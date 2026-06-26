@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=@progtitle@@progtitle_server@
+Exec=@progname@ %f
+Comment=3d light cycle game
+Comment[de]=dreidimensionales Lichtradspiel
+Icon=@progid@
+Terminal=@build_dedicated@
+Categories=Game;ActionGame;
+StartupNotify=@build_dedicated@
+MimeType=application/x-armagetronad;
+Keywords=tron-like;light;cycle;3D;multiplayer;networked;server;

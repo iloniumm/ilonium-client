@@ -1,0 +1,17 @@
+LABEL maintainer="Manuel Moos <z-man@users.sf.net>"
+
+USER root
+
+# more build dependencies
+RUN apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get install \
+curl \
+git \
+make \
+rsync \
+gpg \
+zip \
+-y
+
+
+# no longer works if used directly as gitlab runner image
+#USER steam

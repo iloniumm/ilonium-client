@@ -1,0 +1,57 @@
+#!/bin/bash
+
+# set -x
+
+root="$(dirname "${0}")"
+EXEC=$(grep -h -m 1 -r Exec= "${root}"/*.desktop | cut -d "=" -f 2 | cut -d % -f 1 | cut -d " " -f 1 | head -n 1)
+# append library path so system libraries are found first (if we put our libs into /usr/lib),
+# same for executables.
+
+# true portable app: create a .armagetronad directory in the current directory and
+# it'll be used to store your data.
+extraarg=
+test -d .${EXEC} && extraarg="--userdatadir .${EXEC} --vardir .${EXEC}/var --userconfigdir .${EXEC}/config"
+
+# for debugging: if LD_DEBUG_APP=true, use the included libraries first.
+# you can then use strace to check no non-standard external libraries are needed. 
+
+LOG=
+
+extralib=
+if test "x${LD_DEBUG_APP}" = xtrue; then
+  echo "Library debug mode: ignore system libraries."
+elif ! test -z "${STEAM_RUNTIME_LIBRARY_PATH}"; then
+  # Steam already sets up LD_LIBRARY_PATH so all its libraries are found first
+  echo "Running in Steam, no tinkering required."
+
+  LOGDIR=~/.${EXEC}/var
+  mkdir -p ${LOGDIR}
+  LOG=${LOGDIR}/steamlog.txt
+
+  date > ${LOG}
+  set | grep 'STEAM\|PRESSURE_VESSEL\|PATH\|XDG.*HOME=' >> ${LOG}
+else
+  CACHE=~/.${EXEC}/.syslibs
+  mkdir -p ~/.${EXEC}
+  if test ! -e ${CACHE} || test "${0}" -nt ${CACHE}; then
+    # find all directories in ld's cache
+    for lib in $({ /sbin/ldconfig -p || ldconfig -p; } | tail -n +2 | sed -e "s,.* =>,," -e "s,/[^/]*$,," | sort -u); do
+      extralib=${extralib}:${lib}
+    done
+    echo ${extralib} > ${CACHE}
+  fi
+  extralib=$(cat ${CACHE})
+fi
+
+LD_LIBRARY_PATH="${extralib}:${LD_LIBRARY_PATH}:${root}/usr/lib"
+PATH="${root}/usr/bin:${PATH}" 
+export LD_LIBRARY_PATH
+export PATH
+if test -z "${LOG}"; then
+  exec $EXEC ${extraarg} "$@"
+else
+  echo extralib=${extralib} >> ${LOG}
+  echo LD_LIBRARY_PATH=${LD_LIBRARY_PATH} >> ${LOG}
+  echo PATH=${PATH} >> ${LOG}
+  exec $EXEC ${extraarg} "$@" 2>&1 | tee -a ${LOG}
+fi

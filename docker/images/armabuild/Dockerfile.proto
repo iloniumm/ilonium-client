@@ -1,0 +1,300 @@
+LABEL maintainer="Manuel Moos <z-man@users.sf.net>"
+
+# ###########################
+# common ground
+# ###########################
+
+FROM base as commonground
+
+# record libraries present in base system, install things we know we need
+RUN ls /usr/lib/*.so* /usr/lib/x86_64-linux-gnu/*.so* /usr/lib/i386-linux-gnu/*.so* \
+           /lib/*.so*     /lib/x86_64-linux-gnu/*.so*     /lib/i386-linux-gnu/*.so* \ 
+    2>/dev/null | sed -e s,.*/,, > /usr/base_library_list && \
+apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get install \
+curl \
+g++ \
+git \
+make \
+#libboost-dev \
+#libboost-thread-dev \
+#libprotobuf-dev \
+#libxml2-dev \
+libzthread-dev \
+recode \
+-y
+
+# #####################################
+# client and server build dependencies
+# #####################################
+
+FROM commonground as armabuild_base
+# full build dependencies
+RUN apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get install \
+desktop-file-utils \
+file \
+g++ \
+git \
+make \
+libasound2-dev \
+#libboost-dev \
+#libboost-thread-dev \
+libcurl4-openssl-dev \
+# libssl-dev \
+# libpsl-dev \
+libfile-mimeinfo-perl \
+#libfreetype6-dev \
+#libftgl-dev \
+libgl1-mesa-dev \
+#libglew-dev \
+libglu1-mesa-dev \
+libjpeg-dev \
+libpng-dev \
+libpulse-dev \
+#libprotobuf-dev \
+#libsdl1.2-dev \
+#libsdl-image1.2-dev \
+#libsdl-mixer1.2-dev \
+#libsdl2-dev \
+#libsdl2-image-dev \
+#libsdl2-mixer-dev \
+#libxml2-dev \
+libx11-dev \
+#libxext-dev \
+#libxt-dev \
+#libxv-dev \
+#x11proto-core-dev \
+libzthread-dev \
+pkg-config \
+autoconf \
+automake \
+python3 \
+recode \
+pandoc \
+#zlib1g-dev \
+-y
+
+# copy appimage tools
+COPY appimage/* /usr/bin/
+
+# optional (will fail for ancient steam builds)
+RUN apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get install \
+appstream \
+python3-packaging \
+-y || true
+
+FROM armabuild_base as armabuild
+
+# for debugging, do the manual builds one at a time
+
+# install our version of libxml2
+#COPY build_libxml2.sh .
+#RUN ./build_libxml2.sh libxml2-2.9.10 && rm ./build_libxml2.sh
+
+# install our version of libsdl
+#COPY libsdl-1.2.15-const-xdata32.patch build_libsdl.sh ./
+#RUN ./build_libsdl.sh SDL-1.2.15 && rm ./build_libsdl.sh
+
+# install our version of libsdl_image
+#COPY build_libsdl_image.sh .
+#RUN ./build_libsdl_image.sh SDL_image-1.2.12 && rm ./build_libsdl_image.sh
+
+# install our version of libcurl
+#COPY build_libcurl.sh .
+#RUN ./build_libcurl.sh && rm ./build_libcurl.sh
+
+## for production: do all manual builds in one go, set up builder user
+COPY build*.sh *.patch ./
+RUN ./build_libxml2.sh libxml2-2.9.10 && rm ./build_libxml2.sh && \
+    ./build_libsdl.sh SDL-1.2.15 && rm ./build_libsdl.sh && \
+    ./build_libsdl_image.sh SDL_image-1.2.12 && rm ./build_libsdl_image.sh && \
+    ./build_libcurl.sh && rm ./build_libcurl.sh && \
+    useradd builder && mkdir -p /home/builder && chown builder:builder /home/builder # && chmod 777 /home/builder
+
+# set up rest of builder user
+#WORKDIR /home/builder
+#USER builder
+
+# test new dependencies here
+# RUN apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get install X -y
+
+# ###########################
+# hack in zthread-config
+# ###########################
+
+# the source image here must match the steam one
+FROM amd64/ubuntu:16.04 as zthreadsource
+RUN apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get install libzthread-dev -y
+
+FROM armabuild_base as armabuild_zthreadconfig
+COPY --from=zthreadsource /usr/bin/zthread-config /usr/bin/
+
+FROM zthreaddest as armabuild_zthreadconfig_obsolete
+# set up builder user
+RUN useradd builder && mkdir -p /home/builder && chown builder:builder /home/builder # && chmod 777 /home/builder
+WORKDIR /home/builder
+USER builder
+
+# ###########################
+# debian build dependencies
+# ###########################
+
+FROM armabuild_base as armadeb_base
+# more build dependencies
+RUN apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get install \
+debhelper \
+dh-systemd \
+devscripts \
+libsdl1.2-dev \
+libsdl-image1.2-dev \
+libsdl-mixer1.2-dev \
+libxml2-dev \
+lptools \
+-y
+
+FROM armadeb_base as armadeb
+# set up builder user
+#RUN useradd builder && mkdir -p /home/builder && chown builder:builder /home/builder # && chmod 777 /home/builder
+#WORKDIR /home/builder
+#USER builder
+
+# ###########################
+# bootstrap dependencies (ubuntu base)
+# ###########################
+
+FROM docker:19.03.0 as armaroot_alpine
+
+RUN apk add \
+autoconf \
+automake \
+bash \
+#bison \
+#boost-dev \
+#boost-thread \
+git \
+g++ \
+make \
+libxml2-dev \
+#protobuf-dev \
+pkgconfig \
+python3 \
+py3-packaging \
+tar \
+recode \
+zip \
+--no-cache
+
+# experimental new packages go here
+# RUN apk add --no-cache pandoc
+
+#FROM armaroot_alpine_base AS armaroot_alpine
+# set up builder user
+#RUN useradd builder; mkdir -p /home/builder; chown builder:builder /home/builder # && chmod 777 /home/builder
+#WORKDIR /home/builder
+#USER builder
+
+# ###########################
+# deploy dependencies
+# ###########################
+
+FROM armabuild_base as armadeploy_base
+RUN apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get install \
+0install-core \
+python3-launchpadlib \
+lptools \
+rsync \
+-y
+
+FROM armadeploy_base as armadeploy_nozero
+# set up builder user
+#RUN useradd builder && mkdir -p /home/builder && chown builder:builder /home/builder # && chmod 777 /home/builder
+#WORKDIR /home/builder
+#USER builder
+# pre-load 0publish and feedlint
+RUN export TERM=linux && \
+git config --global push.default simple
+
+
+FROM armadeploy_nozero as armadeploy
+# pre-load 0publish and feedlint
+RUN export TERM=linux && \
+yes Y | 0launch -c 'https://apps.0install.net/0install/0publish.xml' --version && \
+yes Y | 0launch -c 'https://apps.0install.net/0install/feedlint.xml' --version
+
+# ###########################
+# bootstrap dependencies (ubuntu base)
+# ###########################
+
+FROM commonground as bootstrap_ubuntu_base
+RUN apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get install \
+autoconf \
+automake \
+#bison \
+g++ \
+git \
+make \
+#libboost-dev \
+#libboost-thread-dev \
+#libprotobuf-dev \
+#libxml2-dev \
+libzthread-dev \
+pkg-config \
+python3 \
+recode \
+zip \
+-y
+
+#FROM bootstrap_ubuntu_base AS bootstrap_ubuntu
+# set up builder user
+#RUN useradd builder; mkdir -p /home/builder; chown builder:builder /home/builder # && chmod 777 /home/builder
+#WORKDIR /home/builder
+#USER builder
+
+# ###########################
+# docker dependencies (ubuntu base)
+# ###########################
+
+FROM bootstrap_ubuntu_base as armaroot_ubuntu_base
+
+# prepare for repository
+RUN apt-get -y update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install \
+      apt-transport-https \
+      ca-certificates \
+      curl \
+      gnupg-agent \
+      software-properties-common \
+      -y
+
+# set up repository
+RUN   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add - && \
+      apt-key fingerprint 0EBFCD88 | grep "9DC8 5822 9FC7 DD38 854A  E2D8 8D81 803C 0EBF CD88" && \
+      add-apt-repository \
+        "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+   	$(lsb_release -cs) \
+	stable"
+
+# install docker
+RUN	apt-get update -y && \
+	apt-get install -y docker-ce-cli
+
+# full install would be
+#RUN	apt-get update -y && \
+#	DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io
+
+FROM armaroot_ubuntu_base AS armaroot_ubuntu
+RUN mkdir -p /home/builder
+WORKDIR /home/builder
+
+# set up builder user, suid docker so we can actually use it
+#RUN chmod u+s /usr/bin/docker && \
+#RUN  useradd builder && \
+#     mkdir -p /home/builder && \
+#     chown builder:builder /home/builder # && chmod 777 /home/builder
+#WORKDIR /home/builder
+#USER builder
+
+# suid on docker is required because there is no safe way to
+# bind-mound the docker control socket as usable by the builder user.
+# so the only other way I can think of to make docker usable from
+# inside the container is to keep everything in it running as root.
+

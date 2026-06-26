@@ -1,0 +1,157 @@
+#!/bin/bash
+# builds portable client
+
+# set -x
+
+# add AppRun
+cp portable/AppRun ${APPDIR}/
+
+# add desktop file to main dir and canonical place
+find ${APPDIR} -type f -name "*.desktop" -exec mv \{\} ${APPDIR}/org.armagetronad.${PACKAGE}.desktop \;
+find ${APPDIR} -type l -name "*.desktop" -exec rm -f \{\} \;
+mkdir -p ${APPDIR}/usr/share/applications/
+cp ${APPDIR}/org.armagetronad.${PACKAGE}.desktop ${APPDIR}/usr/share/applications/ || exit $?
+
+# add appinfo (noncanonical place, usually it goes to prefix/share/appdata)
+mkdir -p ${APPDIR}/usr/share/metainfo || exit $?
+cp ${APPDIR}/usr/share/games/${PACKAGE}/desktop/armagetronad.appdata.xml ${APPDIR}/usr/share/metainfo/org.armagetronad.${PACKAGE}.appdata.xml || exit $?
+
+# we are dealing with older linters here that require the .desktop extension to the app id
+sed -i -e 's,</id>,.desktop</id>,' ${APPDIR}/usr/share/metainfo/org.armagetronad.${PACKAGE}.appdata.xml || exit $?
+
+# hack Icon
+ICON_NAME=`grep 'Icon=' ${APPDIR}/org.armagetronad.${PACKAGE}.desktop | sed -e 's,Icon=,,'`
+for f in $(find ${APPDIR} -type d -name "desktop"); do
+  cp $f/icons/48x48/*.png ${APPDIR}/${ICON_NAME}.png
+done
+
+lastpath=/usr/lib/*linux-gnu
+otherpath=${lastpath}
+
+function copylib()
+{
+    baselib=$1
+    while test -n "${baselib}"; do
+      if echo ${baselib} | grep -q \^/; then
+        # absolute path, split
+        path=$(dirname ${baselib})
+        baselib=$(basename ${baselib})
+        echo "Found in ${path}."
+        if test "$lastpath" != "$path"; then
+            otherpath=$lastpath
+        fi
+        lastpath=$path
+      fi
+      # copy libary
+      echo Copying ${baselib}...
+      cp -a "${path}/${baselib}" ${APPDIR}/usr/lib/ || exit $?
+      # resolve links
+      baselib=$(ls -l ${path}/${baselib} | grep -- "->" | sed -e "s,.*-> ,,")
+    done
+}
+
+ldd ${APPDIR}/usr/bin/${PACKAGE}
+
+# dependency scrapyard
+# libstdc++ \
+
+#   include libraries
+mkdir -p ${APPDIR}/usr/lib/
+for library in \
+libasound \
+libasyncns \
+libboost_thread \
+libcaca \
+libdbus-[0-9\.]* \
+libFLAC \
+libfreetype \
+libftgl \
+libGLEW \
+libGLU \
+libjbig \
+libjpeg[0-9\.]* \
+libncursesw \
+libnsl \
+libogg \
+libpng[0-9]* \
+libpulse \
+libpulsecommon-[0-9\.]* \
+libpulse-simple \
+libprotobuf \
+libSDL-1.2 \
+libSDL3 \
+libSDL3_image \
+libSDL3_mixer \
+libmimalloc \
+libslang \
+libsndfile \
+libSDL_image-1.2 \
+libSDL_mixer-1.2 \
+libtiff \
+libtinfo \
+libvorbis \
+libvorbisenc \
+libwebp \
+libwrap \
+libxml2 \
+libcurl \
+libpsl \
+libicuuc \
+libicudata \
+libidn \
+librtmp \
+libssl \
+libcrypto \
+libgssapi_krb5 \
+libkrb5 \
+libk5crypto \
+libkrb5support \
+liblber-2.4 \
+libldap_r-2.4 \
+libhogweed \
+libnettle \
+libsasl2 \
+libgssapi \
+libkeyutils \
+libheimntlm \
+libheimbase \
+libasn1 \
+libhcrypto \
+libroken \
+libwind \
+libhx509 \
+libsqlite3 \
+libZThread-[0-9\.]* \
+; do
+  echo "Checking for library ${library}...."
+  baselibs=$(ldd ${APPDIR}/usr/bin/${PACKAGE} | grep "${library}\.so[0-9\.]*" | sed -e "s,.*=> ,," -e "s, (.*,,")
+  if test -z "${baselibs}"; then
+    echo "Not linked."
+  else
+    for l in ${baselibs}; do
+        copylib $l
+    done
+  fi
+done
+
+# ldd ${APPDIR}/usr/bin/${PACKAGE}
+
+if false && ! echo ${PACKAGE} | grep dedicated; then
+# libraries we know are dynamically loaded later, so they don't appear in ldd's output
+for library in \
+libjpeg.so.8 \
+; do
+    echo "Installing library ${library} anyway, we know it's needed."
+    if test -r ${lastpath}/${library}; then
+        copylib ${lastpath}/${library}
+    else
+        copylib ${otherpath}/${library}
+    fi
+done
+fi
+
+# more libraries for 0.4, later
+#libmikmod.so \
+#libmikmod.so.2 \
+
+echo $lastpath

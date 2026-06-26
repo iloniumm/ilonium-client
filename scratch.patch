@@ -1,0 +1,565 @@
+--- src/engine/ePlayer.cpp
++++ src/engine/ePlayer.cpp
+@@ -1988,6 +1988,141 @@
+     memcpy(outName, clean, len); outName[len] = 0;
+ }
+ 
++static bool checkLocalCommand(const tString& rawMessage) {
++    if (!sg_modColorPicker) return false;
++
++    char msg[512];
++    ChatCalc::stripColors(static_cast<const char*>(rawMessage), msg, sizeof(msg));
++
++    char lower[512];
++    for (int i = 0; msg[i] && i < 510; i++) {
++        lower[i] = tolower(msg[i]); lower[i+1] = 0;
++    }
++
++    auto say = [&](const char* replyText) {
++        tColoredString m;
++        m << tColoredString::ColorString(1, 1, 0.5) << "[MOD] " << replyText << "\n";
++        con << m;
++    };
++
++    ePlayer* lp = ePlayer::PlayerConfig(0);
++    if (!lp) return false;
++
++    // --- "set name <name>" ---
++    if (strncmp(lower, "set name ", 9) == 0) {
++        char* newName = msg + 9;
++        while (*newName == ' ') newName++;
++        int nlen = strlen(newName);
++        while (nlen > 0 && newName[nlen-1] == ' ') newName[--nlen] = 0;
++        if (nlen > 0) {
++            tCurrentAccessLevel elev(tAccessLevel_Owner, true);
++            lp->name = newName;
++            std::stringstream ss;
++            ss << "PLAYER_1 " << newName << "\n";
++            tConfItemBase::LoadLine(ss);
++            char reply[512];
++            snprintf(reply, sizeof(reply), "Name set to: %s", newName);
++            say(reply);
++        }
++        return true;
++    }
++
++    // --- "set <color> name <name>" (red, blue, green, yellow, pink, purple, white, rainbow) ---
++    struct ColorPreset { const char* keyword; const char* code; };
++    static const ColorPreset presets[] = {
++        {"set red name ",     "0xff3333"},
++        {"set blue name ",    "0x3388ff"},
++        {"set green name ",   "0x33ff33"},
++        {"set yellow name ",  "0xffff33"},
++        {"set pink name ",    "0xff66cc"},
++        {"set purple name ",  "0xaa33ff"},
++        {"set white name ",   "0xffffff"},
++        {"set orange name ",  "0xff8800"},
++        {"set cyan name ",    "0x33ffff"},
++        {NULL, NULL}
++    };
++    for (int ci = 0; presets[ci].keyword; ci++) {
++        int klen = strlen(presets[ci].keyword);
++        if (strncmp(lower, presets[ci].keyword, klen) == 0) {
++            char* newName = msg + klen;
++            while (*newName == ' ') newName++;
++            int nlen = strlen(newName);
++            while (nlen > 0 && newName[nlen-1] == ' ') newName[--nlen] = 0;
++            if (nlen > 0) {
++                char coloredName[512];
++                snprintf(coloredName, sizeof(coloredName), "%s%s", presets[ci].code, newName);
++                tCurrentAccessLevel elev(tAccessLevel_Owner, true);
++                lp->name = coloredName;
++                std::stringstream ss;
++                ss << "PLAYER_1 " << coloredName << "\n";
++                tConfItemBase::LoadLine(ss);
++                char reply[512];
++                snprintf(reply, sizeof(reply), "Name set to %s %s", presets[ci].keyword + 4, newName);
++                say(reply);
++            }
++            return true;
++        }
++    }
++
++    // --- "set rainbow name <name>" ---
++    if (strncmp(lower, "set rainbow name ", 17) == 0) {
++        char* newName = msg + 17;
++        while (*newName == ' ') newName++;
++        int nlen = strlen(newName);
++        while (nlen > 0 && newName[nlen-1] == ' ') newName[--nlen] = 0;
++        if (nlen > 0) {
++            static const char* rainbow[] = {
++                "0xff3333", "0xff8800", "0xffff33", "0x33ff33",
++                "0x33ffff", "0x3388ff", "0xaa33ff"
++            };
++            char coloredName[512];
++            int pos = 0;
++            for (int i = 0; i < nlen && pos < 490; i++) {
++                const char* col = rainbow[i % 7];
++                for (int k = 0; col[k] && pos < 490; k++) coloredName[pos++] = col[k];
++                coloredName[pos++] = newName[i];
++            }
++            coloredName[pos] = 0;
++            tCurrentAccessLevel elev(tAccessLevel_Owner, true);
++            lp->name = coloredName;
++            std::stringstream ss;
++            ss << "PLAYER_1 " << coloredName << "\n";
++            tConfItemBase::LoadLine(ss);
++            say("Rainbow name applied!");
++        }
++        return true;
++    }
++
++    // --- "set rgb <color1> <color2> [color3] name <name>" ---
++    if (strncmp(lower, "set rgb ", 8) == 0) {
++        // Color name -> RGB lookup
++        struct GradColor { const char* name; int r, g, b; };
++        static const GradColor gradColors[] = {
++            {"red",     0xff, 0x33, 0x33},
++            {"blue",    0x33, 0x88, 0xff},
++            {"green",   0x33, 0xff, 0x33},
++            {"yellow",  0xff, 0xff, 0x33},
++            {"pink",    0xff, 0x66, 0xcc},
++            {"purple",  0xaa, 0x33, 0xff},
++            {"white",   0xff, 0xff, 0xff},
++            {"orange",  0xff, 0x88, 0x00},
++            {"cyan",    0x33, 0xff, 0xff},
++            {"magenta", 0xff, 0x00, 0xff},
++            {"lime",    0x00, 0xff, 0x00},
++            {"gold",    0xff, 0xd7, 0x00},
++            {"silver",  0xcc, 0xcc, 0xcc},
++            {"teal",    0x00, 0x80, 0x80},
++            {"coral",   0xff, 0x7f, 0x50},
++            {"sky",     0x87, 0xce, 0xeb},
++            {"violet",  0xee, 0x82, 0xee},
++            {"crimson", 0xdc, 0x14, 0x3c},
++            {"aqua",    0x00, 0xff, 0xff},
++            {"black",   0x11, 0x11, 0x11},
++            {NULL, 0, 0, 0}
++        };
++
++        char* ptr = msg + 8;
++        while (*ptr == ' ') ptr++;
++
++        int gcolors[3][3];
++        int numGColors = 0;
++
++        for (int pass = 0; pass < 3 && *ptr; pass++) {
++            char pLow[128];
++            int pLen = 0;
++            for (int x = 0; ptr[x] && x < 126; x++) {
++                pLow[x] = tolower(ptr[x]);
++                pLow[x+1] = 0;
++                pLen++;
++            }
++            if (pLen >= 5 && strncmp(pLow, "name ", 5) == 0) break;
++
++            bool matched = false;
++            for (int ci = 0; gradColors[ci].name; ci++) {
++                int nlen2 = strlen(gradColors[ci].name);
++                if (strncmp(pLow, gradColors[ci].name, nlen2) == 0 &&
++                    (ptr[nlen2] == ' ' || ptr[nlen2] == '-' || ptr[nlen2] == 0)) {
++                    gcolors[numGColors][0] = gradColors[ci].r;
++                    gcolors[numGColors][1] = gradColors[ci].g;
++                    gcolors[numGColors][2] = gradColors[ci].b;
++                    numGColors++;
++                    ptr += nlen2;
++                    while (*ptr == ' ' || *ptr == '-') ptr++;
++                    matched = true;
++                    break;
++                }
++            }
++            if (!matched) break;
++        }
++
++        char pCheck[128];
++        for (int x = 0; ptr[x] && x < 126; x++) { pCheck[x] = tolower(ptr[x]); pCheck[x+1] = 0; }
++
++        if (numGColors >= 2 && strncmp(pCheck, "name ", 5) == 0) {
++            char* newName = ptr + 5;
++            while (*newName == ' ') newName++;
++            int nlen = strlen(newName);
++            while (nlen > 0 && newName[nlen-1] == ' ') newName[--nlen] = 0;
++
++            if (nlen > 0) {
++                char coloredName[1024];
++                int pos = 0;
++                for (int i = 0; i < nlen && pos < 1000; i++) {
++                    float t = (nlen > 1) ? (float)i / (float)(nlen - 1) : 0.0f;
++                    float smooth_t = (1.0f - cosf(t * 3.14159265f)) * 0.5f;
++                    int cr, cg, cb;
++
++                    if (numGColors == 2) {
++                        cr = (int)(gcolors[0][0] + (gcolors[1][0] - gcolors[0][0]) * smooth_t);
++                        cg = (int)(gcolors[0][1] + (gcolors[1][1] - gcolors[0][1]) * smooth_t);
++                        cb = (int)(gcolors[0][2] + (gcolors[1][2] - gcolors[0][2]) * smooth_t);
++                    } else {
++                        if (t <= 0.5f) {
++                            float s = (1.0f - cosf(t * 2.0f * 3.14159265f)) * 0.5f;
++                            cr = (int)(gcolors[0][0] + (gcolors[1][0] - gcolors[0][0]) * s);
++                            cg = (int)(gcolors[0][1] + (gcolors[1][1] - gcolors[0][1]) * s);
++                            cb = (int)(gcolors[0][2] + (gcolors[1][2] - gcolors[0][2]) * s);
++                        } else {
++                            float s = (1.0f - cosf((t - 0.5f) * 2.0f * 3.14159265f)) * 0.5f;
++                            cr = (int)(gcolors[1][0] + (gcolors[2][0] - gcolors[1][0]) * s);
++                            cg = (int)(gcolors[1][1] + (gcolors[2][1] - gcolors[1][1]) * s);
++                            cb = (int)(gcolors[1][2] + (gcolors[2][2] - gcolors[1][2]) * s);
++                        }
++                    }
++
++                    if (cr < 0) cr = 0; if (cr > 255) cr = 255;
++                    if (cg < 0) cg = 0; if (cg > 255) cg = 255;
++                    if (cb < 0) cb = 0; if (cb > 255) cb = 255;
++                    pos += snprintf(coloredName + pos, 1024 - pos, "0x%02x%02x%02x", cr, cg, cb);
++                    coloredName[pos++] = newName[i];
++                }
++                coloredName[pos] = 0;
++                tCurrentAccessLevel elev(tAccessLevel_Owner, true);
++                lp->name = coloredName;
++                std::stringstream ss;
++                ss << "PLAYER_1 " << coloredName << "\n";
++                tConfItemBase::LoadLine(ss);
++                say("Gradient name applied!");
++            }
++        } else {
++            say("Usage: set rgb red blue name Nick  OR  set rgb red yellow blue name Nick");
++        }
++        return true;
++    }
++
++    // --- "set color rN gN bN" (flexible order, 1-3 components) ---
++    if (strncmp(lower, "set color ", 10) == 0) {
++        char* args = msg + 10;
++        int newR = -1, newG = -1, newB = -1;
++        char token[64];
++        while (*args) {
++            while (*args == ' ') args++;
++            if (!*args) break;
++            int ti = 0;
++            while (*args && *args != ' ' && ti < 62) token[ti++] = *args++;
++            token[ti] = 0;
++            char tLow[64];
++            for (int i = 0; token[i] && i < 62; i++) { tLow[i] = tolower(token[i]); tLow[i+1] = 0; }
++            if (tLow[0] == 'r' && tLow[1] >= '0' && tLow[1] <= '9') newR = atoi(tLow + 1);
++            else if (tLow[0] == 'g' && tLow[1] >= '0' && tLow[1] <= '9') newG = atoi(tLow + 1);
++            else if (tLow[0] == 'b' && tLow[1] >= '0' && tLow[1] <= '9') newB = atoi(tLow + 1);
++        }
++        if (newR >= 0 || newG >= 0 || newB >= 0) {
++            if (newR >= 0) { if (newR > 15) newR = 15; lp->rgb[0] = newR; }
++            if (newG >= 0) { if (newG > 15) newG = 15; lp->rgb[1] = newG; }
++            if (newB >= 0) { if (newB > 15) newB = 15; lp->rgb[2] = newB; }
++            char reply[512];
++            snprintf(reply, sizeof(reply), "Cycle color set: R:%d G:%d B:%d", lp->rgb[0], lp->rgb[1], lp->rgb[2]);
++            say(reply);
++        } else {
++            say("Usage: set color r5 g12 b2 (values 0-15, any order)");
++        }
++        return true;
++    }
++
++    // --- "reset kd" ---
++    if (strncmp(lower, "reset kd", 8) == 0) {
++        sg_modKDResetFlag = true;
++        say("K/D stats reset!");
++        return true;
++    }
++
++    return false;
++}
++
+ static void checkChat(const tString& rawMessage) {
+     REAL now = tSysTimeFloat();
+ 
+@@ -2001,279 +2136,8 @@
+         lower[i] = tolower(msg[i]); lower[i+1] = 0;
+     }
+ 
+-    // Check if message is from us
+-    bool isMe = false;
+-    ePlayer* lp = ePlayer::PlayerConfig(0);
+-    if (lp && lp->netPlayer) {
+-        tString myName = lp->netPlayer->GetName();
+-        char myClean[256];
+-        ChatCalc::stripColors(static_cast<const char*>(myName), myClean, sizeof(myClean));
+-        if (strstr(clean, myClean) == clean) isMe = true;
+-    }
+-
+-    // === SET NAME / SET COLOR / RESET KD: local commands (only respond to own messages) ===
+-    if (isMe && sg_modColorPicker) {
+-        // --- "set name <name>" ---
+-        if (strncmp(lower, "set name ", 9) == 0) {
+-            char* newName = msg + 9;
+-            while (*newName == ' ') newName++;
+-            int nlen = strlen(newName);
+-            while (nlen > 0 && newName[nlen-1] == ' ') newName[--nlen] = 0;
+-            if (nlen > 0 && lp) {
+-                tCurrentAccessLevel elev(tAccessLevel_Owner, true);
+-                ePlayer* lp_local = ePlayer::PlayerConfig(0);
+-                if (lp_local) lp_local->name = newName;
+-                std::stringstream ss;
+-                ss << "PLAYER_1 " << newName << "\n";
+-                tConfItemBase::LoadLine(ss);
+-                char reply[512];
+-                snprintf(reply, sizeof(reply), "Name set to: %s", newName);
+-                say(reply);
+-            }
+-            return;
+-        }
+-        // --- "set <color> name <name>" (red, blue, green, yellow, pink, purple, white, rainbow) ---
+-        struct ColorPreset { const char* keyword; const char* code; };
+-        static const ColorPreset presets[] = {
+-            {"set red name ",     "0xff3333"},
+-            {"set blue name ",    "0x3388ff"},
+-            {"set green name ",   "0x33ff33"},
+-            {"set yellow name ",  "0xffff33"},
+-            {"set pink name ",    "0xff66cc"},
+-            {"set purple name ",  "0xaa33ff"},
+-            {"set white name ",   "0xffffff"},
+-            {"set orange name ",  "0xff8800"},
+-            {"set cyan name ",    "0x33ffff"},
+-            {NULL, NULL}
+-        };
+-        bool handledColorName = false;
+-        for (int ci = 0; presets[ci].keyword; ci++) {
+-            int klen = strlen(presets[ci].keyword);
+-            if (strncmp(lower, presets[ci].keyword, klen) == 0) {
+-                char* newName = msg + klen;
+-                while (*newName == ' ') newName++;
+-                int nlen = strlen(newName);
+-                while (nlen > 0 && newName[nlen-1] == ' ') newName[--nlen] = 0;
+-                if (nlen > 0 && lp) {
+-                    char coloredName[512];
+-                    snprintf(coloredName, sizeof(coloredName), "%s%s", presets[ci].code, newName);
+-                    tCurrentAccessLevel elev(tAccessLevel_Owner, true);
+-                    ePlayer* lp_local = ePlayer::PlayerConfig(0);
+-                    if (lp_local) lp_local->name = coloredName;
+-                    std::stringstream ss;
+-                    ss << "PLAYER_1 " << coloredName << "\n";
+-                    tConfItemBase::LoadLine(ss);
+-                    char reply[512];
+-                    snprintf(reply, sizeof(reply), "Name set to %s %s", presets[ci].keyword + 4, newName);
+-                    say(reply);
+-                }
+-                handledColorName = true;
+-                break;
+-            }
+-        }
+-        if (handledColorName) return;
+-
+-        // --- "set rainbow name <name>" ---
+-        if (strncmp(lower, "set rainbow name ", 17) == 0) {
+-            char* newName = msg + 17;
+-            while (*newName == ' ') newName++;
+-            int nlen = strlen(newName);
+-            while (nlen > 0 && newName[nlen-1] == ' ') newName[--nlen] = 0;
+-            if (nlen > 0 && lp) {
+-                static const char* rainbow[] = {
+-                    "0xff3333", "0xff8800", "0xffff33", "0x33ff33",
+-                    "0x33ffff", "0x3388ff", "0xaa33ff"
+-                };
+-                char coloredName[512];
+-                int pos = 0;
+-                for (int i = 0; i < nlen && pos < 490; i++) {
+-                    const char* col = rainbow[i % 7];
+-                    for (int k = 0; col[k] && pos < 490; k++) coloredName[pos++] = col[k];
+-                    coloredName[pos++] = newName[i];
+-                }
+-                coloredName[pos] = 0;
+-                tCurrentAccessLevel elev(tAccessLevel_Owner, true);
+-                ePlayer* lp_local = ePlayer::PlayerConfig(0);
+-                if (lp_local) lp_local->name = coloredName;
+-                std::stringstream ss;
+-                ss << "PLAYER_1 " << coloredName << "\n";
+-                tConfItemBase::LoadLine(ss);
+-                say("Rainbow name applied!");
+-            }
+-            return;
+-        }
+-
+-        // --- "set rgb <color1> <color2> [color3] name <name>" — smooth gradient (2 or 3 colors) ---
+-        // Uses cosine interpolation for ultra-smooth, gentle color transitions
+-        if (strncmp(lower, "set rgb ", 8) == 0) {
+-            // Color name -> RGB lookup
+-            struct GradColor { const char* name; int r, g, b; };
+-            static const GradColor gradColors[] = {
+-                {"red",     0xff, 0x33, 0x33},
+-                {"blue",    0x33, 0x88, 0xff},
+-                {"green",   0x33, 0xff, 0x33},
+-                {"yellow",  0xff, 0xff, 0x33},
+-                {"pink",    0xff, 0x66, 0xcc},
+-                {"purple",  0xaa, 0x33, 0xff},
+-                {"white",   0xff, 0xff, 0xff},
+-                {"orange",  0xff, 0x88, 0x00},
+-                {"cyan",    0x33, 0xff, 0xff},
+-                {"magenta", 0xff, 0x00, 0xff},
+-                {"lime",    0x00, 0xff, 0x00},
+-                {"gold",    0xff, 0xd7, 0x00},
+-                {"silver",  0xcc, 0xcc, 0xcc},
+-                {"teal",    0x00, 0x80, 0x80},
+-                {"coral",   0xff, 0x7f, 0x50},
+-                {"sky",     0x87, 0xce, 0xeb},
+-                {"violet",  0xee, 0x82, 0xee},
+-                {"crimson", 0xdc, 0x14, 0x3c},
+-                {"aqua",    0x00, 0xff, 0xff},
+-                {"black",   0x11, 0x11, 0x11},
+-                {NULL, 0, 0, 0}
+-            };
+-
+-            char* ptr = msg + 8;
+-            while (*ptr == ' ') ptr++;
+-
+-            int gcolors[3][3];
+-            int numGColors = 0;
+-
+-            // Parse up to 3 color names before "name" keyword
+-            for (int pass = 0; pass < 3 && *ptr; pass++) {
+-                // Lowercase current position for matching
+-                char pLow[128];
+-                int pLen = 0;
+-                for (int x = 0; ptr[x] && x < 126; x++) {
+-                    pLow[x] = tolower(ptr[x]);
+-                    pLow[x+1] = 0;
+-                    pLen++;
+-                }
+-
+-                // Check if we hit "name " keyword — stop parsing colors
+-                if (pLen >= 5 && strncmp(pLow, "name ", 5) == 0) break;
+-
+-                // Try to match a color name
+-                bool matched = false;
+-                for (int ci = 0; gradColors[ci].name; ci++) {
+-                    int nlen2 = strlen(gradColors[ci].name);
+-                    if (strncmp(pLow, gradColors[ci].name, nlen2) == 0 &&
+-                        (ptr[nlen2] == ' ' || ptr[nlen2] == '-' || ptr[nlen2] == 0)) {
+-                        gcolors[numGColors][0] = gradColors[ci].r;
+-                        gcolors[numGColors][1] = gradColors[ci].g;
+-                        gcolors[numGColors][2] = gradColors[ci].b;
+-                        numGColors++;
+-                        ptr += nlen2;
+-                        while (*ptr == ' ' || *ptr == '-') ptr++;
+-                        matched = true;
+-                        break;
+-                    }
+-                }
+-                if (!matched) break;
+-            }
+-
+-            // Check for "name " keyword at current position
+-            char pCheck[128];
+-            for (int x = 0; ptr[x] && x < 126; x++) { pCheck[x] = tolower(ptr[x]); pCheck[x+1] = 0; }
+-
+-            if (numGColors >= 2 && strncmp(pCheck, "name ", 5) == 0) {
+-                char* newName = ptr + 5;
+-                while (*newName == ' ') newName++;
+-                int nlen = strlen(newName);
+-                while (nlen > 0 && newName[nlen-1] == ' ') newName[--nlen] = 0;
+-
+-                if (nlen > 0 && lp) {
+-                    char coloredName[1024];
+-                    int pos = 0;
+-                    for (int i = 0; i < nlen && pos < 1000; i++) {
+-                        // t: position along the name, 0.0 to 1.0
+-                        float t = (nlen > 1) ? (float)i / (float)(nlen - 1) : 0.0f;
+-
+-                        // Cosine interpolation for ultra-smooth blending:
+-                        // Converts linear t into an S-curve — slow start, smooth middle, slow end
+-                        // This makes adjacent colors feel like "one flowing whole"
+-                        float smooth_t = (1.0f - cosf(t * 3.14159265f)) * 0.5f;
+-
+-                        int cr, cg, cb;
+-
+-                        if (numGColors == 2) {
+-                            cr = (int)(gcolors[0][0] + (gcolors[1][0] - gcolors[0][0]) * smooth_t);
+-                            cg = (int)(gcolors[0][1] + (gcolors[1][1] - gcolors[0][1]) * smooth_t);
+-                            cb = (int)(gcolors[0][2] + (gcolors[1][2] - gcolors[0][2]) * smooth_t);
+-                        } else {
+-                            // 3-color: smooth interpolation across two segments
+-                            if (t <= 0.5f) {
+-                                float s = (1.0f - cosf(t * 2.0f * 3.14159265f)) * 0.5f;
+-                                cr = (int)(gcolors[0][0] + (gcolors[1][0] - gcolors[0][0]) * s);
+-                                cg = (int)(gcolors[0][1] + (gcolors[1][1] - gcolors[0][1]) * s);
+-                                cb = (int)(gcolors[0][2] + (gcolors[1][2] - gcolors[0][2]) * s);
+-                            } else {
+-                                float s = (1.0f - cosf((t - 0.5f) * 2.0f * 3.14159265f)) * 0.5f;
+-                                cr = (int)(gcolors[1][0] + (gcolors[2][0] - gcolors[1][0]) * s);
+-                                cg = (int)(gcolors[1][1] + (gcolors[2][1] - gcolors[1][1]) * s);
+-                                cb = (int)(gcolors[1][2] + (gcolors[2][2] - gcolors[1][2]) * s);
+-                            }
+-                        }
+-
+-                        if (cr < 0) cr = 0; if (cr > 255) cr = 255;
+-                        if (cg < 0) cg = 0; if (cg > 255) cg = 255;
+-                        if (cb < 0) cb = 0; if (cb > 255) cb = 255;
+-                        pos += snprintf(coloredName + pos, 1024 - pos,
+-                            "0x%02x%02x%02x", cr, cg, cb);
+-                        coloredName[pos++] = newName[i];
+-                    }
+-                    coloredName[pos] = 0;
+-                    tCurrentAccessLevel elev(tAccessLevel_Owner, true);
+-                    ePlayer* lp_local = ePlayer::PlayerConfig(0);
+-                    if (lp_local) lp_local->name = coloredName;
+-                    std::stringstream ss;
+-                    ss << "PLAYER_1 " << coloredName << "\n";
+-                    tConfItemBase::LoadLine(ss);
+-                    say("Gradient name applied!");
+-                }
+-            } else {
+-                say("Usage: set rgb red blue name Nick  OR  set rgb red yellow blue name Nick");
+-            }
+-            return;
+-        }
+-
+-        // --- "set color rN gN bN" (flexible order, 1-3 components) ---
+-        if (strncmp(lower, "set color ", 10) == 0) {
+-            char* args = msg + 10;
+-            int newR = -1, newG = -1, newB = -1;
+-            // Parse tokens like r51 g12 b2 in any order
+-            char token[64];
+-            while (*args) {
+-                while (*args == ' ') args++;
+-                if (!*args) break;
+-                int ti = 0;
+-                while (*args && *args != ' ' && ti < 62) token[ti++] = *args++;
+-                token[ti] = 0;
+-                char tLow[64];
+-                for (int i = 0; token[i] && i < 62; i++) { tLow[i] = tolower(token[i]); tLow[i+1] = 0; }
+-                if (tLow[0] == 'r' && tLow[1] >= '0' && tLow[1] <= '9') newR = atoi(tLow + 1);
+-                else if (tLow[0] == 'g' && tLow[1] >= '0' && tLow[1] <= '9') newG = atoi(tLow + 1);
+-                else if (tLow[0] == 'b' && tLow[1] >= '0' && tLow[1] <= '9') newB = atoi(tLow + 1);
+-            }
+-            if (lp && (newR >= 0 || newG >= 0 || newB >= 0)) {
+-                if (newR >= 0) { if (newR > 15) newR = 15; lp->rgb[0] = newR; }
+-                if (newG >= 0) { if (newG > 15) newG = 15; lp->rgb[1] = newG; }
+-                if (newB >= 0) { if (newB > 15) newB = 15; lp->rgb[2] = newB; }
+-                char reply[512];
+-                snprintf(reply, sizeof(reply), "Cycle color set: R:%d G:%d B:%d", lp->rgb[0], lp->rgb[1], lp->rgb[2]);
+-                say(reply);
+-            } else {
+-                say("Usage: set color r5 g12 b2 (values 0-15, any order)");
+-            }
+-            return;
+-        }
+-
+-        // --- "reset kd" ---
+-        if (strncmp(lower, "reset kd", 8) == 0) {
+-            sg_modKDResetFlag = true;
+-            say("K/D stats reset!");
+-            return;
+-        }
+-    }
+-
+     // === COLOR & NAME PICKER: ANY player types "color NAME" or "name NAME", we respond ===
+     if (sg_modColorPicker && (strncmp(lower, "color ", 6) == 0 || strncmp(lower, "name ", 5) == 0)) {
+         bool isColorCmd = (strncmp(lower, "color ", 6) == 0);
+@@ -4826,6 +4690,12 @@
+     tColoredString s( s_orig );
+     s.NetFilter();
+ 
++    // [MOD] Intercept local commands before broadcast
++    if (this->Owner() == sn_myNetID && TrashTalk::checkLocalCommand(s_orig)) {
++        // If the command was handled locally (set name, set rgb, reset kd), do not broadcast
++        return;
++    }
++
+ #ifndef DEDICATED
+     // check for direct console commands
+     tString command("");

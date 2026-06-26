@@ -1,0 +1,2167 @@
+/*
+
+*************************************************************************
+
+ArmageTron -- Just another Tron Lightcycle Game in 3D.
+Copyright (C) 2000  Manuel Moos (manuel@moosnet.de)
+
+**************************************************************************
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+  
+***************************************************************************
+
+*/
+
+#include "gMenus.h"
+#include "ePlayer.h"
+#include "rScreen.h"
+#include "nConfig.h"
+#include "rConsole.h"
+#include "tToDo.h"
+#include "rGL.h"
+#include "eTimer.h"
+#include "eFloor.h"
+#include "rRender.h"
+#include "rModel.h"
+#include "gGame.h"
+#include "gCycle.h"
+#include "gHud.h"
+#include "tRecorder.h"
+#include "rSysdep.h"
+
+#include <sstream>
+#include <set>
+#include <array>
+#include <memory>
+
+// ============ MOD SETTINGS ============
+// Console variables for mod features — settable via console and saved to config
+bool sg_modWaypointsEnabled = true;
+bool sg_modWaypointsEnemyWalls = false;
+REAL sg_modWaypointsMinRubber = 3.0f;
+REAL sg_modWaypointsCooldown = 5.0f;
+REAL sg_modWaypointsLifetime = 30.0f;
+bool sg_modRubberGaugeEnabled = true;
+bool sg_modMinimapEnabled = true;
+bool sg_modRubberBatteryEnabled = true;
+REAL sg_modMinimapScale = 1.0f;
+REAL sg_modMinimapZoom = 1.0f;
+bool sg_modMinimapRotate = false;
+bool sg_modProximityWarning = true;
+bool sg_modZoneTimers = true;
+bool sg_modCutoffAimbot = true;
+bool sg_modPathLineEnabled = true;
+bool sg_modTeammateDeathWarning = true;
+bool sg_modFortressAlerts = true;
+int  sg_modPathDepth = 4;
+int  sg_modPathRange = 120;
+bool sg_modScoreboardEnabled = true;
+bool sg_modAnti360LockEnabled = true;
+bool sg_modChatCalcEnabled = false;
+bool sg_modTrashTalkEnabled = false;
+bool sg_modKDEnabled = true;
+bool sg_modKDResetFlag = false;
+bool sg_modAutoGreet = false;
+bool sg_modFriendlyChat = false;
+bool sg_modColorPicker = true;
+
+static tConfItem<bool> sg_modWaypointsEnabledConf("MOD_WAYPOINTS_ENABLED", sg_modWaypointsEnabled);
+static tConfItem<bool> sg_modWaypointsEnemyWallsConf("MOD_WAYPOINTS_ENEMY_WALLS", sg_modWaypointsEnemyWalls);
+static tConfItem<REAL> sg_modWaypointsMinRubberConf("MOD_WAYPOINTS_MIN_RUBBER", sg_modWaypointsMinRubber);
+static tConfItem<REAL> sg_modWaypointsCooldownConf("MOD_WAYPOINTS_COOLDOWN", sg_modWaypointsCooldown);
+static tConfItem<REAL> sg_modWaypointsLifetimeConf("MOD_WAYPOINTS_LIFETIME", sg_modWaypointsLifetime);
+static tConfItem<bool> sg_modRubberGaugeEnabledConf("MOD_RUBBER_GAUGE", sg_modRubberGaugeEnabled);
+static tConfItem<bool> sg_modMinimapEnabledConf("MOD_MINIMAP", sg_modMinimapEnabled);
+static tConfItem<bool> sg_modRubberBatteryEnabledConf("MOD_RUBBER_BATTERY", sg_modRubberBatteryEnabled);
+static tConfItem<REAL> sg_modMinimapScaleConf("MOD_MINIMAP_SCALE", sg_modMinimapScale);
+static tConfItem<REAL> sg_modMinimapZoomConf("MOD_MINIMAP_ZOOM", sg_modMinimapZoom);
+static tConfItem<bool> sg_modMinimapRotateConf("MOD_MINIMAP_ROTATE", sg_modMinimapRotate);
+static tConfItem<bool> sg_modProximityWarningConf("MOD_PROXIMITY_WARNING", sg_modProximityWarning);
+static tConfItem<bool> sg_modZoneTimersConf("MOD_ZONE_TIMERS", sg_modZoneTimers);
+static tConfItem<bool> sg_modCutoffAimbotConf("MOD_CUTOFF_AIMBOT", sg_modCutoffAimbot);
+static tConfItem<bool> sg_modPathLineEnabledConf("MOD_PATH_LINE", sg_modPathLineEnabled);
+static tConfItem<bool> sg_modTeammateDeathWarningConf("MOD_TEAMMATE_DEATH_WARNING", sg_modTeammateDeathWarning);
+static tConfItem<bool> sg_modFortressAlertsConf("MOD_FORTRESS_ALERTS", sg_modFortressAlerts);
+static tConfItem<int>  sg_modPathDepthConf("MOD_PATH_DEPTH", sg_modPathDepth);
+static tConfItem<int>  sg_modPathRangeConf("MOD_PATH_RANGE", sg_modPathRange);
+static tConfItem<bool> sg_modScoreboardEnabledConf("MOD_SCOREBOARD", sg_modScoreboardEnabled);
+static tConfItem<bool> sg_modAnti360LockEnabledConf("ANTI_360_LOCK_ENABLED", sg_modAnti360LockEnabled);
+static tConfItem<bool> sg_modChatCalcEnabledConf("MOD_CHAT_CALC", sg_modChatCalcEnabled);
+static tConfItem<bool> sg_modTrashTalkEnabledConf("MOD_TRASH_TALK", sg_modTrashTalkEnabled);
+static tConfItem<bool> sg_modKDEnabledConf("MOD_KD_COUNTER", sg_modKDEnabled);
+static tConfItem<bool> sg_modAutoGreetConf("MOD_AUTO_GREET", sg_modAutoGreet);
+static tConfItem<bool> sg_modFriendlyChatConf("MOD_FRIENDLY_CHAT", sg_modFriendlyChat);
+static tConfItem<bool> sg_modColorPickerConf("MOD_COLOR_PICKER", sg_modColorPicker);
+
+// ---- Sub-menu: Combat ----
+static void sg_ModCombatMenu() {
+    uMenu sub("Combat Settings");
+
+    // Pull in the anti-360 time window from gCycle.cpp
+    extern REAL sn_anti360Window;
+
+    static int anti360WindowInt;
+    anti360WindowInt = (int)(sn_anti360Window * 100.0f);
+
+    uMenuItemToggle t3(&sub,
+        "Cut-off Predictor",
+        "Show CUT/NO indicator when you can box in an enemy",
+        sg_modCutoffAimbot);
+
+    uMenuItemToggle t2(&sub,
+        "Proximity Warning",
+        "Red edge glow when enemies are dangerously close behind",
+        sg_modProximityWarning);
+
+    uMenuItemToggle rG(&sub, "Rubber Gauge",
+        "Display rubber percentage near cycle",
+        sg_modRubberGaugeEnabled);
+
+    uMenuItemInt a360w(&sub, "Anti-360 Window (x100)",
+        "Time window in seconds (x100). 100=1.0s, 50=0.5s. Turns outside this window are allowed.",
+        anti360WindowInt, 10, 300);
+
+    uMenuItemToggle a360(&sub, "Anti-360 Lock",
+        "Prevent 360-degree suicide by ignoring the 4th consecutive turn in the same direction",
+        sg_modAnti360LockEnabled);
+
+    sub.Enter();
+
+    sn_anti360Window = (REAL)anti360WindowInt / 100.0f;
+    if (sn_anti360Window < 0.1f) sn_anti360Window = 0.1f;
+}
+
+// ---- Sub-menu: Fortress & Alerts ----
+static void sg_ModFortressMenu() {
+    uMenu sub("Fortress & Alerts");
+
+    uMenuItemToggle t4(&sub,
+        "Live Scoreboard",
+        "Show team scores and player ranking on screen",
+        sg_modScoreboardEnabled);
+
+    uMenuItemToggle t3(&sub,
+        "Zone Timers",
+        "Show time until Sumo/Fortress zone collapse",
+        sg_modZoneTimers);
+
+    uMenuItemToggle t2(&sub,
+        "Fortress Zone Alerts",
+        "Show conquest/defense alerts for fortress zones",
+        sg_modFortressAlerts);
+
+    uMenuItemToggle t1(&sub,
+        "Teammate Death Warning",
+        "Flash warning when a teammate dies",
+        sg_modTeammateDeathWarning);
+
+    sub.Enter();
+}
+
+// ---- Sub-menu: Minimap ----
+static void sg_ModMinimapMenu() {
+    uMenu sub("Minimap Settings");
+
+    static int minimapScaleInt, minimapZoomInt;
+    minimapScaleInt = (int)(sg_modMinimapScale * 10.0f);
+    minimapZoomInt = (int)(sg_modMinimapZoom * 10.0f);
+
+    uMenuItemToggle rotate(&sub, "Rotate With Player",
+        "Rotate minimap smoothly to match player direction", sg_modMinimapRotate);
+
+    uMenuItemInt zoom(&sub, "Inner Zoom (x10)",
+        "Zoom into map content (10=full, 20=2x, 50=5x)", minimapZoomInt, 10, 50);
+
+    uMenuItemInt scale(&sub, "Size (x10)",
+        "Minimap window size (1-30). Default 10", minimapScaleInt, 1, 30);
+
+    uMenuItemToggle toggle(&sub, "Minimap Enabled",
+        "Show/hide the minimap radar", sg_modMinimapEnabled);
+
+    sub.Enter();
+
+    sg_modMinimapScale = (REAL)minimapScaleInt / 10.0f;
+    if (sg_modMinimapScale < 0.1f) sg_modMinimapScale = 0.1f;
+    sg_modMinimapZoom = (REAL)minimapZoomInt / 10.0f;
+    if (sg_modMinimapZoom < 1.0f) sg_modMinimapZoom = 1.0f;
+}
+
+// ---- Sub-menu: Pathfinding ----
+static void sg_ModPathfindingMenu() {
+    uMenu sub("Pathfinding Settings");
+
+    static int pathDepthInt, pathRangeInt;
+    pathDepthInt = sg_modPathDepth;
+    pathRangeInt = sg_modPathRange;
+
+    uMenuItemInt depth(&sub, "Search Depth (turns)",
+        "How many turns ahead to explore (2-6)", pathDepthInt, 2, 6);
+
+    uMenuItemInt range(&sub, "Max Range (units)",
+        "Maximum distance the path can extend (50-200)", pathRangeInt, 50, 200);
+
+    uMenuItemToggle toggle(&sub, "Pathfinding Line",
+        "Show escape vector on the floor", sg_modPathLineEnabled);
+
+    sub.Enter();
+
+    sg_modPathDepth = pathDepthInt;
+    sg_modPathRange = pathRangeInt;
+}
+
+// ---- Sub-menu: Waypoints ----
+static void sg_ModWaypointsMenu() {
+    uMenu sub("Waypoint Settings");
+
+    static int minRubberInt, cooldownInt, lifetimeInt;
+    minRubberInt = (int)sg_modWaypointsMinRubber;
+    cooldownInt = (int)sg_modWaypointsCooldown;
+    lifetimeInt = (int)sg_modWaypointsLifetime;
+
+    uMenuItemInt lifetime(&sub, "Lifetime (sec)",
+        "How long waypoint markers stay visible (5-30)", lifetimeInt, 5, 30);
+
+    uMenuItemInt cooldown(&sub, "Cooldown (sec)",
+        "Seconds between markers (1-30)", cooldownInt, 1, 30);
+
+    uMenuItemToggle enemy(&sub, "All Walls",
+        "ON = all walls, OFF = rim only", sg_modWaypointsEnemyWalls);
+
+    uMenuItemInt minrub(&sub, "Min Rubber",
+        "Minimum rubber to create marker", minRubberInt, 0, 20);
+
+    uMenuItemToggle toggle(&sub, "Waypoints Enabled",
+        "Enable rubber waypoint markers", sg_modWaypointsEnabled);
+
+    sub.Enter();
+
+    sg_modWaypointsMinRubber = (REAL)minRubberInt;
+    sg_modWaypointsCooldown = (REAL)cooldownInt;
+    sg_modWaypointsLifetime = (REAL)lifetimeInt;
+}
+
+// ---- Sub-menu: Perfect Turn & AutoEscape ----
+static void sg_ModPerfectTurnMenu() {
+    uMenu sub("Perfect Turn & AutoEscape");
+
+    // Pull in the config vars from gCycle.cpp
+    extern REAL sg_perfectTurnCalibration;
+    extern REAL sg_autoEscapeRubberMargin;
+    extern bool sg_autoEscapePingComp;
+
+    static int calibInt, marginInt;
+    calibInt = (int)(sg_perfectTurnCalibration * 100.0f);
+    marginInt = (int)(sg_autoEscapeRubberMargin * 100.0f);
+
+    uMenuItemToggle pingComp(&sub,
+        "AutoEscape: Ping Compensation",
+        "Use network ping to time escape turns",
+        sg_autoEscapePingComp);
+
+    uMenuItemInt margin(&sub,
+        "AutoEscape: Rubber Margin (x100)",
+        "Safety margin before max rubber (0-100). 15 = 0.15 rubber units",
+        marginInt, 0, 100);
+
+    uMenuItemInt calib(&sub,
+        "Perfect Turn: Calibration (x100)",
+        "Manual trigger distance (0 = rubber-only mode). 50 = 0.50 units",
+        calibInt, 0, 200);
+
+    sub.Enter();
+
+    sg_perfectTurnCalibration = (REAL)calibInt / 100.0f;
+    sg_autoEscapeRubberMargin = (REAL)marginInt / 100.0f;
+}
+
+// ============ NOCLIP SETTINGS ============
+// Externs from eCamera.cpp
+extern REAL sg_noclipSpeed;
+extern REAL sg_noclipSlowFactor;
+extern REAL sg_noclipMouseSens;
+extern int sg_noclipKeyForward;
+extern int sg_noclipKeyBack;
+extern int sg_noclipKeyLeft;
+extern int sg_noclipKeyRight;
+extern int sg_noclipKeyUp;
+extern int sg_noclipKeyDown;
+extern int sg_noclipKeyZoomIn;
+extern int sg_noclipKeyZoomOut;
+extern int sg_noclipKeyCenter;
+extern int sg_noclipKeyLookAt;
+extern int sg_noclipKeyLock;
+extern int sg_noclipKeyFollow;
+extern int sg_noclipKeyNextPl;
+extern int sg_noclipKeyPrevPl;
+extern int sg_noclipKeySlow;
+// Cinematic externs
+extern bool sg_noclipCinematic;
+extern int sg_noclipKeyToggle;
+extern int sg_noclipKeyCinematic;
+extern int sg_noclipKeyOrbit;
+extern int sg_noclipKeySmooth;
+extern int sg_noclipKeyZoneFocus;
+extern REAL sg_noclipOrbitSpeed;
+extern REAL sg_noclipOrbitRadius;
+extern REAL sg_noclipOrbitHeight;
+extern REAL sg_noclipFollowDist;
+extern REAL sg_noclipFollowHeight;
+extern REAL sg_noclipSmoothFactor;
+
+#include <SDL_keysym.h>
+#include <SDL_keyboard.h>
+
+class uMenuItemModKey : public uMenuItem {
+    int& keycode;
+    tString title;
+    bool active;
+public:
+    uMenuItemModKey(uMenu* m, const char* t, const char* h, int& k)
+        : uMenuItem(m, h), keycode(k), title(t), active(false) {}
+
+    virtual ~uMenuItemModKey() {}
+
+    virtual void Render(REAL x, REAL y, REAL alpha=1, bool selected=false) {
+        DisplayText(x - 0.02f, y, title, selected, alpha, 1);
+        if (active) {
+            DisplayText(x + 0.02f, y, "Press any key... (ESC to cancel, DEL to clear)", selected, alpha, -1);
+        } else {
+            const char* name = "Unbound";
+            if (keycode > 0 && keycode <= SDLK_LAST) {
+                name = SDL_GetKeyName((SDLKey)keycode);
+            } else if (keycode == 0) {
+                name = "Unbound";
+            } else {
+                name = "Unknown";
+            }
+            DisplayText(x + 0.02f, y, name, selected, alpha, -1);
+        }
+    }
+
+    virtual void Enter() { active = true; }
+
+    virtual bool Event(SDL_Event& e) {
+        if (!active) return false;
+        
+        if (e.type == SDL_KEYDOWN) {
+            if (e.key.keysym.sym == SDLK_ESCAPE) {
+                active = false;
+                return true;
+            } else if (e.key.keysym.sym == SDLK_DELETE || e.key.keysym.sym == SDLK_BACKSPACE) {
+                keycode = 0;
+                active = false;
+                return true;
+            }
+            keycode = e.key.keysym.sym;
+            active = false;
+            return true;
+        } else if (e.type == SDL_MOUSEBUTTONDOWN) {
+            active = false;
+            return true;
+        }
+        return false;
+    }
+};
+
+static void sg_NoclipControlsMenu() {
+    uMenu sub("Noclip Controls");
+
+    // Cinematic keybinds
+    new uMenuItemModKey(&sub, "Toggle Noclip Key", "Enter/Exit spectator mode",          sg_noclipKeyToggle);
+    new uMenuItemModKey(&sub, "Zone Focus Key",    "Cycle camera look toward active zones",  sg_noclipKeyZoneFocus);
+    extern int sg_noclipKeyMapCenter;
+    new uMenuItemModKey(&sub, "Map Center Key",    "Lock camera look toward map center",     sg_noclipKeyMapCenter);
+    new uMenuItemModKey(&sub, "Smooth Follow Key", "Toggle smooth chase camera",         sg_noclipKeySmooth);
+    new uMenuItemModKey(&sub, "Orbit Camera Key",  "Toggle auto-orbit around player",    sg_noclipKeyOrbit);
+    new uMenuItemModKey(&sub, "Clean Screen Key",  "Toggle clean screen (hide ALL HUD)", sg_noclipKeyCinematic);
+    
+    // Console toggle
+    extern bool sg_noclipHideConsole;
+    new uMenuItemToggle(&sub, "Hide Console in Cinematic", "Hide the chat/console when Clean Screen is active", sg_noclipHideConsole);
+
+    extern bool sg_noclipHideNames;
+    new uMenuItemToggle(&sub, "Hide Names in Cinematic", "Hide player names and rubber gauge when Clean Screen is active", sg_noclipHideNames);
+
+    // Navigation keybinds
+    new uMenuItemModKey(&sub, "Slow Fly Key",       "Hold to fly slowly", sg_noclipKeySlow);
+    new uMenuItemModKey(&sub, "Prev Player Key",    "Teleport to previous player", sg_noclipKeyPrevPl);
+    new uMenuItemModKey(&sub, "Next Player Key",    "Teleport to next player", sg_noclipKeyNextPl);
+    new uMenuItemModKey(&sub, "Follow Player Key",  "Toggle player follow mode", sg_noclipKeyFollow);
+    new uMenuItemModKey(&sub, "Lock Camera Key",    "Freeze all movement and look", sg_noclipKeyLock);
+    new uMenuItemModKey(&sub, "Look-At Center Key", "Rotate camera toward map center", sg_noclipKeyLookAt);
+    new uMenuItemModKey(&sub, "TP to Center Key",   "Teleport to map center", sg_noclipKeyCenter);
+    new uMenuItemModKey(&sub, "Zoom Out Key",       "Increase FOV (zoom out)", sg_noclipKeyZoomOut);
+    new uMenuItemModKey(&sub, "Zoom In Key",        "Decrease FOV (zoom in)", sg_noclipKeyZoomIn);
+    new uMenuItemModKey(&sub, "Descend Key",        "Move camera down", sg_noclipKeyDown);
+    new uMenuItemModKey(&sub, "Ascend Key",         "Move camera up", sg_noclipKeyUp);
+    new uMenuItemModKey(&sub, "Strafe Right Key",   "Move camera right", sg_noclipKeyRight);
+    new uMenuItemModKey(&sub, "Strafe Left Key",    "Move camera left", sg_noclipKeyLeft);
+    new uMenuItemModKey(&sub, "Backward Key",       "Move camera backward", sg_noclipKeyBack);
+    new uMenuItemModKey(&sub, "Forward Key",        "Move camera forward", sg_noclipKeyForward);
+
+    sub.Enter();
+}
+
+static void sg_NoclipCinematicMenu() {
+    uMenu sub("Cinematic Camera Settings");
+
+    int orbitSpd  = (int)(sg_noclipOrbitSpeed * 100);
+    int orbitRad  = (int)sg_noclipOrbitRadius;
+    int orbitH    = (int)sg_noclipOrbitHeight;
+    int followD   = (int)sg_noclipFollowDist;
+    int followH   = (int)sg_noclipFollowHeight;
+    int smooth    = (int)(sg_noclipSmoothFactor * 10);
+
+    uMenuItemInt smoothItem(&sub, "Smooth Factor (x10)",
+        "LERP smoothing strength (50 = 5.0)", smooth, 10, 200);
+
+    uMenuItemInt fhItem(&sub, "Follow Height",
+        "Camera height above followed player", followH, 5, 200);
+
+    uMenuItemInt fdItem(&sub, "Follow Distance",
+        "Camera distance behind followed player", followD, 5, 200);
+
+    uMenuItemInt ohItem(&sub, "Orbit Height",
+        "Height of orbit camera above target", orbitH, 5, 300);
+
+    uMenuItemInt orItem(&sub, "Orbit Radius",
+        "Distance from orbit center to camera", orbitRad, 10, 500);
+
+    uMenuItemInt osItem(&sub, "Orbit Speed (x100)",
+        "Angular speed of orbit (30 = 0.3 rad/s)", orbitSpd, 5, 200);
+
+    uMenuItemToggle cinToggle(&sub, "Clean Screen (no HUD)",
+        "Hide ALL HUD elements for pure cinematic view", sg_noclipCinematic);
+
+    sub.Enter();
+
+    sg_noclipOrbitSpeed = (REAL)orbitSpd / 100.0;
+    sg_noclipOrbitRadius = (REAL)orbitRad;
+    sg_noclipOrbitHeight = (REAL)orbitH;
+    sg_noclipFollowDist = (REAL)followD;
+    sg_noclipFollowHeight = (REAL)followH;
+    sg_noclipSmoothFactor = (REAL)smooth / 10.0;
+}
+
+static void sg_NoclipSettingsMenu() {
+    uMenu sub("Noclip Spectator Settings");
+
+    // Speed as int for easier slider
+    int speedInt = (int)sg_noclipSpeed;
+    int sensInt  = (int)(sg_noclipMouseSens * 10000);
+    int slowInt  = (int)(sg_noclipSlowFactor * 100);
+
+    uMenuItemFunction cin(&sub, "Cinematic Settings >>",
+        "Orbit, smooth follow, clean screen", &sg_NoclipCinematicMenu);
+
+    uMenuItemFunction ctrl(&sub, "Controls / Keybinds >>",
+        "Rebind all noclip keys", &sg_NoclipControlsMenu);
+
+    uMenuItemInt slowItem(&sub, "Slow Factor (x100)",
+        "Speed multiplier when slow key is held (25 = 0.25x)", slowInt, 5, 100);
+
+    uMenuItemInt sensItem(&sub, "Mouse Sensitivity (x10000)",
+        "Mouse look sensitivity (30 = 0.003)", sensInt, 5, 200);
+
+    uMenuItemInt speedItem(&sub, "Flight Speed",
+        "Base movement speed in noclip mode", speedInt, 5, 500);
+
+    sub.Enter();
+
+    sg_noclipSpeed = (REAL)speedInt;
+    sg_noclipMouseSens = (REAL)sensInt / 10000.0;
+    sg_noclipSlowFactor = (REAL)slowInt / 100.0;
+}
+
+// ---- Main Mod Menu ----
+void sg_ModSettingsMenu() {
+    uMenu mod_menu("Ilona's Mod Menu");
+
+    uMenuItemToggle battery(&mod_menu, "Rubber Battery Indicator",
+        "Wide horizontal rubber bar above bottom panels", sg_modRubberBatteryEnabled);
+
+    uMenuItemFunction fw(&mod_menu, "Waypoint Settings >>",
+        "Configure rubber waypoint markers", sg_ModWaypointsMenu);
+
+    uMenuItemFunction fp(&mod_menu, "Pathfinding Settings >>",
+        "Configure escape pathfinding visualization", sg_ModPathfindingMenu);
+
+    uMenuItemFunction fm(&mod_menu, "Minimap Settings >>",
+        "Configure minimap radar display", sg_ModMinimapMenu);
+
+    uMenuItemFunction ff(&mod_menu, "Fortress & Alerts >>",
+        "Scoreboard, zone timers, death warnings", sg_ModFortressMenu);
+
+    uMenuItemFunction fc(&mod_menu, "Combat Settings >>",
+        "Cut-off predictor, proximity warning, gauges", sg_ModCombatMenu);
+
+    uMenuItemFunction fpt(&mod_menu, "Perfect Turn & AutoEscape >>",
+        "Configure perfect turn timing and auto-escape rubber triggers", sg_ModPerfectTurnMenu);
+
+    uMenuItemFunction fnoclip(&mod_menu, "Noclip Spectator >>",
+        "Flight speed, mouse sensitivity, keybinds, slow mode", &sg_NoclipSettingsMenu);
+
+    uMenuItemToggle calcToggle(&mod_menu, "Chat Calculator Bot",
+        "Auto-reply to math expressions in chat (e.g. 2+2, sin(45))", sg_modChatCalcEnabled);
+
+    uMenuItemToggle trashToggle(&mod_menu, "AI Trash Talker",
+        "Auto trash talk based on game events and chat keywords", sg_modTrashTalkEnabled);
+
+    uMenuItemToggle kdToggle(&mod_menu, "K/D Counter HUD",
+        "Show kills/deaths/KD ratio on screen (top-left)", sg_modKDEnabled);
+
+    uMenuItemToggle greetToggle(&mod_menu, "Auto-Greet on Join",
+        "Automatically greet when joining a server", sg_modAutoGreet);
+
+    uMenuItemToggle friendlyToggle(&mod_menu, "Friendly Auto-Responder",
+        "Polite responses only (gg, wp, gf, hi, bb) - safe for competitive", sg_modFriendlyChat);
+
+    uMenuItemToggle colorPickToggle(&mod_menu, "Color Picker (chat: color NAME)",
+        "Type 'color NAME' in chat to see player RGB. 'color NAME apply' to copy.", sg_modColorPicker);
+
+    mod_menu.Enter();
+}
+// ============ END MOD SETTINGS ============
+
+static tConfItem<int>   tm0("TEXTURE_MODE_0",rTextureGroups::TextureMode[0]);
+static tConfItem<int>   tm1("TEXTURE_MODE_1",rTextureGroups::TextureMode[1]);
+static tConfItem<int>   tm2("TEXTURE_MODE_2",rTextureGroups::TextureMode[2]);
+static tConfItem<int>   tm3("TEXTURE_MODE_3",rTextureGroups::TextureMode[3]);
+
+uMenu sg_screenMenu("$display_settings_menu");
+
+static uMenuItemFunction defaul
+(&sg_screenMenu,"$graphics_load_defaults_text",
+ "$graphics_load_defaults_help",
+ &sr_LoadDefaultConfig);
+uMenu screen_menu_detail("$detail_settings_menu");
+uMenu screen_menu_tweaks("$performance_tweaks_menu");
+uMenu screen_menu_prefs("$preferences_menu");
+uMenu hud_prefs("$hud_menu");
+
+static void sg_ScreenModeMenu();
+
+static uMenuItemSubmenu smt(&sg_screenMenu,&screen_menu_tweaks,
+                            "$performance_tweaks_menu_help");
+static uMenuItemSubmenu smd(&sg_screenMenu,&screen_menu_detail,
+                            "$detail_settings_menu_help");
+static uMenuItemSubmenu smp(&sg_screenMenu,&screen_menu_prefs,
+                            "$preferences_menu_help");
+static uMenuItemFunction smm(&sg_screenMenu,"$screen_mode_menu",
+                             "$screen_mode_menu_help", sg_ScreenModeMenu );
+
+static uMenuItemSubmenu huds(&screen_menu_prefs,&hud_prefs,
+                             "$hud_menu_help");
+
+
+static tConfItemLine c_ext("GL_EXTENSIONS",gl_extensions);
+static tConfItemLine c_ver("GL_VERSION",gl_version);
+static tConfItemLine c_rEnd("GL_RENDERER",gl_renderer);
+static tConfItemLine c_vEnd("GL_VENDOR",gl_vendor);
+// static tConfItemLine a_ver("ARMAGETRON_VERSION",sn_programVersion);
+
+static std::deque<tString> sg_consoleHistory; // global since the class doesn't live beyond the execution of the command
+static int sg_consoleHistoryMaxSize=10; // size of the console history
+static tSettingItem< int > sg_consoleHistoryMaxSizeConf("HISTORY_SIZE_CONSOLE",sg_consoleHistoryMaxSize);
+
+class ArmageTron_feature_menuitem: public uMenuItemSelection<int>{
+    void NewChoice(uSelectItem<bool> *){}
+    void NewChoice(char *,bool ){}
+public:
+    ArmageTron_feature_menuitem(uMenu *m,char const * tit,char const * help,int &targ)
+            :uMenuItemSelection<int>(m,tit,help,targ){
+        uMenuItemSelection<int>::NewChoice(
+            "$feature_disabled_text",
+            "$feature_disabled_help",
+            rFEAT_OFF);
+        uMenuItemSelection<int>::NewChoice(
+            "$feature_default_text",
+            "$feature_default_help",
+            rFEAT_DEFAULT);
+        uMenuItemSelection<int>::NewChoice(
+            "$feature_enabled_text",
+            "$feature_enabled_help",
+            rFEAT_ON);
+    }
+
+    ~ArmageTron_feature_menuitem(){}
+};
+
+
+class ArmageTron_texmode_menuitem: public uMenuItemSelection<int>{
+    void NewChoice(uSelectItem<bool> *){}
+    void NewChoice(char *,bool ){}
+public:
+    ArmageTron_texmode_menuitem(uMenu *m,char const * tit,int &targ,
+                                bool font=false)
+            :uMenuItemSelection<int>
+    (m,tit,"$texture_menuitem_help",targ){
+
+        if(!font)
+            uMenuItemSelection<int>::NewChoice
+            ("$texture_off_text","$texture_off_help",-1);
+#ifndef DEDICATED
+        uMenuItemSelection<int>::NewChoice
+        ("$texture_nearest_text","$texture_nearest_help",GL_NEAREST);
+
+        uMenuItemSelection<int>::NewChoice
+        ("$texture_bilinear_text","$texture_bilinear_help",GL_LINEAR);
+
+        if(!font)
+        {
+            uMenuItemSelection<int>::NewChoice
+            ("$texture_mipmap_nearest_text",
+             "$texture_mipmap_nearest_help",
+             GL_NEAREST_MIPMAP_NEAREST);
+            uMenuItemSelection<int>::NewChoice
+            ("$texture_mipmap_bilinear_text",
+             "$texture_mipmap_bilinear_help",
+             GL_LINEAR_MIPMAP_NEAREST);
+            uMenuItemSelection<int>::NewChoice
+            ("$texture_mipmap_trilinear_text",
+             "$texture_mipmap_trilinear_help",
+             GL_LINEAR_MIPMAP_LINEAR);
+        }
+    #endif
+    }
+
+    ~ArmageTron_texmode_menuitem(){}
+};
+
+static tConfItem<bool>    ab("ALPHA_BLEND",sr_alphaBlend);
+static tConfItem<bool>    ss("SMOOTH_SHADING",sr_smoothShading);
+static tConfItem<bool>    to("TEXT_OUT",sr_textOut);
+static tConfItem<bool>    fps("SHOW_FPS",sr_FPSOut);
+static tConfItem<bool>    pbt("SHOW_RECORDING_TIME",sr_RecordingTimeOut);
+// tConfItem<> ("",&);
+static tConfItem<int> fm("FLOOR_MIRROR",sr_floorMirror);
+static tConfItem<int> fd("FLOOR_DETAIL",sr_floorDetail);
+static tConfItem<bool> hr("HIGH_RIM",sr_highRim);
+static tConfItem<bool> dt("DITHER",sr_dither);
+static tConfItem<bool> us("UPPER_SKY",sr_upperSky);
+static tConfItem<bool> ls("LOWER_SKY",sr_lowerSky);
+static tConfItem<bool> wos("SKY_WOBBLE",sr_skyWobble);
+static tConfItem<bool> ip("INFINITY_PLANE",sr_infinityPlane);
+
+extern bool sg_axesIndicator;
+
+static tConfItem<bool> lm("LAG_O_METER",sr_laggometer);
+static tConfItem<bool> ai("AXES_INDICATOR",sg_axesIndicator);
+static tConfItem<bool> po("PREDICT_OBJECTS",sr_predictObjects);
+static tConfItem<bool> t32("TEXTURES_HI",sr_texturesTruecolor);
+
+static tConfItem<bool> kwa("KEEP_WINDOW_ACTIVE",sr_keepWindowActive);
+#ifdef USE_HEADLIGHT
+static tConfItem<bool> chl("HEADLIGHT",headlights);
+#endif
+
+#ifndef SDL_OPENGL
+#ifndef DIRTY
+#define DIRTY
+#endif
+#endif
+
+bool operator < ( rScreenSize const & a, rScreenSize const & b )
+{
+    return a.Compare(b) < 0;
+}
+
+class gResMenEntry
+{
+    uMenuItemSelection<rScreenSize> res_men; // menu item
+    std::set< rScreenSize > sizes;           // set of already added modes
+
+    // adds a single custom screen resolution
+    void NewChoice( rScreenSize const & size )
+    {
+        if ( sizes.find( size ) == sizes.end() )
+        {
+            sizes.insert(size);
+        }
+    }
+
+    // adds a single predefined resolution
+    void NewChoice( rResolution res )
+    {
+        rScreenSize size( res );
+        NewChoice( size );
+    }
+
+public:
+    gResMenEntry( uMenu & screen_menu_mode, rScreenSize& res, const tOutput& text, const tOutput& help, bool addFixed )
+            :res_men
+            (&screen_menu_mode,
+             text,
+             help,
+             res)
+    {
+#ifndef DEDICATED
+        // fetch valid screen modes from SDL
+        SDL_Rect **modes;
+        modes=SDL_ListModes(NULL, SDL_FULLSCREEN|SDL_OPENGL);
+
+        // Check is there are any modes available
+        int i;
+        if(modes == 0 || modes == (SDL_Rect **)-1)
+        {
+            // add all fixed resolutions
+            for ( i = ArmageTron_Custom; i>=0; --i )
+            {
+                NewChoice( rResolution(i) );
+            }
+        }
+        else
+        {
+            // add custom resolution
+            NewChoice( ArmageTron_Custom );
+
+            // add desktop resolution
+            if ( sr_DesktopScreensizeSupported() && !addFixed )
+                NewChoice( ArmageTron_Desktop );
+
+            // the maximal allowed screen size
+            rScreenSize maxSize(0,0);
+
+            // fill in available modes (avoid duplicates)
+            for(i=0;modes[i];++i)
+            {
+                // add mode (if it's new)
+                rScreenSize size(modes[i]->w, modes[i]->h);
+                NewChoice( size );
+                if ( maxSize.width < size.width )
+                    maxSize.width = size.width;
+                if ( maxSize.height < size.height )
+                    maxSize.height = size.height;
+            }
+
+            // add fixed resolutions (as window sizes)
+            if ( addFixed )
+            {
+                for ( i = ArmageTron_Custom; i>=ArmageTron_Min; --i )
+                {
+                    rScreenSize size( static_cast< rResolution >(i) );
+
+                    // only add those that fit the maximal resolution
+                    if ( maxSize.height >= size.height && maxSize.width >= size.width )
+                        NewChoice( size );
+                }
+            }
+        }
+
+        // insert sorted resolutions into menu
+        for( std::set< rScreenSize >::iterator iter = sizes.begin(); iter != sizes.end(); ++iter )
+            {
+                rScreenSize const & size = *iter;
+
+                std::stringstream s;
+                if ( size.width + size.height > 0 )
+                    s << size.width << " x " << size.height;
+                else
+                    s << tOutput("$screen_size_desktop");
+
+                res_men.NewChoice( s.str().c_str(), "", size );
+            }
+
+#endif
+    }
+};
+
+static void sg_ScreenModeMenu()
+{
+    uMenu screen_menu_mode("$screen_mode_menu");
+
+    uMenuItemFunction appl
+    (&screen_menu_mode,
+     "$screen_apply_changes_text",
+     "$screen_apply_changes_help",
+     &sr_ReinitDisplay);
+
+    uMenuItemToggle kwa_t(
+        &screen_menu_mode,
+        "$screen_keep_window_active_text",
+        "$screen_keep_window_active_help",
+        sr_keepWindowActive);
+
+    uMenuItemToggle ie_t
+    (&screen_menu_mode,
+     "$screen_check_errors_text",
+     "$screen_check_errors_help",
+     currentScreensetting.checkErrors);
+
+    // frame rate limit
+    std::unique_ptr<uMenuItem> zfm_t;
+    {
+        // list of hand-picked MAX_FPS values
+        std::array<int, 17> pickableLimits{0, 20, 30, 40, 60, 80, 100, 120, 180, 240, 300, 360, 480, 600, 720, 900, 1200};
+        bool pickable = false;
+        for (auto const limit : pickableLimits)
+        {
+            if (limit == sr_maxFPS)
+                pickable = true;
+        }
+
+        if (pickable)
+        {
+            // current value is in pickable list. create selection menu item
+            auto zmf_t_p = new uMenuItemSelection<int>(&screen_menu_mode,
+                                                       "$screen_max_fps_text",
+                                                       "$max_fps_help",
+                                                       sr_maxFPS);
+            zfm_t.reset(zmf_t_p);
+
+            zmf_t_p->NewChoice("$screen_max_fps_off_text", "$screen_max_fps_off_help", 0);
+            for (auto const limit : pickableLimits)
+            {
+                if (!limit)
+                    continue;
+                std::stringstream s;
+                s << limit;
+                zmf_t_p->NewChoice(s.str().c_str(), "", limit);
+            }
+        }
+        else
+        {
+            // fallback to ranged item
+            zfm_t.reset(new uMenuItemInt(&screen_menu_mode, "$screen_max_fps_text", "$max_fps_help", sr_maxFPS, 0, 9990, 10));
+        }
+    }
+
+#ifdef SDL_OPENGL
+#ifdef DIRTY
+    uMenuItemToggle sdl_t
+    (&screen_menu_mode,
+     "$screen_use_sdl_text",
+     "$screen_use_sdl_help",
+     currentScreensetting.useSDL);
+#endif // dirty
+
+#if SDL_VERSION_ATLEAST(1, 2, 10)
+    uMenuItemSelection<rVSync> zvs_t
+    (&screen_menu_mode,
+     "$screen_vsync_text",
+     "$screen_vsync_help",
+     currentScreensetting.vSync);
+
+    uSelectEntry<rVSync> zvs_on(zvs_t,"$screen_vsync_on_text","$screen_vsync_on_help",ArmageTron_VSync_On);
+    uSelectEntry<rVSync> zvs_d(zvs_t,"$screen_vsync_default_text","$screen_vsync_default_help",ArmageTron_VSync_Default);
+    uSelectEntry<rVSync> zvs_off(zvs_t,"$screen_vsync_off_text","$screen_vsync_off_help",ArmageTron_VSync_Off);
+#ifdef HAVE_GLEW
+    uSelectEntry<rVSync> zvs_blur(zvs_t,"$screen_vsync_motionblur_text","$screen_vsync_motionblur_help",ArmageTron_VSync_MotionBlur);
+#endif // HAVE_GLEW
+#endif // SDL_GL_SWAP_CONTROL
+#endif // SDL_OPENGL
+
+    uMenuItemToggle gm(
+        &screen_menu_mode,
+        "$screen_grab_mouse_text",
+        "$screen_grab_mouse_help",
+        su_mouseGrab);
+
+    uMenuItemSelection<rColorDepth> zd_t
+    (&screen_menu_mode,
+     "$screen_zdepth_text",
+     "$screen_zdepth_help",
+     currentScreensetting.zDepth);
+
+    uSelectEntry<rColorDepth> zd_16(zd_t,"$screen_zdepth_16_text","$screen_zdepth_16_help",ArmageTron_ColorDepth_16);
+    uSelectEntry<rColorDepth> zd_d(zd_t,"$screen_zdepth_desk_text","$screen_zdepth_desk_help",ArmageTron_ColorDepth_Desktop);
+    uSelectEntry<rColorDepth> zd_32(zd_t,"$screen_zdepth_32_text","$screen_zdepth_32_help",ArmageTron_ColorDepth_32);
+
+    uMenuItemSelection<rColorDepth> cd_t
+    (&screen_menu_mode,
+     "$screen_colordepth_text",
+     "$screen_colordepth_help",
+     currentScreensetting.colorDepth);
+
+    uSelectEntry<rColorDepth> cd_16(cd_t,"$screen_colordepth_16_text","$screen_colordepth_16_help",ArmageTron_ColorDepth_16);
+    uSelectEntry<rColorDepth> cd_d(cd_t,"$screen_colordepth_desk_text","$screen_colordepth_desk_help",ArmageTron_ColorDepth_Desktop);
+    uSelectEntry<rColorDepth> cd_32(cd_t,"$screen_colordepth_32_text","$screen_colordepth_32_help",ArmageTron_ColorDepth_32);
+
+    uMenuItemToggle fs_t
+    (&screen_menu_mode,
+     "$screen_fullscreen_text",
+     "$screen_fullscreen_help",
+     currentScreensetting.fullscreen);
+
+
+    gResMenEntry res( screen_menu_mode, currentScreensetting.res, "$screen_resolution_text", "$screen_resolution_help", false );
+    gResMenEntry winsize( screen_menu_mode, currentScreensetting.windowSize, "$window_size_text", "$window_size_help", true );
+
+    /*
+    uMenuItemSelection<rResolution> res_men
+    (&screen_menu_mode,
+     "$screen_resolution_text",
+     "$screen_resolution_help",
+     currentScreensetting.res);
+
+
+    uSelectEntry<rResolution> a(res_men,"320x200","",ArmageTron_320_200);
+     static uSelectEntry<rResolution> b(res_men,"320x240","",ArmageTron_320_240);
+    static uSelectEntry<rResolution> c(res_men,"400x300","",ArmageTron_400_300);
+    static uSelectEntry<rResolution> d(res_men,"512x384","",ArmageTron_512_384);
+    static uSelectEntry<rResolution> e(res_men,"640x480","",ArmageTron_640_480);
+    static uSelectEntry<rResolution> f(res_men,"800x600","",ArmageTron_800_600);
+    static uSelectEntry<rResolution> g(res_men,"1024x768","",ArmageTron_1024_768);
+    static uSelectEntry<rResolution> h(res_men,"1280x1024","",ArmageTron_1280_1024);
+    static uSelectEntry<rResolution> i(res_men,"1600x1200","",ArmageTron_1600_1200);
+    static uSelectEntry<rResolution> j(res_men,"2048x1572","",ArmageTron_2048_1572);
+    static uSelectEntry<rResolution> jj(res_men,
+    				    "$screen_custom_text",
+    				    "$screen_custom_help"
+    				    ,ArmageTron_Custom);
+    */
+
+    screen_menu_mode.Enter();
+}
+
+
+static uMenuItemSelection<int> mfm
+(&screen_menu_detail,
+ "$detail_floor_mirror_text",
+ "$detail_floor_mirror_help",
+ sr_floorMirror);
+static uSelectEntry<int> mfma(mfm,"$detail_floor_mirror_off_text","$detail_floor_mirror_off_help",rMIRROR_OFF);
+
+
+static uSelectEntry<int> mfmb(mfm,"$detail_floor_mirror_obj_text",
+                              "$detail_floor_mirror_obj_help",
+                              rMIRROR_OBJECTS);
+
+static uSelectEntry<int> mfmc(mfm,"$detail_floor_mirror_ow_text",
+                              "$detail_floor_mirror_ow_help",
+                              rMIRROR_WALLS);
+
+static uSelectEntry<int> mfme(mfm,"$detail_floor_mirror_ev_text","$detail_floor_mirror_ev_help",rMIRROR_ALL);
+
+static uMenuItemToggle fs_dither
+(&screen_menu_detail,"$detail_dither_text",
+ "$detail_dither_help",
+ sr_dither);
+
+#ifndef DEDICATED
+// from gWall.cpp
+extern bool sg_simpleTrail;
+static uMenuItemToggle sgm_simpleTrail
+(&screen_menu_detail,
+ "$detail_simple_trail_text",
+ "$detail_simple_trail_help",
+ sg_simpleTrail);
+#endif
+
+static uMenuItemSelection<int> mfd
+(&screen_menu_detail,
+ "$detail_floor_text",
+ "$detail_floor_help",
+ sr_floorDetail);
+
+static uSelectEntry<int> mfda(mfd,"$detail_floor_no_text",
+                              "$detail_floor_no_help",
+                              rFLOOR_OFF);
+static uSelectEntry<int> mfdb(mfd,"$detail_floor_grid_text",
+                              "$detail_floor_grid_help",
+                              rFLOOR_GRID);
+static uSelectEntry<int> mfdc(mfd,"$detail_floor_tex_text",
+                              "$detail_floor_tex_help",
+                              rFLOOR_TEXTURE);
+static uSelectEntry<int> mfdd(mfd,"$detail_floor_2tex_text",
+                              "$detail_floor_2tex_help",
+                              rFLOOR_TWOTEXTURE);
+
+static uMenuItemToggle  abm
+(&screen_menu_detail,"$detail_alpha_text",
+ "$detail_alpha_help",
+ sr_alphaBlend);
+
+static uMenuItemToggle  ssm
+(&screen_menu_detail,"$detail_smooth_text",
+ "$detail_smooth_help",
+ sr_smoothShading);
+
+extern bool crash_sparks;		// from gCycle.cpp
+extern bool white_sparks;		// from gSparks.cpp
+static tConfItem<bool> cs2("SPARKS",crash_sparks);
+static tConfItem<bool> wsp("WHITE_SPARKS",white_sparks);
+
+extern bool sg_crashExplosion;   // from gExplosion.cpp
+static tConfItem<bool> crexp("EXPLOSION",sg_crashExplosion);
+
+#ifndef DEDICATED
+//extern bool png_screenshot;		// from rSysdep.cpp
+//static tConfItem<bool> pns("PNG_SCREENSHOT",png_screenshot);
+
+static uMenuItemToggle  t32b
+(&screen_menu_detail,"$detail_text_truecolor_text",
+ "$detail_text_truecolor_help"
+ ,sr_texturesTruecolor);
+
+
+static ArmageTron_texmode_menuitem tmm0(&screen_menu_detail,
+                                        rTextureGroups::TextureGroupDescription[0],
+                                        rTextureGroups::TextureMode[0]);
+
+static ArmageTron_texmode_menuitem tmm1(&screen_menu_detail,
+                                        rTextureGroups::TextureGroupDescription[1],
+                                        rTextureGroups::TextureMode[1]);
+
+static ArmageTron_texmode_menuitem tmm2(&screen_menu_detail,
+                                        rTextureGroups::TextureGroupDescription[2],
+                                        rTextureGroups::TextureMode[2]);
+
+static ArmageTron_texmode_menuitem tmm3(&screen_menu_detail,
+                                        rTextureGroups::TextureGroupDescription[3],
+                                        rTextureGroups::TextureMode[3],true);
+
+
+uMenuItemToggle bpt2
+(&screen_menu_prefs,"$misc_recording_time_text",
+ "$misc_recording_time_help",sr_RecordingTimeOut);
+
+static uMenuItemToggle s2
+(&screen_menu_prefs,"$pref_highrim_text",
+ "$pref_highrim_help",sr_highRim);
+
+static uMenuItemToggle us2
+(&screen_menu_prefs,"$pref_uppersky_text",
+ "$pref_uppersky_help",
+ sr_upperSky);
+
+static uMenuItemToggle ls2
+(&screen_menu_prefs,"$pref_lowersky_text",
+ "$pref_lowersky_help",
+ sr_lowerSky);
+
+uMenuItemToggle fps2
+(&screen_menu_prefs,"$misc_fps_text",
+ "$misc_fps_help",sr_FPSOut);
+
+#ifdef USE_HEADLIGHT
+static uMenuItemToggle uchl(&screen_menu_prefs,"$pref_headlight_text","$pref_headlight_help",
+                            headlights);
+#endif
+
+
+static uMenuItemToggle ws2
+(&screen_menu_prefs,"$pref_skymove_text",
+ "$pref_skymove_help",
+ sr_skyWobble);
+
+static uMenuItemToggle crexp2
+(&screen_menu_prefs,"$pref_explosion_text",
+ "$pref_explosion_help",
+ sg_crashExplosion);
+
+static uMenuItemToggle cs
+(&screen_menu_prefs,"$pref_sparks_text",
+ "$pref_sparks_help",
+ crash_sparks);
+
+static uMenuItemSelection<rDisplayListUsage> dl
+(&screen_menu_tweaks,"$tweaks_displaylists_text",
+ "$tweaks_displaylists_help", sr_useDisplayLists);
+static uSelectEntry<rDisplayListUsage> dl_off(dl,"$tweaks_displaylists_off_text","$tweaks_displaylists_off_help",rDisplayList_Off);
+static uSelectEntry<rDisplayListUsage> dl_cac(dl,"$tweaks_displaylists_cac_text","$tweaks_displaylists_cac_help",rDisplayList_CAC);
+static uSelectEntry<rDisplayListUsage> dl_cae(dl,"$tweaks_displaylists_cae_text","$tweaks_displaylists_cae_help",rDisplayList_CAE);
+
+static uMenuItemToggle infp
+(&screen_menu_tweaks,"$tweaks_infinity_text",
+ "$tweaks_infinity_help"
+ ,sr_infinityPlane);
+
+uMenuItemSelection<rSysDep::rSwapMode> swapMode
+(&screen_menu_tweaks,
+ "$swapmode_text",
+ "$swapmode_help",
+ rSysDep::swapMode_);
+
+static uSelectEntry<rSysDep::rSwapMode> swapMode_fastest(swapMode,"$swapmode_fastest_text","$swapmode_fastest_help",rSysDep::rSwap_Fastest);
+static uSelectEntry<rSysDep::rSwapMode> swapMode_glFlush(swapMode,"$swapmode_glflush_text","$swapmode_glflush_help",rSysDep::rSwap_glFlush);
+static uSelectEntry<rSysDep::rSwapMode> swapMode_glFinish(swapMode,"$swapmode_glfinish_text","$swapmode_glfinish_help",rSysDep::rSwap_glFinish);
+
+/*
+uMenuItemSelection<int> targetFPS
+(&screen_menu_tweaks,
+ "$targetfps_text",
+ "$targetfps_help",
+rSysDep::swapMode_);
+
+static uSelectEntry<rSysDep::rSwapMode> swapMode_150Hz(swapMode,"$swapmode_150hz_text","$swapmode_150hz_help",rSysDep::rSwap_150Hz);
+static uSelectEntry<rSysDep::rSwapMode> swapMode_100Hz(swapMode,"$swapmode_100hz_text","$swapmode_100hz_help",rSysDep::rSwap_100Hz);
+static uSelectEntry<rSysDep::rSwapMode> swapMode_80Hz(swapMode,"$swapmode_80hz_text","$swapmode_80hz_help",rSysDep::rSwap_80Hz);
+static uSelectEntry<rSysDep::rSwapMode> swapMode_60Hz(swapMode,"$swapmode_60hz_text","$swapmode_60hz_help",rSysDep::rSwap_60Hz);
+*/
+
+tCONFIG_ENUM( rSysDep::rSwapMode );
+
+static tConfItem< rSysDep::rSwapMode > swapModeCI("SWAP_MODE", rSysDep::swapMode_ );
+
+static tConfItem<REAL> sgs("SPEED_GAUGE_SIZE",subby_SpeedGaugeSize);
+static tConfItem<REAL> sgx("SPEED_GAUGE_LOCX",subby_SpeedGaugeLocX);
+static tConfItem<REAL> sgy("SPEED_GAUGE_LOCY",subby_SpeedGaugeLocY);
+
+static tConfItem<REAL> bgs("BRAKE_GAUGE_SIZE",subby_BrakeGaugeSize);
+static tConfItem<REAL> bgx("BRAKE_GAUGE_LOCX",subby_BrakeGaugeLocX);
+static tConfItem<REAL> bgy("BRAKE_GAUGE_LOCY",subby_BrakeGaugeLocY);
+
+static tConfItem<REAL> rgs("RUBBER_GAUGE_SIZE",subby_RubberGaugeSize);
+static tConfItem<REAL> rgx("RUBBER_GAUGE_LOCX",subby_RubberGaugeLocX);
+static tConfItem<REAL> rgy("RUBBER_GAUGE_LOCY",subby_RubberGaugeLocY);
+
+static tConfItem<bool> showh("SHOW_HUD",subby_ShowHUD);
+static tConfItem<bool> showf("SHOW_FASTEST",subby_ShowSpeedFastest);
+static tConfItem<bool> shows("SHOW_SCORE",subby_ShowScore);
+static tConfItem<bool> showae("SHOW_ALIVE",subby_ShowAlivePeople);
+static tConfItem<bool> showp("SHOW_PING",subby_ShowPing);
+static tConfItem<bool> showsm("SHOW_SPEED",subby_ShowSpeedMeter);
+static tConfItem<bool> showbm("SHOW_BRAKE",subby_ShowBrakeMeter);
+static tConfItem<bool> showrm("SHOW_RUBBER",subby_ShowRubberMeter);
+static tConfItem<bool> showtim("SHOW_TIME",showTime);
+static tConfItem<bool> show24("SHOW_TIME_24",show24hour);
+
+static tConfItem<REAL> scorex("SCORE_LOCX",subby_ScoreLocX);
+static tConfItem<REAL> scorey("SCORE_LOCY",subby_ScoreLocY);
+static tConfItem<REAL> scores("SCORE_SIZE",subby_ScoreSize);
+
+static tConfItem<REAL> fastx("FASTEST_LOCX",subby_FastestLocX);
+static tConfItem<REAL> fasty("FASTEST_LOCY",subby_FastestLocY);
+static tConfItem<REAL> fasts("FASTEST_SIZE",subby_FastestSize);
+
+static tConfItem<REAL> aex("ALIVE_LOCX",subby_AlivePeopleLocX);
+static tConfItem<REAL> aey("ALIVE_LOCY",subby_AlivePeopleLocY);
+static tConfItem<REAL> aes("ALIVE_SIZE",subby_AlivePeopleSize);
+
+static tConfItem<REAL> px("PING_LOCX",subby_PingLocX);
+static tConfItem<REAL> py("PING_LOCY",subby_PingLocY);
+static tConfItem<REAL> ps("PING_SIZE",subby_PingSize);
+
+uMenuItemToggle hud3
+(&hud_prefs,"$pref_showfastest_text",
+ "$pref_showfastest_help",subby_ShowSpeedFastest);
+
+uMenuItemToggle mud4
+(&hud_prefs,"$pref_showscore_text",
+ "$pref_showscore_help",subby_ShowScore);
+
+uMenuItemToggle hud5
+(&hud_prefs,"$pref_showenemies_text",
+ "$pref_showenemies_help",subby_ShowAlivePeople);
+
+uMenuItemToggle hud6
+(&hud_prefs,"$pref_showping_text",
+ "$pref_showping_help",subby_ShowPing);
+
+uMenuItemToggle hud7
+(&hud_prefs,"$pref_showspeed_text",
+ "$pref_showspeed_help",subby_ShowSpeedMeter);
+
+uMenuItemToggle hud8
+(&hud_prefs,"$pref_showbrake_text",
+ "$pref_showbrake_help",subby_ShowBrakeMeter);
+
+uMenuItemToggle hud9
+(&hud_prefs,"$pref_showrubber_text",
+ "$pref_showrubber_help",subby_ShowRubberMeter);
+
+uMenuItemToggle hud10
+(&hud_prefs,"$pref_showtime_text",
+ "$pref_showtime_help",showTime);
+
+uMenuItemToggle hud11
+(&hud_prefs,"$pref_show24hour_text",
+ "$pref_show24hour_help",show24hour);
+
+uMenuItemToggle hud2
+(&hud_prefs,"$pref_showhud_text",
+ "$pref_showhud_help",subby_ShowHUD);
+
+static tConfItem<bool> WRAP("WRAP_MENU",uMenu::wrap);
+
+class gMemuItemConsole: uMenuItemStringWithHistory{
+public:
+    gMemuItemConsole(uMenu *M,tString &c):
+    uMenuItemStringWithHistory(M,"Con:","", c, 1024, sg_consoleHistory, sg_consoleHistoryMaxSize) {}
+
+    virtual ~gMemuItemConsole(){}
+
+    //virtual void Render(REAL x,REAL y,REAL alpha=1,bool selected=0);
+
+    virtual bool Event(SDL_Event &e){
+        if (e.type==SDL_KEYDOWN &&
+                (e.key.keysym.sym==SDLK_KP_ENTER || e.key.keysym.sym==SDLK_RETURN)){
+
+            con << tColoredString::ColorString(.5,.5,1) << " > " << *content << '\n';
+
+            // direct commands are executed at owner level
+            tCurrentAccessLevel level( tAccessLevel_Owner, true );
+
+            // pass the console command to the configuration system
+            std::stringstream s(&((*content)[0]));
+            tConfItemBase::LoadAll( s, false );
+
+            MyMenu()->Exit();
+            return true;
+        }
+        else if (e.type==SDL_KEYDOWN &&
+                 uActionGlobal::IsBreakingGlobalBind(e.key.keysym.sym))
+            return su_HandleEvent(e, true);
+        else
+            return uMenuItemStringWithHistory::Event(e);
+    }
+};
+
+void do_con(){
+    su_ClearKeys();
+        
+    se_ChatState( ePlayerNetID::ChatFlags_Console, true );
+    sr_con.SetHeight(20,false);
+    se_SetShowScoresAuto(false);
+    tString c;
+
+    uMenu con_menu("",false);
+    gMemuItemConsole s(&con_menu,c);
+    con_menu.SetCenter(-.75);
+    con_menu.SetBot(-2);
+    con_menu.SetTop(-.7);
+    con_menu.Enter();
+
+    se_ChatState( ePlayerNetID::ChatFlags_Console, false );
+
+    se_SetShowScoresAuto(true);
+    sr_con.SetHeight(7,false);
+}
+#endif
+
+void sg_ConsoleInput(){
+#ifndef DEDICATED
+    st_ToDoOnce(&do_con);
+#endif
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class ArmageTron_viewport_menuitem:public uMenuItemInt{
+public:
+    ArmageTron_viewport_menuitem(uMenu *m):
+            uMenuItemInt(m,"$viewport_menu_title",
+                         "$viewport_menu_help",
+                         rViewportConfiguration::next_conf_num,
+                 0,rViewportConfiguration::s_viewportNumConfigurations-1){
+        m->RequestSpaceBelow(.9);
+    }
+
+    virtual REAL SpaceRight(){return 1;}
+
+    virtual void RenderBackground(){
+        uMenuItem::RenderBackground();
+
+        if (rViewportConfiguration::next_conf_num<0) rViewportConfiguration::next_conf_num=0;
+        if (rViewportConfiguration::next_conf_num>=rViewportConfiguration::s_viewportNumConfigurations)
+            rViewportConfiguration::next_conf_num=rViewportConfiguration::s_viewportNumConfigurations-1;
+
+        tString  titles[MAX_VIEWPORTS];
+
+        for(int i=MAX_VIEWPORTS-1;i>=0;i--)
+            titles[i] << i+1;
+#ifndef DEDICATED
+        rViewportConfiguration::DemonstrateViewport(titles);
+#endif
+    }
+
+    virtual void Render(REAL x,REAL y,REAL alpha=1,bool selected=0){
+        if (rViewportConfiguration::next_conf_num<0) rViewportConfiguration::next_conf_num=0;
+        if (rViewportConfiguration::next_conf_num>=rViewportConfiguration::s_viewportNumConfigurations)
+            rViewportConfiguration::next_conf_num=rViewportConfiguration::s_viewportNumConfigurations-1;
+
+        tOutput disp;
+
+        disp << "$viewport_conf_text";
+        disp.AddSpace();
+        disp << rViewportConfiguration::s_viewportConfigurationNames[rViewportConfiguration::next_conf_num];
+        DisplayText(x-.02,y,disp,selected,alpha);
+    }
+
+};
+
+
+
+class ArmageTronPlayer_to_viewport_menuitem:public uMenuItemInt{
+    int    vp;
+public:
+    ArmageTronPlayer_to_viewport_menuitem(uMenu *m,int v):
+            uMenuItemInt(m,"",
+                         "$viewport_assign_help",
+                         s_newViewportBelongsToPlayer[v],
+                 0,MAX_PLAYERS-1),vp(v){
+        m->RequestSpaceBelow(.9);
+    }
+
+    virtual REAL SpaceRight(){return 1;}
+
+    virtual void LeftRight(int x){
+        rViewport::SetDirectionOfCorrection(vp,x);
+        target=(target + MAX_PLAYERS + x) % MAX_PLAYERS;
+    }
+
+    virtual void RenderBackground(){
+        rViewport::CorrectViewport(vp, MAX_PLAYERS);
+
+        uMenuItem::RenderBackground();
+
+        tString titles[MAX_VIEWPORTS];
+        for(int i=MAX_VIEWPORTS-1;i>=0;i--){
+            titles[i] << s_newViewportBelongsToPlayer[i]+1;
+            titles[i] << " (";
+            titles[i] << ePlayer::PlayerConfig(s_newViewportBelongsToPlayer[i])->Name();
+            titles[i] << ")";
+        }
+#ifndef DEDICATED
+        rViewportConfiguration::DemonstrateViewport(titles);
+#endif
+    }
+
+    virtual void Render(REAL x,REAL y,REAL alpha=1,bool selected=0){
+
+        tOutput disp;
+
+        disp.SetTemplateParameter(1, vp +1);
+        disp.SetTemplateParameter(2, s_newViewportBelongsToPlayer[vp]+1);
+        disp.SetTemplateParameter(3, ePlayer::PlayerConfig(s_newViewportBelongsToPlayer[vp])->Name());
+        disp << "$viewport_belongs_text";
+
+        DisplayText(x-.02,y,disp,selected,alpha);
+    }
+
+};
+
+#include "rSysdep.h"
+extern void Render(int);
+
+
+class ArmageTron_color_menuitem:public uMenuItemInt{
+protected:
+    int *rgb;
+    unsigned short me;
+public:
+    ArmageTron_color_menuitem(uMenu *m,const char *tit,
+                              const char *help, int *RGB,int Me)
+            :uMenuItemInt(m,tit,help,RGB[Me],0,15),
+    rgb(RGB),me(Me) {
+        m->RequestSpaceBelow(.2);
+    }
+
+    ~ArmageTron_color_menuitem(){}
+
+    virtual REAL SpaceRight(){return .2;}
+
+
+    virtual void RenderBackground(){
+        //    static int count=0;
+        /*
+        while(rgb[0]+rgb[1]+rgb[2]<13){
+          if (rgb[count]<15)
+        rgb[count]++;
+          count++;
+          if (count>2)
+        count=0;
+        }
+        */
+#ifndef DEDICATED
+        uMenuItem::RenderBackground();
+        if (!sr_glOut)
+            return;
+        REAL r = rgb[0]/15.0;
+        REAL g = rgb[1]/15.0;
+        REAL b = rgb[2]/15.0;
+        se_MakeColorValid(r, g, b, 1.0f);
+        RenderEnd();
+        glColor3f(r, g, b);
+        glRectf(.8,-.8,.98,-.98);
+#endif
+    }
+
+};
+
+
+
+void sg_PlayerMenu(int Player){
+    tOutput name;
+    name.SetTemplateParameter(1, Player+1);
+
+    name << "$player_menu_text";
+
+
+    uMenu playerMenu(name);
+
+    uMenu camera_menu("$player_camera_text");
+    uMenu chat_menu("$player_chat_text");
+    //  name.Clear();
+    chat_menu.SetCenter(-.5);
+
+    uMenuItemString *ic[MAX_INSTANT_CHAT];
+
+    ePlayer *p = ePlayer::PlayerConfig(Player);
+    if (!p)
+        return;
+
+    int i;
+    for(i=MAX_INSTANT_CHAT-1;i>=0;i--){
+        tOutput name;
+        name.SetTemplateParameter(1, i+1);
+        name << "$player_chat_chat";
+        ic[i]=new uMenuItemString
+              (&chat_menu,name,
+               "$player_chat_chat_help",
+               p->instantChatString[i], se_SpamMaxLen);
+    }
+
+    uMenuItemToggle al
+    (&playerMenu,"$player_autologin_text",
+     "$player_autologin_help",
+     p->autoLogin);
+
+    uMenuItemString gid(&playerMenu,
+                      "$player_global_id_text",
+                      "$player_global_id_help",
+                      p->globalID, 400);
+    gid.SetColorMode( rTextField::COLOR_IGNORE );
+
+    uMenuItemToggle st
+    (&playerMenu,"$player_stealth_text",
+     "$player_stealth_help",
+     p->stealth);
+
+    uMenuItemToggle sp
+    (&playerMenu,"$player_spectator_text",
+     "$player_spectator_help",
+     p->spectate);
+
+    uMenuItemToggle pnt
+    (&playerMenu,"$player_name_team_text",
+     "$player_name_team_help",
+     p->nameTeamAfterMe);
+
+    uMenuItemInt npt
+    (&playerMenu,"$player_num_per_team_text",
+     "$player_num_per_team_help",
+     p->favoriteNumberOfPlayersPerTeam, 1, 16, 1);
+
+    ArmageTron_color_menuitem B(&playerMenu,"$player_blue_text",
+                                "$player_blue_help",
+                                p->rgb,2);
+
+    ArmageTron_color_menuitem G(&playerMenu,"$player_green_text",
+                                "$player_green_help",
+                                p->rgb,1);
+
+    ArmageTron_color_menuitem R(&playerMenu,"$player_red_text",
+                                "$player_red_help",
+                                p->rgb,0);
+
+
+
+    uMenuItemSubmenu chm(&playerMenu,&chat_menu,
+                         "$player_chat_chat_help");
+
+    uMenuItemSubmenu cm(&playerMenu,&camera_menu,
+                        "$player_camera_help");
+
+    uMenuItemFunctionInt icc(&playerMenu,"$player_camera_input_text",
+                             "$player_camera_input_help",
+                             &su_InputConfigCamera,Player);
+
+    uMenuItemFunctionInt inc(&playerMenu,"$player_input_text",
+                             "$player_input_help",
+                             &su_InputConfig,Player);
+
+
+    camera_menu.SetCenter(.3);
+
+    uMenuItemToggle cam_glance
+    (&camera_menu,
+     "$camera_smart_glance_custom_text",
+     "$camera_smart_glance_custom_help",
+     p->smartCustomGlance);
+
+    uMenuItemToggle cis(&camera_menu,
+                        "$player_camera_autoin_text",
+                        "$player_camera_autoin_help",
+                        p->autoSwitchIncam);
+
+    uMenuItemToggle cim(&camera_menu,
+                        "$player_camera_wobble_text",
+                        "$player_camera_wobble_help",
+                        p->wobbleIncam);
+
+    uMenuItemToggle cic(&camera_menu,
+                        "$player_camera_center_int_text",
+                        "$player_camera_center_int_help",
+                        p->centerIncamOnTurn);
+
+    uMenuItemToggle al_s
+    (&camera_menu,
+     "$player_camera_smartcam_text",
+     "$player_camera_smartcam_help",
+     p->allowCam[CAMERA_SMART]);
+
+    uMenuItemToggle al_f
+    (&camera_menu,
+     "$player_camera_fixed_text",
+     "$player_camera_fixed_help",
+     p->allowCam[CAMERA_FOLLOW]);
+
+
+    uMenuItemToggle al_fr
+    (&camera_menu,
+     "$player_camera_free_text",
+     "$player_camera_free_help",
+     p->allowCam[CAMERA_FREE]);
+
+    uMenuItemToggle al_c
+    (&camera_menu,
+     "$player_camera_custom_text",
+     "$player_camera_custom_help",
+     p->allowCam[CAMERA_CUSTOM]);
+
+    uMenuItemToggle al_sc
+    (&camera_menu,
+     "$player_camera_server_custom_text",
+     "$player_camera_server_custom_help",
+     p->allowCam[CAMERA_SERVER_CUSTOM]);
+
+    uMenuItemToggle al_i
+    (&camera_menu,
+     "$player_camera_incam_text",
+     "$player_camera_incam_help",
+     p->allowCam[CAMERA_IN]);
+
+
+    uMenuItemInt cam_fov
+    (&camera_menu,
+     "$player_camera_fov_text",
+     "$player_camera_fov_help",
+     p->startFOV,30,160,5);
+
+    uMenuItemSelection<eCamMode> cam_s
+    (&camera_menu,
+     "$player_camera_initial_text",
+     "$player_camera_initial_help",
+     p->startCamera);
+
+    cam_s.NewChoice("$player_camera_initial_scust_text","$player_camera_initial_scust_help",CAMERA_SERVER_CUSTOM);
+    cam_s.NewChoice("$player_camera_initial_cust_text","$player_camera_initial_cust_help",CAMERA_CUSTOM);
+    cam_s.NewChoice("$player_camera_initial_int_text","$player_camera_initial_int_help",CAMERA_IN);
+    cam_s.NewChoice("$player_camera_initial_smrt_text","$player_camera_initial_smrt_help",CAMERA_SMART);
+    cam_s.NewChoice("$player_camera_initial_ext_text","$player_camera_initial_ext_help",CAMERA_FOLLOW);
+    cam_s.NewChoice("$player_camera_initial_free_text","$player_camera_initial_free_help",CAMERA_FREE);
+
+    uMenuItemString n(&playerMenu,
+                      "$player_name_text",
+                      "$player_name_help",
+                      p->name, 16);
+
+    playerMenu.Enter();
+
+    for(i=MAX_INSTANT_CHAT-1; i>=0; i--)
+        delete ic[i];
+
+
+    // request network synchronisation if the server can handle it
+    static nVersionFeature inGameRenames( 5 );
+    if ( inGameRenames.Supported() )
+    {
+        ePlayerNetID::Update();
+        ePlayer::SendAuthNames();
+    }
+
+    /*
+    for (i=MAX_PLAYERS-1; i>=0; i--)
+    {
+        if (ePlayer::PlayerIsInGame(i))
+        {
+            ePlayer* p = ePlayer::PlayerConfig(i);
+            if (p->netPlayer)
+                p->netPlayer->RequestSync();
+        }
+    }
+    */
+}
+
+
+VOIDFUNC viewport_menu_x;
+
+
+
+
+
+
+// from gGame.C
+//extern int pingCharity;
+
+
+void sg_PlayerMenu(){
+    uMenu Player_men("$player_mainmenu_text");
+
+
+    uMenuItemFunction vp_selec(&Player_men,
+                               "$viewport_assign_text",
+                               "$viewport_assign_help",
+                               &viewport_menu_x);
+
+    ArmageTron_viewport_menuitem vp(&Player_men);
+    uMenuItemFunctionInt  *names[MAX_PLAYERS];
+
+    int i;
+
+    for(i=MAX_PLAYERS-1;i>=0;i--){
+        tOutput title;
+        title.SetTemplateParameter(1, i+1);
+        title << "$player_menu_text";
+
+        tOutput help;
+        help.SetTemplateParameter(1, i+1);
+        help << "$player_menu_help";
+
+        names[i]=new uMenuItemFunctionInt(&Player_men,
+                                          title,
+                                          help,
+                                          sg_PlayerMenu,i);
+    }
+
+
+    Player_men.Enter();
+
+    //  ePlayerNetID::Update();
+    for(i=MAX_VIEWPORTS-1;i>=0;i--){
+        delete names[i];
+    }
+}
+
+
+
+
+void viewport_menu_x(void){
+    uMenu sg_PlayerMenu("$viewport_assign_text");
+
+    ArmageTronPlayer_to_viewport_menuitem *select[MAX_VIEWPORTS];
+
+    int i;
+    for(i=rViewportConfiguration::s_viewportConfigurations[rViewportConfiguration::next_conf_num]->num_viewports-1;i>=0;i--){
+        select[i]=new ArmageTronPlayer_to_viewport_menuitem(&sg_PlayerMenu,i);
+    }
+
+    // ArmageTron_viewport_menuitem vp(&sg_PlayerMenu);
+
+    sg_PlayerMenu.Enter();
+
+    for(i=rViewportConfiguration::s_viewportConfigurations[rViewportConfiguration::next_conf_num]->num_viewports-1;i>=0;i--){
+        delete select[i];
+    }
+}
+
+
+static uActionGlobal con_input( "CONSOLE_INPUT" );
+
+
+static uActionGlobal screenshot( "SCREENSHOT" );
+
+static uActionGlobal togglefullscreen( "TOGGLE_FULLSCREEN" );
+
+static bool screenshot_func(REAL x){
+    if (x>0){
+#ifndef DEDICATED
+        sr_screenshotIsPlanned=true;
+#endif
+    }
+
+    return true;
+}
+
+static bool con_func(REAL x){
+    if (x>0){
+        sg_ConsoleInput();
+    }
+
+    return true;
+}
+
+static bool toggle_fullscreen_func( REAL x )
+{
+#ifndef DEDICATED
+#ifdef DEBUG
+    // don't toggle fullscreen while playing back in debug mode, that's annoying
+    if ( tRecorder::IsPlayingBack() )
+        return true;
+#endif
+
+    // only do anything if the application is active (work around odd bug)
+    if ( x > 0 && ( SDL_GetAppState() & SDL_APPACTIVE ) )
+    {
+        currentScreensetting.fullscreen = !currentScreensetting.fullscreen;
+        sr_ReinitDisplay();
+    }
+#endif
+
+    return true;
+}
+
+static uActionGlobalFunc gaf_ss(&screenshot,&screenshot_func, true );
+static uActionGlobalFunc gaf_md(&con_input,&con_func);
+static uActionGlobalFunc gaf_tf(&togglefullscreen,&toggle_fullscreen_func, true );
+
+// =====================================================================
+// MODERN VISUAL MENU (ImGui-style)
+// =====================================================================
+#undef glBegin
+#undef glEnd
+#undef glMatrixMode
+
+#include <GL/gl.h>
+#include <math.h>
+#include "rTexture.h"
+#include "rFont.h"
+
+bool cVisualMenu::isOpen = false;
+float cVisualMenu::menuAlpha = 0.0f;
+
+void cVisualMenu::Init() {}
+
+void cVisualMenu::Toggle() {
+    isOpen = !isOpen;
+    // Always hide system cursor - we draw our own when menu is open
+    // Game's own logic handles cursor when menu is closed
+    SDL_ShowCursor(SDL_DISABLE);
+}
+
+static int mouseX = 400, mouseY = 300;
+static float hoverAlpha[20] = {0};
+static bool modState[20] = {0};
+static float toggleAnim[20] = {0};
+static float slideIn[20] = {0};     // staggered slide-in per item
+static float slideInTimer = 0;      // global timer for stagger
+static float headerGlow = 0;        // subtle pulsing glow
+static float profileSlide = 0;      // profile section slide-in
+static bool menuFirstOpen = true;
+
+// =====================================================================
+// SMOOTH ROUNDED RECTANGLE (64 segments for silky smooth corners)
+// =====================================================================
+static void drawSmoothRect(float x, float y, float w, float h, float rad,
+                           float r1, float g1, float b1, float a1) {
+    glDisable(GL_TEXTURE_2D);
+    if (rad > w * 0.5f) rad = w * 0.5f;
+    if (rad > h * 0.5f) rad = h * 0.5f;
+    
+    const int segs = 16; // segments per corner (64 total)
+    glColor4f(r1, g1, b1, a1);
+    glBegin(GL_POLYGON);
+    // Top-left
+    for (int i = 0; i <= segs; ++i) {
+        float a = M_PI + (M_PI / 2.0f) * ((float)i / segs);
+        glVertex2f(x + rad + cosf(a) * rad, y + rad + sinf(a) * rad);
+    }
+    // Top-right
+    for (int i = 0; i <= segs; ++i) {
+        float a = 1.5f * M_PI + (M_PI / 2.0f) * ((float)i / segs);
+        glVertex2f(x + w - rad + cosf(a) * rad, y + rad + sinf(a) * rad);
+    }
+    // Bottom-right
+    for (int i = 0; i <= segs; ++i) {
+        float a = (M_PI / 2.0f) * ((float)i / segs);
+        glVertex2f(x + w - rad + cosf(a) * rad, y + h - rad + sinf(a) * rad);
+    }
+    // Bottom-left
+    for (int i = 0; i <= segs; ++i) {
+        float a = M_PI * 0.5f + (M_PI / 2.0f) * ((float)i / segs);
+        glVertex2f(x + rad + cosf(a) * rad, y + h - rad + sinf(a) * rad);
+    }
+    glEnd();
+}
+
+// Gradient rectangle (top to bottom color blend)
+static void drawGradientRect(float x, float y, float w, float h,
+                             float r1, float g1, float b1, float a1,
+                             float r2, float g2, float b2, float a2) {
+    glDisable(GL_TEXTURE_2D);
+    glBegin(GL_QUADS);
+    glColor4f(r1, g1, b1, a1); glVertex2f(x, y);
+    glColor4f(r1, g1, b1, a1); glVertex2f(x + w, y);
+    glColor4f(r2, g2, b2, a2); glVertex2f(x + w, y + h);
+    glColor4f(r2, g2, b2, a2); glVertex2f(x, y + h);
+    glEnd();
+}
+
+// Circle (for avatar frame etc)
+static void drawCircle(float cx, float cy, float radius, float r, float g, float b, float a) {
+    glDisable(GL_TEXTURE_2D);
+    glColor4f(r, g, b, a);
+    glBegin(GL_POLYGON);
+    for (int i = 0; i < 48; i++) {
+        float angle = 2.0f * M_PI * i / 48.0f;
+        glVertex2f(cx + cosf(angle) * radius, cy + sinf(angle) * radius);
+    }
+    glEnd();
+}
+
+// =====================================================================
+// CUSTOM BITMAP FONT RENDERER
+// Reads directly from font.png texture atlas (16 cols x 8 rows)
+// =====================================================================
+static void drawText(float x, float y, float charW, float charH, const char* text,
+                     float r, float g, float b, float a) {
+    rFont::s_defaultFont.Select(true);
+    glEnable(GL_TEXTURE_2D);
+    glColor4f(r, g, b, a);
+
+    const float texW = 1.0f / 16.0f;
+    const float texH = 1.0f / 8.0f;
+    const float pix = 0.003f; // inset to avoid glyph bleeding
+    float cx = x;
+
+    for (const char* p = text; *p; p++) {
+        unsigned char ch = (unsigned char)*p;
+        if (ch < 32) continue;
+        int col = ch % 16;
+        int row = ch / 16;
+
+        float tx0 = col * texW + pix;
+        float tx1 = (col + 1) * texW - pix;
+        float ty0 = row * texH + pix;
+        float ty1 = (row + 1) * texH - pix;
+
+        glBegin(GL_QUADS);
+        glTexCoord2f(tx0, ty0); glVertex2f(cx, y);
+        glTexCoord2f(tx1, ty0); glVertex2f(cx + charW, y);
+        glTexCoord2f(tx1, ty1); glVertex2f(cx + charW, y + charH);
+        glTexCoord2f(tx0, ty1); glVertex2f(cx, y + charH);
+        glEnd();
+
+        cx += charW * 1.15f;  // proper letter spacing with gaps
+    }
+    glDisable(GL_TEXTURE_2D);
+}
+
+static void drawLabel(float x, float y, float size, const char* text,
+                      float r, float g, float b, float a) {
+    drawText(x, y, size * 0.55f, size, text, r, g, b, a);
+}
+
+static float lerpf(float a, float b, float t) {
+    if (t < 0) t = 0; if (t > 1) t = 1;
+    return a + (b - a) * t;
+}
+
+// =====================================================================
+// RENDER
+// =====================================================================
+void cVisualMenu::Render() {
+    if (!isOpen && menuAlpha <= 0.005f) return;
+
+    // Smooth alpha
+    float target = isOpen ? 1.0f : 0.0f;
+    menuAlpha += (target - menuAlpha) * 0.10f;
+    if (!isOpen && menuAlpha < 0.005f) { menuAlpha = 0; return; }
+
+    // Animation timer
+    if (isOpen) {
+        if (menuFirstOpen) { slideInTimer = 0; menuFirstOpen = false; }
+        slideInTimer += 0.04f;
+        if (slideInTimer > 10.0f) slideInTimer = 10.0f;
+    } else {
+        menuFirstOpen = true;
+        slideInTimer = 0;
+    }
+
+
+    sr_ResetRenderState(true);
+
+    // FORCE hide system cursor every frame when menu is open
+    // Always keep system cursor hidden - we draw our own custom cursor
+    SDL_ShowCursor(SDL_DISABLE);
+
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glOrtho(0, 800, 600, 0, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_LIGHTING);
+    glDisable(GL_TEXTURE_2D);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Scale-in animation
+    float scale = 0.90f + (0.10f * menuAlpha);
+    glTranslatef(400, 300, 0);
+    glScalef(scale, scale, 1);
+    glTranslatef(-400, -300, 0);
+
+    // Mouse coords
+    float orthoMX = mouseX * (800.0f / sr_screenWidth);
+    float orthoMY = mouseY * (600.0f / sr_screenHeight);
+    float mx = (orthoMX - 400) / scale + 400;
+    float my = (orthoMY - 300) / scale + 300;
+
+    // =================== BACKGROUND DIM ===================
+    glColor4f(0, 0, 0, menuAlpha * 0.60f);
+    glBegin(GL_QUADS);
+    glVertex2f(-500, -500); glVertex2f(1300, -500);
+    glVertex2f(1300, 1100); glVertex2f(-500, 1100);
+    glEnd();
+
+    // =================== MAIN PANEL ===================
+    // Shadow behind panel
+    drawSmoothRect(148, 58, 600, 490, 22, 0.0f, 0.0f, 0.0f, menuAlpha * 0.3f);
+    // Panel body
+    drawSmoothRect(145, 55, 600, 490, 20, 0.07f, 0.07f, 0.08f, menuAlpha * 0.97f);
+
+    // =================== HEADER with subtle gradient ===================
+    drawSmoothRect(145, 55, 600, 48, 20, 0.10f, 0.10f, 0.12f, menuAlpha * 0.97f);
+    // Square off bottom of header
+    glColor4f(0.10f, 0.10f, 0.12f, menuAlpha * 0.97f);
+    glBegin(GL_QUADS);
+    glVertex2f(145, 83); glVertex2f(745, 83);
+    glVertex2f(745, 103); glVertex2f(145, 103);
+    glEnd();
+    // Static subtle accent line
+    glColor4f(0.30f, 0.22f, 0.55f, menuAlpha * 0.35f);
+    glBegin(GL_QUADS);
+    glVertex2f(145, 102); glVertex2f(745, 102);
+    glVertex2f(745, 103); glVertex2f(145, 103);
+    glEnd();
+
+    // =================== CATEGORY TABS ===================
+    // Active tab pill
+    drawSmoothRect(320, 65, 90, 30, 15, 0.20f, 0.15f, 0.35f, menuAlpha * 0.85f);
+    drawLabel(330, 70, 16, "Visuals", 1.0f, 1.0f, 1.0f, menuAlpha);
+    drawLabel(435, 70, 16, "Hud", 0.40f, 0.40f, 0.45f, menuAlpha * 0.8f);
+    drawLabel(500, 70, 16, "Util", 0.40f, 0.40f, 0.45f, menuAlpha * 0.8f);
+
+    // =================== SETTINGS GRID ===================
+    const char* modNames[] = {
+        "Custom Fog",    "Rubber Gauge",  "Speed Meter",
+        "Brake Meter",   "Show HUD",      "Show Scores",
+        "Show Ping",     "Show Fastest",  "Minimap",
+        "Alive Counter", "Show Time",     "24h Format",
+        "Noclip Mode",   "Camera Lock"
+    };
+    const char* modDescs[] = {
+        "Adjust fog color and density",
+        "Display rubber usage gauge",
+        "Show speed indicator",
+        "Show brake indicator",
+        "Toggle entire HUD display",
+        "Display score overlay",
+        "Show ping to server",
+        "Show fastest player speed",
+        "Enable minimap radar",
+        "Show alive player count",
+        "Display current time",
+        "Use 24-hour time format",
+        "Enable free camera mode",
+        "Lock glance camera angle"
+    };
+
+    for (int i = 0; i < 14; i++) {
+        int col = i / 7;
+        int row = i % 7;
+        float bx = 165 + col * 285;
+        float by = 118 + row * 52;
+
+        // Staggered slide-in animation
+        float delay = i * 0.12f;
+        float slideT = slideInTimer - delay;
+        if (slideT < 0) slideT = 0;
+        if (slideT > 1) slideT = 1;
+        // Ease-out cubic
+        float ease = 1.0f - (1.0f - slideT) * (1.0f - slideT) * (1.0f - slideT);
+        slideIn[i] = ease;
+
+        // Slide from right and fade in
+        float offsetX = (1.0f - ease) * 60.0f;
+        float itemAlpha = menuAlpha * ease;
+        if (itemAlpha < 0.01f) continue;
+
+        float ix = bx + offsetX;
+
+        // Hover detection
+        bool hovered = (mx >= ix && mx <= ix + 270 && my >= by && my <= by + 48);
+        hoverAlpha[i] += ((hovered ? 1.0f : 0.0f) - hoverAlpha[i]) * 0.15f;
+
+        // Toggle animation
+        toggleAnim[i] += ((modState[i] ? 1.0f : 0.0f) - toggleAnim[i]) * 0.12f;
+
+        // Hover glow
+        if (hoverAlpha[i] > 0.01f) {
+            drawSmoothRect(ix - 5, by - 3, 278, 50, 10,
+                          0.13f, 0.12f, 0.18f, itemAlpha * 0.55f * hoverAlpha[i]);
+        }
+
+        // Mod name
+        drawLabel(ix + 5, by + 4, 14, modNames[i], 0.85f, 0.85f, 0.88f, itemAlpha);
+        // Description
+        drawLabel(ix + 5, by + 24, 10, modDescs[i], 0.38f, 0.38f, 0.44f, itemAlpha * 0.85f);
+
+        // Toggle track
+        float tt = toggleAnim[i];
+        float tr = lerpf(0.16f, 0.50f, tt);
+        float tg = lerpf(0.16f, 0.30f, tt);
+        float tb = lerpf(0.20f, 0.85f, tt);
+        drawSmoothRect(ix + 232, by + 12, 34, 16, 8, tr, tg, tb, itemAlpha * 0.95f);
+
+        // Toggle knob with shadow
+        float knobX = lerpf(ix + 235, ix + 250, tt);
+        drawSmoothRect(knobX - 0.5f, by + 13.5f, 13, 13, 6.5f, 0, 0, 0, itemAlpha * 0.2f); // shadow
+        drawSmoothRect(knobX, by + 13, 12, 12, 6, 0.95f, 0.95f, 0.97f, itemAlpha);
+    }
+
+    // =================== SEPARATOR LINE ===================
+    glColor4f(0.15f, 0.15f, 0.18f, menuAlpha * 0.5f);
+    glBegin(GL_QUADS);
+    glVertex2f(165, 484); glVertex2f(730, 484);
+    glVertex2f(730, 485); glVertex2f(165, 485);
+    glEnd();
+
+    // =================== PROFILE SECTION ===================
+    profileSlide += ((isOpen ? 1.0f : 0.0f) - profileSlide) * 0.08f;
+    float pEase = 1.0f - (1.0f - profileSlide) * (1.0f - profileSlide);
+    float pAlpha = menuAlpha * pEase;
+    float pOffsetY = (1.0f - pEase) * 30.0f;
+
+    // Profile background
+    drawSmoothRect(160, 490 + pOffsetY, 250, 48, 12, 0.10f, 0.10f, 0.12f, pAlpha * 0.92f);
+
+    // Styled avatar (gradient circle with initial letter)
+    // Outer glow ring
+    drawCircle(190, 514 + pOffsetY, 19, 0.45f, 0.28f, 0.78f, pAlpha * 0.4f);
+    // Avatar gradient circle
+    drawCircle(190, 514 + pOffsetY, 16, 0.50f, 0.32f, 0.85f, pAlpha * 0.95f);
+    // Inner lighter circle
+    drawCircle(190, 514 + pOffsetY, 12, 0.58f, 0.40f, 0.92f, pAlpha * 0.6f);
+    // Letter "D" in the center
+    drawLabel(183, 506 + pOffsetY, 18, "D", 1.0f, 1.0f, 1.0f, pAlpha * 0.95f);
+
+    // Username
+    drawLabel(215, 499 + pOffsetY, 16, "Developer", 0.95f, 0.95f, 0.97f, pAlpha);
+    // UID with accent color
+    drawLabel(215, 518 + pOffsetY, 11, "UID: 666", 0.50f, 0.40f, 0.75f, pAlpha * 0.9f);
+
+    // =================== CLOSE BUTTON ===================
+    bool closeHovered = (mx >= 718 && mx <= 740 && my >= 60 && my <= 82);
+    float closeAlpha = closeHovered ? 0.9f : 0.5f;
+    drawSmoothRect(718, 60, 22, 22, 11, 0.20f, 0.15f, 0.15f, menuAlpha * closeAlpha);
+    drawLabel(722, 63, 14, "X", 0.9f, 0.5f, 0.5f, menuAlpha * closeAlpha);
+
+    // =================== CUSTOM CURSOR ===================
+    glDisable(GL_TEXTURE_2D);
+    // Shadow
+    glColor4f(0, 0, 0, menuAlpha * 0.35f);
+    glBegin(GL_TRIANGLES);
+    glVertex2f(mx + 1.5f, my + 1.5f);
+    glVertex2f(mx + 14, my + 5.5f);
+    glVertex2f(mx + 5.5f, my + 14);
+    glEnd();
+    // White body
+    glColor4f(1, 1, 1, menuAlpha * 0.95f);
+    glBegin(GL_TRIANGLES);
+    glVertex2f(mx, my);
+    glVertex2f(mx + 13, my + 4);
+    glVertex2f(mx + 4, my + 13);
+    glEnd();
+    // Inner highlight
+    glColor4f(0.85f, 0.85f, 0.90f, menuAlpha * 0.5f);
+    glBegin(GL_TRIANGLES);
+    glVertex2f(mx + 2, my + 3);
+    glVertex2f(mx + 10, my + 5);
+    glVertex2f(mx + 5, my + 10);
+    glEnd();
+
+    // =================== CLEANUP ===================
+    glEnable(GL_TEXTURE_2D);
+    glEnable(GL_DEPTH_TEST);
+
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+}
+
+// =====================================================================
+// EVENT HANDLER
+// =====================================================================
+bool cVisualMenu::HandleEvent(const SDL_Event& event) {
+    if (event.type == SDL_KEYDOWN) {
+        if (event.key.keysym.sym == SDLK_INSERT) {
+            Toggle();
+            return true;
+        }
+        if (isOpen && event.key.keysym.sym == SDLK_ESCAPE) {
+            Toggle();
+            return true;
+        }
+    }
+    if (isOpen) {
+        if (event.type == SDL_MOUSEMOTION) {
+            mouseX = event.motion.x;
+            mouseY = event.motion.y;
+            return true;
+        }
+        if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
+            mouseX = event.button.x;
+            mouseY = event.button.y;
+
+            float scale = 0.90f + (0.10f * menuAlpha);
+            float orthoMX = mouseX * (800.0f / sr_screenWidth);
+            float orthoMY = mouseY * (600.0f / sr_screenHeight);
+            float cx = (orthoMX - 400) / scale + 400;
+            float cy = (orthoMY - 300) / scale + 300;
+
+            // Close button
+            if (cx >= 718 && cx <= 740 && cy >= 60 && cy <= 82) {
+                Toggle();
+                return true;
+            }
+
+            // Toggle clicks
+            for (int i = 0; i < 14; i++) {
+                int col = i / 7;
+                int row = i % 7;
+                float bx = 165 + col * 285;
+                float by = 118 + row * 52;
+                if (cx >= bx && cx <= bx + 270 && cy >= by && cy <= by + 48) {
+                    modState[i] = !modState[i];
+                    return true;
+                }
+            }
+            return true;
+        }
+        if (event.type == SDL_MOUSEBUTTONUP) return true;
+    }
+    return false;
+}
