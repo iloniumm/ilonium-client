@@ -21,6 +21,12 @@ cp -r $BUILDDIR/language/languages.txt $WINDIR/language || exit 1
 mkdir -p $WINDIR/config || exit 1
 cp -r $BUILDDIR/config/*.cfg $BUILDDIR/config/*.srv $WINDIR/config || exit 1
 
+# clean build remnants from source copy
+find $WINDIR/src -name "*.exe" -delete
+find $WINDIR/src -name "*.o" -delete
+find $WINDIR/src -name "*.a" -delete
+find $WINDIR/src -name "armagetronad_main" -delete
+
 # rename text files
 for f in $WINDIR/INSTALL $WINDIR/COPYING $WINDIR/AUTHORS $WINDIR/NEWS $WINDIR/ChangeLog `find $WINDIR -name "*README*"`; do
     mv $f $f.txt || exit 1
