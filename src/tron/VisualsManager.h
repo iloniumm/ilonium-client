@@ -3,11 +3,17 @@
 
 #include "tMath.h"
 
-#ifdef LINUX
+#if defined(LINUX) || defined(__APPLE__)
 #include <SDL3/SDL.h>
+#ifdef __APPLE__
+#include <OpenGL/gl.h>
+#include <OpenGL/glu.h>
+#else
 #include <GL/gl.h>
 #include <GL/glu.h>
 #endif
+#endif
+
 
 // Struct representing a single physical particle
 struct VisualParticle {

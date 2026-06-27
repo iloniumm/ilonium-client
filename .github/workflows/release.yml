@@ -24,16 +24,54 @@ jobs:
             cmake \
             python3 \
             pkg-config \
-            libsdl3-dev \
-            libsdl3-image-dev \
-            libsdl3-mixer-dev \
             libxml2-dev \
             libcurl4-openssl-dev \
             libpng-dev \
             libmimalloc-dev \
             libzthread-dev \
             recode \
-            desktop-file-utils
+            desktop-file-utils \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libasound2-dev \
+            libpulse-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrandr-dev \
+            libxcursor-dev \
+            libxfixes-dev \
+            libxi-dev \
+            libxss-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libdbus-1-dev \
+            libibus-1.0-dev
+
+      - name: Build SDL3 from source
+        run: |
+          # Build SDL3
+          git clone --depth 1 https://github.com/libsdl-org/SDL.git -b main
+          cd SDL
+          cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DSDL_STATIC=OFF -DSDL_SHARED=ON
+          cmake --build build -j$(nproc)
+          sudo cmake --install build
+          cd ..
+          
+          # Build SDL3_image
+          git clone --depth 1 https://github.com/libsdl-org/SDL_image.git -b main
+          cd SDL_image
+          cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DSDLIMAGE_SAMPLES=OFF -DSDLIMAGE_DEPS_SHARED=ON
+          cmake --build build -j$(nproc)
+          sudo cmake --install build
+          cd ..
+          
+          # Build SDL3_mixer
+          git clone --depth 1 https://github.com/libsdl-org/SDL_mixer.git -b main
+          cd SDL_mixer
+          cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DSDLMIXER_SAMPLES=OFF -DSDLMIXER_DEPS_SHARED=ON
+          cmake --build build -j$(nproc)
+          sudo cmake --install build
+          cd ..
 
       - name: Build
         run: |
@@ -80,14 +118,14 @@ jobs:
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-autotools
-            mingw-w64-x86_64-SDL3
-            mingw-w64-x86_64-SDL3_image
-            mingw-w64-x86_64-SDL3_mixer
+            mingw-w64-x86_64-sdl3
+            mingw-w64-x86_64-sdl3-image
+            mingw-w64-x86_64-sdl3-mixer
             mingw-w64-x86_64-mimalloc
             mingw-w64-x86_64-libxml2
             mingw-w64-x86_64-curl
             mingw-w64-x86_64-libpng
-            recode
+            mingw-w64-x86_64-recode
             git
 
       - name: Build
