@@ -533,7 +533,7 @@ case "$target" in
         MATHLIB=""
         SYS_GL_LIB="opengl32"
         SYS_GLU_LIB="glu32"
-        LDFLAGS="$LDFLAGS -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic -Wl,--allow-multiple-definition"
+        LDFLAGS="$LDFLAGS -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic"
         is_windows=true
         ;;
     *-*-beos*)
