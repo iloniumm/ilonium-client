@@ -185,7 +185,8 @@ armagetronad_main_LDFLAGS = -Wl,-rpath,'$$ORIGIN'
 # without any source changes. Link FIRST so it intercepts everything.
 if HAVE_MIMALLOC
 armagetronad_main_LDADD=$(MIMALLOC_OVERRIDE_LIBS) \
-  libtron.a libenginecore.a libengine.a libnetwork.a libui.a librender.a libtools.a
+  libtron.a libenginecore.a libengine.a libnetwork.a libui.a librender.a libtools.a \
+  $(MIMALLOC_OVERRIDE_LIBS)
 armagetronad_main_CPPFLAGS=$(MIMALLOC_CFLAGS)
 else
 armagetronad_main_LDADD=libtron.a libenginecore.a libengine.a libnetwork.a libui.a librender.a libtools.a
