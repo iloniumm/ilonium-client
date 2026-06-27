@@ -741,5 +741,9 @@ ePlayerNetID & ePlayerNetID::SetUserName( tString const & userName )
     return *this;
 }
 
+#ifdef GetUserName
+#undef GetUserName
+#endif
+
 #endif
 
