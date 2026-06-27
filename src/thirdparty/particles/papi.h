@@ -21,7 +21,7 @@
 #ifdef PARTICLEDLL_EXPORTS
 #define PARTICLEDLL_API __declspec(dllexport)
 #else
-#define PARTICLEDLL_API __declspec(dllimport)
+#define PARTICLEDLL_API
 #endif
 
 #else

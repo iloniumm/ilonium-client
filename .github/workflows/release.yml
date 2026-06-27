@@ -77,7 +77,7 @@ jobs:
       - name: Build
         run: |
           ./bootstrap.sh
-          ./configure --prefix=/usr progname=Retrocycles progtitle="Retrocycles"
+          ./configure --prefix=/usr --bindir=/usr/bin progname=Retrocycles progtitle="Retrocycles"
           make -j$(nproc)
 
       - name: Package
