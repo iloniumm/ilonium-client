@@ -18,6 +18,7 @@ rm -rf $WINDIR/src/doc
 rm -rf $WINDIR/doc
 cp -r $DOCDIR $WINDIR/doc || exit 1
 cp -r $BUILDDIR/language/languages.txt $WINDIR/language || exit 1
+mkdir -p $WINDIR/config || exit 1
 cp -r $BUILDDIR/config/*.cfg $BUILDDIR/config/*.srv $WINDIR/config || exit 1
 
 # rename text files
