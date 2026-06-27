@@ -6407,7 +6407,11 @@ void ModMenu::RunCustomMainMenu() {
         s_PendingStartLocalGame = true;
     }
     if (getenv("RETRO_TEST_PLAY_DEMO")) {
+#ifdef _WIN32
+        _putenv("RETRO_TEST_PLAY_DEMO=");
+#else
         unsetenv("RETRO_TEST_PLAY_DEMO");
+#endif
         const char* path_env = getenv("RETRO_TEST_PLAY_DEMO_PATH");
         std::string dp_path = path_env ? path_env : "1.aarec";
         if (DemoPlayerManager::Instance().LoadFile(dp_path)) {
@@ -8765,9 +8769,11 @@ void ModMenu::RunCustomInGameMenu() {
                             ePlayerNetID* pni = se_PlayerNetIDs(i);
                             if (pni) {
                                 std::string loginStr = "not logged in";
+#ifdef KRAWALL_SERVER
                                 if (pni->IsAuthenticated() && pni->GetRawAuthenticatedName().Len() > 0) {
                                     loginStr = (const char*)pni->GetRawAuthenticatedName();
                                 }
+#endif
                                 
                                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
                                 ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.10f, 0.12f, 0.4f));

@@ -95,7 +95,7 @@ jobs:
           find appdir -name "*.png" -path "*/icons/*48x48*" -exec cp {} appdir/.DirIcon \; || true
           
           # Pack appdir into AppImage
-          ./appimagetool-x86_64.AppImage --appimage-extract-and-run appdir Retrocycles-x86_64.AppImage
+          ./appimagetool-x86_64.AppImage --appimage-extract-and-run --no-appstream appdir Retrocycles-x86_64.AppImage
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
