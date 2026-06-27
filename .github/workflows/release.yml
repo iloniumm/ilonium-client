@@ -159,7 +159,7 @@ jobs:
           cd ../../..
           
           # Copy executable and supporting DLLs into winsource package
-          cp src/Retrocycles.exe docker/build/context/winsource/
+          cp src/armagetronad_main.exe docker/build/context/winsource/Retrocycles.exe
           cp /mingw64/bin/SDL3.dll docker/build/context/winsource/
           cp /mingw64/bin/*mimalloc*.dll docker/build/context/winsource/ || true
           cp /mingw64/bin/SDL3_image.dll docker/build/context/winsource/ || true
