@@ -1,0 +1,177 @@
+name: Release CI/CD
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-linux:
+    name: Build Linux (AppImage)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            autoconf \
+            automake \
+            libtool \
+            cmake \
+            python3 \
+            pkg-config \
+            libsdl3-dev \
+            libsdl3-image-dev \
+            libsdl3-mixer-dev \
+            libxml2-dev \
+            libcurl4-openssl-dev \
+            libpng-dev \
+            libmimalloc-dev \
+            libzthread-dev \
+            recode \
+            desktop-file-utils
+
+      - name: Build
+        run: |
+          ./bootstrap.sh
+          ./configure --prefix=/usr progname=Retrocycles progtitle="Retrocycles"
+          make -j$(nproc)
+
+      - name: Package
+        run: |
+          make install DESTDIR=$(pwd)/appdir
+          cd docker/build/context
+          APPDIR=$(pwd)/../../../appdir PACKAGE=Retrocycles bash portable/build
+          cd ../../..
+          
+          # Download and run appimagetool to create the AppImage
+          curl -LO https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          
+          # Set up DirIcon
+          find appdir -name "*.png" -path "*/icons/*48x48*" -exec cp {} appdir/.DirIcon \; || true
+          
+          # Pack appdir into AppImage
+          ./appimagetool-x86_64.AppImage --appimage-extract-and-run appdir Retrocycles-x86_64.AppImage
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Retrocycles-Linux-AppImage
+          path: Retrocycles-x86_64.AppImage
+
+  build-windows:
+    name: Build Windows (MinGW)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-autotools
+            mingw-w64-x86_64-SDL3
+            mingw-w64-x86_64-SDL3_image
+            mingw-w64-x86_64-SDL3_mixer
+            mingw-w64-x86_64-mimalloc
+            mingw-w64-x86_64-libxml2
+            mingw-w64-x86_64-curl
+            mingw-w64-x86_64-libpng
+            recode
+            git
+
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          ./bootstrap.sh
+          ./configure --prefix=/mingw64 --disable-sysinstall --disable-desktop --disable-armathentication progname=Retrocycles progtitle="Retrocycles"
+          make -j4
+
+      - name: Package
+        shell: msys2 {0}
+        run: |
+          # Clone Code::Blocks template repository
+          git clone https://gitlab.com/armagetronad/build_codeblocks.git docker/build/context/codeblocks
+          
+          # Create temporary directories for winsource.sh script execution
+          mkdir -p docker/build/context/source
+          mkdir -p docker/build/context/build
+          
+          # Copy source tree and compile assets
+          cp -r Makefile configure bootstrap.sh config.h.in version.m4 aclocal.m4 configure.ac Makefile.am Makefile.in batch desktop language models resource scripts sound textures AUTHORS CHANGELOG.md COPYING news README.md src docker/build/context/source/ || true
+          cp -r language docker/build/context/build/
+          cp -r config docker/build/context/build/
+          mkdir -p docker/build/context/build/src/doc
+          cp -r src/doc/* docker/build/context/build/src/doc/ || true
+          
+          # Execute winsource.sh script
+          cd docker/build/context
+          bash winsource.sh
+          cd ../../..
+          
+          # Copy executable and supporting DLLs into winsource package
+          cp src/Retrocycles.exe docker/build/context/winsource/
+          cp /mingw64/bin/SDL3.dll docker/build/context/winsource/
+          cp /mingw64/bin/*mimalloc*.dll docker/build/context/winsource/ || true
+          cp /mingw64/bin/SDL3_image.dll docker/build/context/winsource/ || true
+          cp /mingw64/bin/SDL3_mixer.dll docker/build/context/winsource/ || true
+          cp /mingw64/bin/libxml2.dll docker/build/context/winsource/ || true
+          cp /mingw64/bin/libpng*.dll docker/build/context/winsource/ || true
+          cp /mingw64/bin/libcurl*.dll docker/build/context/winsource/ || true
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Retrocycles-Windows-MinGW
+          path: docker/build/context/winsource
+
+  build-macos:
+    name: Build macOS (.app Bundle)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install autoconf automake libtool dylibbundler sdl3 sdl3_image sdl3_mixer mimalloc pkg-config libpng libxml2 curl
+
+      - name: Setup library symlinks for Apple Silicon
+        run: |
+          if [ -d /opt/homebrew ]; then
+            sudo mkdir -p /usr/local/lib
+            sudo ln -s /opt/homebrew/lib/libSDL3*.dylib /usr/local/lib/ || true
+            sudo ln -s /opt/homebrew/lib/libmimalloc*.dylib /usr/local/lib/ || true
+            sudo mkdir -p /usr/local/opt/sdl3/lib
+            sudo ln -s /opt/homebrew/lib/libSDL3*.dylib /usr/local/opt/sdl3/lib/ || true
+            sudo mkdir -p /usr/local/opt/mimalloc/lib
+            sudo ln -s /opt/homebrew/lib/libmimalloc*.dylib /usr/local/opt/mimalloc/lib/ || true
+          fi
+
+      - name: Build
+        run: |
+          ./bootstrap.sh
+          ./configure --disable-restoreold --enable-automakedefaults --disable-useradd --disable-sysinstall --disable-initscripts --disable-uninstall --disable-etc --disable-games progname=Retrocycles progtitle="Retrocycles"
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Package
+        run: |
+          export SKIP_PART_2=yes
+          bash src/macosx/build_bundle.sh
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Retrocycles-macOS-Bundle
+          path: Retrocycles.app
