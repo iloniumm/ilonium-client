@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build-linux:
     name: Build Linux (AppImage)
@@ -214,3 +217,44 @@ jobs:
         with:
           name: Retrocycles-macOS-Bundle
           path: Retrocycles.app
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Retrocycles-Linux-AppImage
+          path: artifacts/linux
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Retrocycles-Windows-MinGW
+          path: artifacts/windows
+
+      - name: Download macOS Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Retrocycles-macOS-Bundle
+          path: artifacts/macos
+
+      - name: Zip Artifacts for Release
+        run: |
+          cd artifacts/linux && zip -r ../../Retrocycles-Linux-AppImage.zip . && cd ../..
+          cd artifacts/windows && zip -r ../../Retrocycles-Windows-MinGW.zip . && cd ../..
+          cd artifacts/macos && zip -r ../../Retrocycles-macOS-Bundle.zip . && cd ../..
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Retrocycles-Linux-AppImage.zip
+            Retrocycles-Windows-MinGW.zip
+            Retrocycles-macOS-Bundle.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
