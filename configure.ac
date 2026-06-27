@@ -534,6 +534,7 @@ case "$target" in
         SYS_GL_LIB="opengl32"
         SYS_GLU_LIB="glu32"
         LDFLAGS="$LDFLAGS -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic -Wl,--allow-multiple-definition"
+        is_windows=true
         ;;
     *-*-beos*)
 	AC_DEFINE(BEOS, 1, [BeOS])
@@ -1061,9 +1062,14 @@ AC_SUBST(progid)
 # all include directories added via -I so far should be system level inlcudes, divide them from those added by individual makefiles
 # CPPFLAGS="-I- $CPPFLAGS"
 
-CXXFLAGS="$CXXFLAGS -O3 -mtune=generic -flto"
-CFLAGS="$CFLAGS -O3 -mtune=generic -flto"
-LDFLAGS="$LDFLAGS -flto"
+if test "$is_windows" = true; then
+    CXXFLAGS="$CXXFLAGS -O3 -mtune=generic"
+    CFLAGS="$CFLAGS -O3 -mtune=generic"
+else
+    CXXFLAGS="$CXXFLAGS -O3 -mtune=generic -flto"
+    CFLAGS="$CFLAGS -O3 -mtune=generic -flto"
+    LDFLAGS="$LDFLAGS -flto"
+fi
 
 export CPPFLAGS
 export CXXFLAGS
