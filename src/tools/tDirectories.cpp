@@ -76,6 +76,9 @@ static const char * s_topSourceDir = ".";
 #ifdef TOP_SOURCE_DIR
 // #include "tPaths.h"
 #include "tUniversalVariables.h"
+#ifdef WIN32
+#undef DATADIR
+#endif
 #endif
 
 #ifndef PREFIX

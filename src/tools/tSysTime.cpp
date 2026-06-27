@@ -82,9 +82,6 @@ struct tTime
 #ifdef WIN32
 #include <windows.h>
 #include <sys/timeb.h>
-#ifndef DEDICATED
-#include "rSDL.h"
-#endif
 
 // flag indicating whether the HPC is reliable
 static bool st_hpcReliable = true;
@@ -172,7 +169,7 @@ void usleep(int x)
     sleep_rest+=x;
     unsigned int r=sleep_rest/1000;
 #ifndef DEDICATED
-    SDL_Delay(r);
+    Sleep(r);
 #else
 
 #ifdef DEBUG
