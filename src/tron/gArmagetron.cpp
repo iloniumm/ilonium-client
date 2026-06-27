@@ -795,7 +795,8 @@ int main(int argc,char **argv){
                 }
                 else
                 {
-                    sg_PutEnv( "SDL_VIDEODRIVER=windib" );
+                    // SDL3 does not support windib
+                    // sg_PutEnv( "SDL_VIDEODRIVER=windib" );
                 }
             }
 #endif
