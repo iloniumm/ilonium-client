@@ -1088,7 +1088,7 @@ void sr_Activate(bool active)
 #ifdef WIN32
     if ( currentScreensetting.fullscreen && !active )
     {
-        SDL_WM_IconifyWindow();
+        SDL_MinimizeWindow(sr_screen);
     }
 #endif
 #endif
