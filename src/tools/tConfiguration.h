@@ -273,14 +273,14 @@ public:
     static void DocAll(std::ostream &s);
 
     // helper functions for files (use these, they manage recording and playback properly)
-    enum SearchPath
+    enum tSearchPath
     {
         Config = 1,
         Var    = 2,
         All    = 3
     };
 
-    static bool OpenFile( std::ifstream & s, tString const & filename, SearchPath path ); //! opens a file stream for configuration reading
+    static bool OpenFile( std::ifstream & s, tString const & filename, tSearchPath path ); //! opens a file stream for configuration reading
     static void ReadFile( std::ifstream & s ); //! loads configuration from a file
 
     virtual void ReadVal(std::istream &s)=0;
