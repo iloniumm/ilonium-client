@@ -171,6 +171,26 @@ jobs:
           cp /mingw64/bin/libpng*.dll docker/build/context/winsource/ || true
           cp /mingw64/bin/libcurl*.dll docker/build/context/winsource/ || true
 
+          # Find and copy all dependent MinGW DLLs recursively
+          echo "Copying recursive MinGW DLL dependencies..."
+          mkdir -p temp_dlls
+          cp docker/build/context/winsource/*.dll docker/build/context/winsource/Retrocycles.exe temp_dlls/
+          for i in {1..3}; do
+            for f in temp_dlls/*.dll temp_dlls/*.exe; do
+              ldd "$f" | grep -i "/mingw64/bin/" | awk '{print $3}' | while read -r dll_path; do
+                if [ -f "$dll_path" ]; then
+                  dll_name=$(basename "$dll_path")
+                  if [ ! -f "docker/build/context/winsource/$dll_name" ]; then
+                    echo "Copying dependency: $dll_name"
+                    cp "$dll_path" docker/build/context/winsource/
+                    cp "$dll_path" temp_dlls/
+                  fi
+                fi
+              done
+            done
+          done
+          rm -rf temp_dlls
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
