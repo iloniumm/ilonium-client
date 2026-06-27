@@ -1,4 +1,10 @@
 #include "TrailRenderer.h"
+#include "../render/rGL.h"
+#ifdef __APPLE__
+#include <OpenGL/glext.h>
+#else
+#include <GL/glext.h>
+#endif
 #include <iostream>
 
 // Global variables

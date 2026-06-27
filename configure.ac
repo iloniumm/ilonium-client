@@ -781,7 +781,9 @@ dnl         GLU
 dnl *************************************************
 
 
-if test $SYS_GLU_LIB && echo $LIBS | grep -v "\-lGLU" > /dev/null; then
+if test "$SYS_GLU_LIB" = "glu32"; then
+  LIBS="$LIBS -lglu32"
+elif test $SYS_GLU_LIB && echo $LIBS | grep -v "\-lGLU" > /dev/null; then
 
 dnl AC_CHECK_LIB($SYS_GLU_LIB, gluBuild2DMipmaps,,
 AC_CHECK_LIB($SYS_GLU_LIB, gluBuild3DMipmaps,,

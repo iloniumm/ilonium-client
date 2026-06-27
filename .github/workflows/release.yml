@@ -127,7 +127,6 @@ jobs:
             mingw-w64-x86_64-curl
             mingw-w64-x86_64-libpng
             mingw-w64-x86_64-recode
-            mingw-w64-x86_64-glu
             git
 
       - name: Build

@@ -3,8 +3,7 @@
 
 #include <vector>
 #include <SDL3/SDL.h>
-#include <GL/gl.h>
-#include <GL/glext.h>
+
 
 // Simple vector structure
 struct vec4 {
