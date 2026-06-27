@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include    "tLocale.h"
 #include    "tConfiguration.h"
 #include    "tException.h"
+#include    <cstdlib>
 
 #ifdef WIN32
 #include    <windows.h>
@@ -63,7 +64,14 @@ static void quitWithMessagePrepare( const char* message )
 #endif
 
 #ifdef USEBOX
-    int result = MessageBox (NULL, message , "Message", MB_OK);
+    if ( !getenv("GITHUB_ACTIONS") && !getenv("HEADLESS") )
+    {
+        int result = MessageBox (NULL, message , "Message", MB_OK);
+    }
+    else
+    {
+        std::cout << message;
+    }
 #else
     std::cout << message;
 #endif

@@ -1433,6 +1433,11 @@ static void FindDataPath()
 #ifdef WIN32
     // look for data in the same directory as the executable
     if ( TestDataPath(GetParent(st_pathToExecutable.Get(), 1) ) ) return;
+
+    // Check if we are running in the build directory on Windows
+    tString bindirNow(GenerateParentOfExecutable(1));
+    if ( TestPath( bindirNow, "Makefile" ) )
+        throw tRunningInBuildDirectory();
 #else
     // try to use path substitution
     if ( TestDataPath( st_RelocatePath( tString(AA_DATADIR ) ) ) ) return;

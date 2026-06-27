@@ -79,6 +79,11 @@ void st_PresentError( const char* caption, const char *message )
 {
     std::cerr << message;
 
+    if ( getenv("GITHUB_ACTIONS") || getenv("HEADLESS") )
+    {
+        throw 1;
+    }
+
 #ifdef DEBUG	
     int result = MessageBox (NULL, message , caption, MB_RETRYCANCEL);
 #else
@@ -102,7 +107,10 @@ int result = MessageBox (NULL, message , caption, MB_OK);
 void st_PresentMessage( const char* caption, const char *message )
 {
     std::cerr << message;
-    MessageBox (NULL, message , caption, MB_OK);
+    if ( !getenv("GITHUB_ACTIONS") && !getenv("HEADLESS") )
+    {
+        MessageBox (NULL, message , caption, MB_OK);
+    }
 }
 
 #endif // WINDOWS
