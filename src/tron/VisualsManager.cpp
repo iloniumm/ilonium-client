@@ -1,4 +1,6 @@
 #include "VisualsManager.h"
+#include <SDL3/SDL.h>
+#include "../render/rGL.h"
 #include "gMenus.h"
 #include "gWall.h"
 #include "gCycle.h"

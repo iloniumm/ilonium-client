@@ -45,14 +45,15 @@ jobs:
             libxkbcommon-dev \
             libwayland-dev \
             libdbus-1-dev \
-            libibus-1.0-dev
+            libibus-1.0-dev \
+            libxtst-dev
 
       - name: Build SDL3 from source
         run: |
           # Build SDL3
           git clone --depth 1 https://github.com/libsdl-org/SDL.git -b main
           cd SDL
-          cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DSDL_STATIC=OFF -DSDL_SHARED=ON
+          cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DSDL_STATIC=OFF -DSDL_SHARED=ON -DSDL_X11_XTEST=OFF
           cmake --build build -j$(nproc)
           sudo cmake --install build
           cd ..
@@ -126,6 +127,7 @@ jobs:
             mingw-w64-x86_64-curl
             mingw-w64-x86_64-libpng
             mingw-w64-x86_64-recode
+            mingw-w64-x86_64-glu
             git
 
       - name: Build
