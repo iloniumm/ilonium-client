@@ -632,7 +632,7 @@ static void se_AdminLogin_ReallyOnlyCallFromChatKTHNXBYE( ePlayerNetID * p )
 
     sn_ConsoleOut("You have been logged in!\n",p->Owner());
     tString serverLoginMessage;
-    serverLoginMessage << "Remote admin login for user \"" << p->GetUserName() << "\" accepted.\n";
+    serverLoginMessage << "Remote admin login for user \"" << p->GetPlayerUserName() << "\" accepted.\n";
     sn_ConsoleOut(serverLoginMessage, 0);
 }
 #endif
@@ -1373,7 +1373,7 @@ void ePlayer::SendAuthNames()
 
 static void se_RequestLogin( ePlayerNetID * p )
 {
-    tString userName = p->GetUserName();
+    tString userName = p->GetPlayerUserName();
     tString authority;
     if ( p->Owner() != 0 &&  p->loginWanted )
     {
@@ -1590,7 +1590,7 @@ ePlayerNetID * ePlayerNetID::FindPlayerByName( tString const & name, ePlayerNetI
     
     if ( !ret )
     {
-        ret = CompareBufferToPlayerNames( name, num_matches, requester, &ePlayerNetID::GetUserName, &se_NameFilterID, &se_Hide  );
+        ret = CompareBufferToPlayerNames( name, num_matches, requester, &ePlayerNetID::GetPlayerUserName, &se_NameFilterID, &se_Hide  );
     }
     if ( ret && num_matches == 1 )
     {
@@ -1600,7 +1600,7 @@ ePlayerNetID * ePlayerNetID::FindPlayerByName( tString const & name, ePlayerNetI
     
     if ( !ret )
     {
-        ret = CompareBufferToPlayerNames( name, num_matches, requester, &ePlayerNetID::GetUserName, Filter, &se_Hide );
+        ret = CompareBufferToPlayerNames( name, num_matches, requester, &ePlayerNetID::GetPlayerUserName, Filter, &se_Hide );
     }
     if ( ret && num_matches == 1 )
     {
@@ -3181,7 +3181,7 @@ void se_Promote( ePlayerNetID * admin, ePlayerNetID * victim, tAccessLevel acces
 
 void se_OpBase( ePlayerNetID * admin, ePlayerNetID * victim, char const * command, tAccessLevel accessLevel )
 {
-    tString authName = victim->GetUserName() + "@L_OP";
+    tString authName = victim->GetPlayerUserName() + "@L_OP";
     if ( victim->IsAuthenticated() )
     {
         authName = victim->GetRawAuthenticatedName();
@@ -3408,7 +3408,7 @@ static void se_AdminLogin_ReallyOnlyCallFromChatKTHNXBYE( ePlayerNetID * p, std:
     {
         tString failedLogin;
         sn_ConsoleOut("Login denied!\n",p->Owner());
-        failedLogin << "Remote admin login for user \"" << p->GetUserName();
+        failedLogin << "Remote admin login for user \"" << p->GetPlayerUserName();
         failedLogin << "\" using password \"" << params << "\" rejected.\n";
         sn_ConsoleOut(failedLogin, 0);
     }
@@ -3429,7 +3429,7 @@ static void se_AdminLogin_ReallyOnlyCallFromChatKTHNXBYE( ePlayerNetID * p, std:
             }
             else
             {
-                p->SetRawAuthenticatedName( p->GetUserName() + "@" + params );
+                p->SetRawAuthenticatedName( p->GetPlayerUserName() + "@" + params );
             }
         }
 
@@ -3490,7 +3490,7 @@ static void se_AdminAdmin( ePlayerNetID * p, std::istream & s )
     tString str;
     str.ReadLine(s);
     tColoredString msg;
-    msg << tColoredString::ColorString(1,0,0) << "Remote admin command" << tColoredString::ColorString(-1,-1,-1) << " by " << tColoredString::ColorString(1,1,.5) << p->GetUserName() << tColoredString::ColorString(-1,-1,-1) << ": " << tColoredString::ColorString(.5,.5,1) << str << "\n";
+    msg << tColoredString::ColorString(1,0,0) << "Remote admin command" << tColoredString::ColorString(-1,-1,-1) << " by " << tColoredString::ColorString(1,1,.5) << p->GetPlayerUserName() << tColoredString::ColorString(-1,-1,-1) << ": " << tColoredString::ColorString(.5,.5,1) << str << "\n";
     se_SecretConsoleOut( msg, p, &se_cannotSeeConsole, p );
     std::istringstream stream(&str(0));
 
@@ -3746,7 +3746,7 @@ static void se_ChatMe( ePlayerNetID * p, std::istream & s, eChatSpamTester & spa
     sn_ConsoleOut(console,0);
 
     tString str;
-    str << p->GetUserName() << " /me " << msg;
+    str << p->GetPlayerUserName() << " /me " << msg;
     se_SaveToChatLog(str);
     return;
 }
@@ -3811,7 +3811,7 @@ static void se_ChatShout( ePlayerNetID * p, tString const & say, eChatSpamTester
         se_DisplayChatLocally( p, say);
         
         tString s;
-        s << p->GetUserName() << ' ' << say;
+        s << p->GetPlayerUserName() << ' ' << say;
         se_SaveToChatLog(s);
     }
 }
@@ -6994,7 +6994,7 @@ static bool se_IsNameTaken( tString const & name, ePlayerNetID const * exception
             ePlayerNetID * player = se_PlayerNetIDs(i);
             if ( player != exception )
             {
-                if ( name == player->GetUserName() || name == ePlayerNetID::FilterName( player->GetName() ) )
+                if ( name == player->GetPlayerUserName() || name == ePlayerNetID::FilterName( player->GetName() ) )
                     return true;
             }
         }
@@ -8487,7 +8487,7 @@ void ePlayerNetID::GetScoreFromDisconnectedCopy()
     
     for(i=se_PlayerNetIDs.Len()-1;i>=0;i--){
         ePlayerNetID *pni=se_PlayerNetIDs(i);
-        if (pni->disconnected && pni->GetUserName() == GetUserName() && pni->Owner() == 0)
+        if (pni->disconnected && pni->GetPlayerUserName() == GetPlayerUserName() && pni->Owner() == 0)
         {
 #ifdef DEBUG
             con << GetName() << " reconnected.\n";
@@ -10654,7 +10654,7 @@ void ePlayerNetID::LogScoreDifference( void )
     {
         int scoreDifference = score - lastScore_;
         lastScore_ = IMPOSSIBLY_LOW_SCORE;
-        se_roundScoreWriter << scoreDifference << GetUserName();
+        se_roundScoreWriter << scoreDifference << GetPlayerUserName();
         if ( currentTeam )
             se_roundScoreWriter << FilterName( currentTeam->Name() );
         se_roundScoreWriter.write();

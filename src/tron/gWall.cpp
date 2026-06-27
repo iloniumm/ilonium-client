@@ -658,7 +658,7 @@ void sg_TopologyPoliceCheck( gCycle* cycle, eWall* oldWall, gPlayerWall* newWall
         std::stringstream filename;
         if ( cycle && cycle->Player() )
         {
-            filename << cycle->Player()->GetUserName() << "_";
+            filename << cycle->Player()->GetPlayerUserName() << "_";
         }
         filename << "topology";
         std::ofstream f( filename.str().c_str(), std::ios::app );

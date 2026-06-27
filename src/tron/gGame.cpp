@@ -651,7 +651,7 @@ protected:
     // find the player at position i
     ePlayerNetID *online(int p){
         for (int i=se_PlayerNetIDs.Len()-1;i>=0;i--)
-            if (se_PlayerNetIDs(i)->IsHuman() && !strcmp(se_PlayerNetIDs(i)->GetUserName(),highName[p]))
+            if (se_PlayerNetIDs(i)->IsHuman() && !strcmp(se_PlayerNetIDs(i)->GetPlayerUserName(),highName[p]))
                 return se_PlayerNetIDs(i);
 
         return NULL;
@@ -764,7 +764,7 @@ public:
     virtual void greet_this(ePlayerNetID *p,tOutput &o){
         //    tOutput o;
 
-        int f=Find(p->GetUserName())+1;
+        int f=Find(p->GetPlayerUserName())+1;
         int l=highName.Len();
 
         o.SetTemplateParameter(1, f);
@@ -928,7 +928,7 @@ template<class T>class highscores: public gHighscoresBase{
     void Add( ePlayerNetID* player,T AddScore)
     {
         tASSERT( player );
-        tString const & name = player->GetUserName();
+        tString const & name = player->GetPlayerUserName();
         int f=Find(name,true);
         checkPos(f,name,AddScore+high_score[f]);
     }
@@ -950,7 +950,7 @@ template<class T>class highscores: public gHighscoresBase{
 
     void Check(const ePlayerNetID* player,T score){
         tASSERT( player );
-        tString name = player->GetUserName();
+        tString name = player->GetPlayerUserName();
 
         // find the name in the list
         int found=Find(name,true);
@@ -1123,7 +1123,7 @@ public:
 
         for(int i=active.Len()-1;i>=0;i--){
 
-            nums[i]=Find(active(i)->GetUserName(),true);
+            nums[i]=Find(active(i)->GetPlayerUserName(),true);
 
             if (high_score[nums[i]]<0)
                 high_score[nums[i]]=0;
@@ -1159,11 +1159,11 @@ public:
                     potExtra *= 2.0f;
                 }
 
-                Add(player->GetUserName(), ( pot / winningTeam->NumHumanPlayers() + potExtra ) - bet[i] );
+                Add(player->GetPlayerUserName(), ( pot / winningTeam->NumHumanPlayers() + potExtra ) - bet[i] );
             }
             else
             {
-                Add(player->GetUserName(),-bet[i]);
+                Add(player->GetPlayerUserName(),-bet[i]);
             }
         }
     }

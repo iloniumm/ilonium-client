@@ -1613,7 +1613,7 @@ void gCycle::OnNotifyNewDestination( gDestination* dest )
 #ifdef GNUPLOT_DEBUG
     if ( sg_gnuplotDebug && Player() )
     {
-        std::ofstream f( Player()->GetUserName() + "_sync", std::ios::app );
+        std::ofstream f( Player()->GetPlayerUserName() + "_sync", std::ios::app );
         f << dest->position.x << " " << dest->position.y << "\n";
     }
 #endif
@@ -2448,11 +2448,11 @@ void gCycle::MyInitAfterCreation(){
 #ifdef GNUPLOT_DEBUG
     if ( sg_gnuplotDebug && Player() )
     {
-        std::ofstream f( Player()->GetUserName() + "_step" );
+        std::ofstream f( Player()->GetPlayerUserName() + "_step" );
         f << pos.x << " " << pos.y << "\n";
-        std::ofstream g( Player()->GetUserName() + "_sync" );
+        std::ofstream g( Player()->GetPlayerUserName() + "_sync" );
         g << pos.x << " " << pos.y << "\n";
-        std::ofstream h( Player()->GetUserName() + "_turn" );
+        std::ofstream h( Player()->GetPlayerUserName() + "_turn" );
         h << pos.x << " " << pos.y << "\n";
     }
 #endif
@@ -2724,7 +2724,7 @@ bool gCycle::Timestep(REAL currentTime){
 #ifdef GNUPLOT_DEBUG
     if ( sg_gnuplotDebug && Player() )
     {
-        std::ofstream f( Player()->GetUserName() + "_step", std::ios::app );
+        std::ofstream f( Player()->GetPlayerUserName() + "_step", std::ios::app );
         f << pos.x << " " << pos.y << "\n";
     }
 #endif
@@ -3298,7 +3298,7 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
                 REAL rubberEventVal = modPeakRubberInSpot - modRubberAtEventStart;
                 if (this->Player()) {
                     tColoredString playerName;
-                    playerName << this->Player()->GetUserName();
+                    playerName << this->Player()->GetPlayerUserName();
                     con << "Player " << playerName << ": Rubber event " << rubberEventVal << "\n";
                 }
             }
@@ -3546,14 +3546,14 @@ void gCycle::KillAt( const eCoord& deathPos){
             !dynamic_cast<gAIPlayer*>(hunter)     &&
             !dynamic_cast<gAIPlayer*>(Player())             &&
             hunter->IsAuth() && Player()->IsAuth())
-        nKrawall::ServerFrag(hunter->GetUserName(), Player()->GetUserName());
+        nKrawall::ServerFrag(hunter->GetPlayerUserName(), Player()->GetPlayerUserName());
 #endif
 
     if (hunter==Player())
     {
         if (hunter)
         {
-            sg_deathSuicideWriter << hunter->GetUserName();
+            sg_deathSuicideWriter << hunter->GetPlayerUserName();
             sg_deathSuicideWriter.write();
 
             if ( score_suicide )
@@ -3577,7 +3577,7 @@ void gCycle::KillAt( const eCoord& deathPos){
                 preyName << *Player();
                 preyName << tColoredString::ColorString(1,1,1);
                 if (Player()->CurrentTeam() != hunter->CurrentTeam()) {
-                    sg_deathFragWriter << Player()->GetUserName() << hunter->GetUserName();
+                    sg_deathFragWriter << Player()->GetPlayerUserName() << hunter->GetPlayerUserName();
                     sg_deathFragWriter.write();
 
                     win.SetTemplateParameter(3, preyName);
@@ -3592,7 +3592,7 @@ void gCycle::KillAt( const eCoord& deathPos){
                     }
                 }
                 else {
-                    sg_deathTeamkillWriter << Player()->GetUserName() << hunter->GetUserName();
+                    sg_deathTeamkillWriter << Player()->GetPlayerUserName() << hunter->GetPlayerUserName();
                     sg_deathTeamkillWriter.write();
 
                     tColoredString hunterName;
@@ -3733,7 +3733,7 @@ void gCycle::PassEdge(const eWall *ww,REAL time,REAL a,int){
                         
                         if ( explosion->AccountForHole() )
                         {
-                            sg_sacrificeWriter << Player()->GetUserName() << holer->Player()->GetUserName() << w->Cycle()->Player()->GetUserName();
+                            sg_sacrificeWriter << Player()->GetPlayerUserName() << holer->Player()->GetPlayerUserName() << w->Cycle()->Player()->GetPlayerUserName();
                             sg_sacrificeWriter.write();
                             if ( score_hole > 0 )
                             {
@@ -4053,7 +4053,7 @@ bool gCycle::DoTurn(int d)
 #ifdef GNUPLOT_DEBUG
     if ( sg_gnuplotDebug && Player() )
     {
-        std::ofstream f( Player()->GetUserName() + "_turn", std::ios::app );
+        std::ofstream f( Player()->GetPlayerUserName() + "_turn", std::ios::app );
         f << pos.x << " " << pos.y << "\n";
     }
 #endif

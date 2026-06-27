@@ -492,10 +492,10 @@ public:
     inline tString const & GetName( void ) const;	//!< Gets this player's name without colors.
     inline ePlayerNetID const & GetName( tString & name ) const;	//!< Gets this player's name without colors.
 
-    inline tString const & GetUserName( void ) const;	//!< Gets this player's full name. Use for writing to files or comparing with admin input.
-    inline ePlayerNetID const & GetUserName( tString & userName ) const;	//!< Gets this player's name, cleared for system logs. Use for writing to files or comparing with admin input.
+    inline tString const & GetPlayerUserName( void ) const;	//!< Gets this player's full name. Use for writing to files or comparing with admin input.
+    inline ePlayerNetID const & GetPlayerUserName( tString & userName ) const;	//!< Gets this player's name, cleared for system logs. Use for writing to files or comparing with admin input.
 
-    tString const & GetLogName( void ) const{ return GetUserName(); }	//!< Gets this player's name, cleared for system logs (with escaped special characters). Use for writing to files.
+    tString const & GetLogName( void ) const{ return GetPlayerUserName(); }	//!< Gets this player's name, cleared for system logs (with escaped special characters). Use for writing to files.
     tString GetFilteredAuthenticatedName( void ) const;	//!< Gets the filtered, ecaped authentication name
 #ifdef KRAWALL_SERVER
     tString const & GetRawAuthenticatedName( void ) const{ return rawAuthenticatedName_; }	//!< Gets the raw, unescaped authentication name
@@ -694,7 +694,7 @@ ePlayerNetID const & ePlayerNetID::GetName( tString & name ) const
 
 // ******************************************************************************************
 // *
-// *	GetUserName
+// *	GetPlayerUserName
 // *
 // ******************************************************************************************
 //!
@@ -702,14 +702,14 @@ ePlayerNetID const & ePlayerNetID::GetName( tString & name ) const
 //!
 // ******************************************************************************************
 
-tString const & ePlayerNetID::GetUserName( void ) const
+tString const & ePlayerNetID::GetPlayerUserName( void ) const
 {
     return this->userName_;
 }
 
 // ******************************************************************************************
 // *
-// *	GetUserName
+// *	GetPlayerUserName
 // *
 // ******************************************************************************************
 //!
@@ -718,7 +718,7 @@ tString const & ePlayerNetID::GetUserName( void ) const
 //!
 // ******************************************************************************************
 
-ePlayerNetID const & ePlayerNetID::GetUserName( tString & userName ) const
+ePlayerNetID const & ePlayerNetID::GetPlayerUserName( tString & userName ) const
 {
     userName = this->userName_;
     return *this;
@@ -740,10 +740,6 @@ ePlayerNetID & ePlayerNetID::SetUserName( tString const & userName )
     this->userName_ = userName;
     return *this;
 }
-
-#ifdef GetUserName
-#undef GetUserName
-#endif
 
 #endif
 
