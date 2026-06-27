@@ -147,7 +147,7 @@ jobs:
           mkdir -p docker/build/context/build
           
           # Copy source tree and compile assets
-          cp -r Makefile configure bootstrap.sh config.h.in version.m4 aclocal.m4 configure.ac Makefile.am Makefile.in batch desktop language models resource scripts sound textures AUTHORS CHANGELOG.md COPYING news README.md src docker/build/context/source/ || true
+          cp -r Makefile configure bootstrap.sh config.h.in version.m4 aclocal.m4 configure.ac Makefile.am Makefile.in batch desktop language models resource scripts sound textures AUTHORS CHANGELOG.md COPYING NEWS news README.md INSTALL ChangeLog src docker/build/context/source/ || true
           cp -r language docker/build/context/build/
           cp -r config docker/build/context/build/
           mkdir -p docker/build/context/build/src/doc
