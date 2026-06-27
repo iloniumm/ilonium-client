@@ -44,13 +44,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 //eGrid* eSoundPlayer::S_Grid = NULL;
 
-#ifdef WIN32
-#define HAVE_LIBSDL_MIXER 1
-#endif
-
 #ifndef DEDICATED
 #ifdef  HAVE_LIBSDL_MIXER
-#include <SDL3/SDL_mixer.h>
+#include <SDL3_mixer/SDL_mixer.h>
 static Mix_Music* music = NULL;
 #endif
 
