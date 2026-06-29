@@ -5,6 +5,9 @@
 
 #ifdef WIN32
 #include <windows.h>
+#ifdef GetUserName
+#undef GetUserName
+#endif
 #endif
 
 
