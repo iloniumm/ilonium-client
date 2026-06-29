@@ -111,6 +111,7 @@ inline char SDL_TranslateCyrillic(unsigned char b1, unsigned char b2) {
 #define KMOD_CTRL SDL_KMOD_CTRL
 #define KMOD_ALT SDL_KMOD_ALT
 #define KMOD_GUI SDL_KMOD_GUI
+#define KMOD_META SDL_KMOD_GUI
 #else
 #define SDLK_LAST 1024
 typedef int SDL_keysym;
