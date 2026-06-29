@@ -56,7 +56,7 @@ if test -z "@progtitle_server@"; then
     for adlib in /usr/local/opt/sdl3*/lib/libSDL3*.dylib /usr/local/lib/libSDL3*.dylib /usr/local/opt/mimalloc*/lib/libmimalloc*.dylib /usr/local/lib/libmimalloc*.dylib; do
         if test -r ${adlib}; then
             mkdir -p "${BUNDLE}/@libdir@/"
-            cp -R "${adlib}" "${BUNDLE}/@libdir@/"
+            cp -L "${adlib}" "${BUNDLE}/@libdir@/"
             EXTRALIB="${EXTRALIB} -x ./@libdir@/`basename ${adlib}`"
         fi
     done
