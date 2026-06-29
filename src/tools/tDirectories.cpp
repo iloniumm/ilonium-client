@@ -1552,7 +1552,12 @@ private:
 #endif
 
                 // last fallback for debugging (activated only if there is data in the assumed build directory)
-                if ( TestPath( buildDirectory, "language/languages.txt" ) && TestDataPath( s_topSourceDir ) && TestConfigurationPath( st_DataDir + "/config" ) )
+                tString sourceDir( s_topSourceDir );
+                if ( sourceDir.Len() > 0 && sourceDir[0] != '/' && sourceDir[0] != '\\' )
+                {
+                    sourceDir = buildDirectory + "/" + sourceDir;
+                }
+                if ( TestPath( buildDirectory, "language/languages.txt" ) && ( TestDataPath( sourceDir ) || TestDataPath( buildDirectory ) ) && TestConfigurationPath( st_DataDir + "/config" ) )
                 {
                     // we must be running the game in debug mode; set user data dir to current directory.
                     st_UserDataDir = buildDirectory;

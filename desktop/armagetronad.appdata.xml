@@ -51,7 +51,7 @@
   <url type="bugtracker">https://gitlab.com/armagetronad/armagetronad/-/issues</url>
 
   <releases>
-    <release version="0.2.9.3.0-ilonas-modpack" date="2026-06-27"/>
+    <release version="0.2.9.3.0-ilonas-modpack" date="2026-06-29"/>
   </releases>
 
   <x-flatpak-content_rating type="oars-1.1">
