@@ -226,7 +226,7 @@ jobs:
       - name: Build
         run: |
           ./bootstrap.sh
-          ./configure --disable-restoreold --enable-automakedefaults --disable-useradd --disable-sysinstall --disable-initscripts --disable-uninstall --disable-etc --disable-games progname=Retrocycles progtitle="Retrocycles"
+          bash src/macosx/configure_for_bundle.sh progname=Retrocycles progtitle="Retrocycles"
           make -j$(sysctl -n hw.ncpu)
 
       - name: Package
