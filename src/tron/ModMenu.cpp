@@ -9191,9 +9191,15 @@ void ModMenu::RunCustomInGameMenu() {
                             ePlayerNetID* pni = se_PlayerNetIDs(i);
                             if (pni) {
                                 std::string loginStr = "not logged in";
+#ifdef KRAWALL_SERVER
                                 if (pni->IsAuthenticated() && pni->GetRawAuthenticatedName().Len() > 0) {
                                     loginStr = (const char*)pni->GetRawAuthenticatedName();
                                 }
+#else
+                                if (pni->IsLoggedIn()) {
+                                    loginStr = "admin";
+                                }
+#endif
                                 
                                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
                                 ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.10f, 0.12f, 0.4f));
