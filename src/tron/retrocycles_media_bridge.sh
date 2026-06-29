@@ -4,8 +4,15 @@
 # Bypasses Snap sandbox restrictions using a simple file-based IPC.
 # =====================================================================
 
-TARGET_FILE="/home/scarlet/snap/steam/common/.armagetronad/retrocycles_media_state.txt"
-CMD_FILE="/home/scarlet/snap/steam/common/.armagetronad/retrocycles_media_cmd.txt"
+USER_HOME=$(eval echo ~${SUDO_USER:-$USER})
+if [ -d "$USER_HOME/snap/steam/common/.armagetronad" ]; then
+    TARGET_DIR="$USER_HOME/snap/steam/common/.armagetronad"
+else
+    TARGET_DIR="$USER_HOME/.armagetronad"
+fi
+
+TARGET_FILE="$TARGET_DIR/retrocycles_media_state.txt"
+CMD_FILE="$TARGET_DIR/retrocycles_media_cmd.txt"
 
 mkdir -p "$(dirname "$TARGET_FILE")"
 

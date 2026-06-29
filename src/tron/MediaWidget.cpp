@@ -10,6 +10,7 @@
 #include "HudManager.h"
 #include "MediaWidget.h"
 #include "tools/tConfiguration.h"
+#include "tools/tDirectories.h"
 #include <cmath>
 #include <algorithm>
 #include <cstring>
@@ -81,18 +82,6 @@ static tConfItem<bool> sg_hudMedia_RgbModeConf        ("MOD_HUD_MEDIA_RGBMODE", 
 static tConfItem<REAL> sg_hudMedia_RgbSpeedConf       ("MOD_HUD_MEDIA_RGBSPEED",       sg_hudMedia_RgbSpeed);
 
 // Helper function to safely execute processes
-static std::string ExecCommand(const char* cmd) {
-    char buffer[256];
-    std::string result = "";
-    FILE* pipe = popen(cmd, "r");
-    if (!pipe) return "";
-    while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
-        result += buffer;
-    }
-    pclose(pipe);
-    return result;
-}
-
 static ImVec4 GetRgbColor(float speed, float offset = 0.0f) {
     float hue = fmodf((float)ImGui::GetTime() * 0.2f * speed + offset, 1.0f);
     ImVec4 col;
@@ -102,7 +91,8 @@ static ImVec4 GetRgbColor(float speed, float offset = 0.0f) {
 }
 
 void SendMediaCommand(int cmd) {
-    FILE* f = fopen("/home/scarlet/snap/steam/common/.armagetronad/retrocycles_media_cmd.txt", "w");
+    tString path = tDirectories::Var().GetWritePath("retrocycles_media_cmd.txt");
+    FILE* f = fopen((const char*)path, "w");
     if (!f) return;
     switch (cmd) {
         case -1: fprintf(f, "prev\n"); break;
@@ -189,7 +179,8 @@ void MediaWidget::PollingThreadFunc() {
 
     while (!m_ThreadShouldExit) {
         // Read state from IPC file
-        FILE* f = fopen("/home/scarlet/snap/steam/common/.armagetronad/retrocycles_media_state.txt", "r");
+        tString path = tDirectories::Var().GetReadPath("retrocycles_media_state.txt");
+        FILE* f = fopen((const char*)path, "r");
         
         bool isPlaying = false;
         float position = 0.0f;
@@ -571,7 +562,8 @@ void MediaWidget::Draw(ImDrawList* dl, ImVec2 pos, float alphaMult) {
     if (pbHovered && !isEditing && io.MouseClicked[0] && m_TotalLength > 0.0f) {
         float tParam = (io.MousePos.x - pbX0) / (pbX1 - pbX0);
         float seekSec = tParam * m_TotalLength;
-        FILE* fCmd = fopen("/home/scarlet/snap/steam/common/.armagetronad/retrocycles_media_cmd.txt", "w");
+        tString pathCmd = tDirectories::Var().GetWritePath("retrocycles_media_cmd.txt");
+        FILE* fCmd = fopen((const char*)pathCmd, "w");
         if (fCmd) {
             fprintf(fCmd, "seek%f\n", seekSec);
             fclose(fCmd);

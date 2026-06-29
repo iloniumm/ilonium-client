@@ -791,7 +791,11 @@ static void DrawCycleColorPreview(ePlayer* lp) {
 
 #include <dirent.h>
 #include <sys/stat.h>
+#ifdef WIN32
+#include <direct.h>
+#else
 #include <unistd.h>
+#endif
 #include <map>
 
 struct SavedProfile {
@@ -6664,7 +6668,11 @@ void ModMenu::RunCustomMainMenu() {
         s_PendingStartLocalGame = true;
     }
     if (getenv("RETRO_TEST_PLAY_DEMO")) {
+#ifdef WIN32
+        _putenv("RETRO_TEST_PLAY_DEMO=");
+#else
         unsetenv("RETRO_TEST_PLAY_DEMO");
+#endif
         const char* path_env = getenv("RETRO_TEST_PLAY_DEMO_PATH");
         std::string dp_path = path_env ? path_env : "1.aarec";
         if (DemoPlayerManager::Instance().LoadFile(dp_path)) {
