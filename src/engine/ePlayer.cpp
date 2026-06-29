@@ -28,6 +28,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "eTeam.h"
 #include "tMemManager.h"
 #include "ePlayer.h"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+#ifndef M_E
+#define M_E 2.7182818284590452354
+#endif
 #include "../tron/ModMenu.h"
 //#include "tInitExit.h"
 #include "tConfiguration.h"
