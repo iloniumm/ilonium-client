@@ -1793,7 +1793,7 @@ static uActionGlobalFunc gaf_tf(&togglefullscreen,&toggle_fullscreen_func, true 
 #undef glEnd
 #undef glMatrixMode
 
-#include <GL/gl.h>
+#include "rGL.h"
 #include <math.h>
 #include "rTexture.h"
 #include "ModMenu.h"

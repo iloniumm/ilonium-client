@@ -3637,11 +3637,13 @@ void ChatWidget::Draw() {
         }
 
         static int prevMsgCount = 0;
+        static bool lastTyping = false;
         int curMsgCount = g_chatMessages.size();
-        if (curMsgCount > prevMsgCount || typing) {
+        if (curMsgCount > prevMsgCount || (typing && !lastTyping)) {
             ImGui::SetScrollHereY(1.0f);
-            prevMsgCount = curMsgCount;
         }
+        prevMsgCount = curMsgCount;
+        lastTyping = typing;
         
         ImGui::SetWindowFontScale(1.0f);
     }
