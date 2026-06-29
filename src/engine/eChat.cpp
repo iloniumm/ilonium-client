@@ -287,7 +287,7 @@ bool eChatSpamTester::Block()
 
 eChatSaidEntry eChatSpamTester::GetSaidEntry(nTimeRolling const& currentTime) const
 {
-    return eChatSaidEntry(say_, player_->GetPlayerUserName(), currentTime, lastSaidType_);
+    return eChatSaidEntry(say_, player_->GetUserName(), currentTime, lastSaidType_);
 }
 
 bool eChatSpamTester::CheckSpamHistory(nTimeRolling const& currentTime) const
@@ -533,7 +533,7 @@ void eChatPrefixSpamTester::CalcScore( PrefixEntry & data, const int & len, cons
 
 void eChatPrefixSpamTester::RemovePrefixEntries( const tString & prefix, const eChatSaidEntry & e ) const
 {
-    eChatSaidEntry entry( prefix, player_->GetPlayerUserName(), e.Time(), e.Type() );
+    eChatSaidEntry entry( prefix, player_->GetUserName(), e.Time(), e.Type() );
     eChatLastSaid::SaidList & xs = player_->GetLastSaid().lastSaid_;
     xs.erase( std::remove_if( xs.begin(), xs.end(), IsPrefixPredicate< eChatSaidEntry >( entry, false ) ), xs.end() );
 }

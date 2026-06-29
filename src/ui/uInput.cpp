@@ -237,6 +237,11 @@ static int TranslateScancodeToLegacyKeycode(int scancode) {
         return scancode;
     }
 
+    int legacy = ScancodeToQWERTYKeycode(scancode);
+    if (legacy != 0) {
+        return legacy;
+    }
+
     switch (scancode) {
         case SDL_SCANCODE_BACKSPACE:      return 8;
         case SDL_SCANCODE_TAB:            return 9;

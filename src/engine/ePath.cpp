@@ -34,8 +34,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "eSensor.h"
 
 // heap of HalfEdges that are considered to be included in a possible path
-static tHeap<eHalfEdge> open_heap;
-static tHeap<eHalfEdge> closed_heap;
+static tHeap<eHalfEdge> open;
+static tHeap<eHalfEdge> closed;
 
 
 
@@ -110,14 +110,14 @@ eWall* eHalfEdge::CrossesNewWall(const eGrid *grid) const
 
 void eHalfEdge::ClearPathData()
 {
-    while (open_heap.Len())
+    while (open.Len())
     {
-        eHalfEdge *e = open_heap.Remove(0);
+        eHalfEdge *e = open.Remove(0);
         e->origin_ = PATH_NONE;
     }
-    while (closed_heap.Len())
+    while (closed.Len())
     {
-        eHalfEdge *e = closed_heap.Remove(0);
+        eHalfEdge *e = closed.Remove(0);
         e->origin_ = PATH_NONE;
     }
 }
@@ -139,7 +139,7 @@ REAL EdgePenalty(const eHalfEdge *e, const eGameObject *g)
 
 void eHalfEdge::SetMinPathLength( REAL length, tHeapBase& heap, ePATH_ORIGIN origin )
 {
-    tASSERT( Heap() != &closed_heap );
+    tASSERT( Heap() != &closed );
 
     origin_ = origin;
     tHeapElement::SetVal( length, heap );
@@ -166,7 +166,7 @@ void eHalfEdge::FindPath(const eCoord& startPoint, const eFace* startFace,
         eHalfEdge *run = startFace->Edge();
         for (int i=2; i>=0; i--)
         {
-            run->SetMinPathLength( Distance(run, startPoint) + Distance(run, stopPoint), open_heap, PATH_START );
+            run->SetMinPathLength( Distance(run, startPoint) + Distance(run, stopPoint), open, PATH_START );
 
             run = run->Next();
         }
@@ -175,20 +175,20 @@ void eHalfEdge::FindPath(const eCoord& startPoint, const eFace* startFace,
     // search for a path until one of the edges of the goal face is in the closed list or we have to give up
     eHalfEdge* stopEdge = NULL;
 
-    while (open_heap.Len() > 0 && !stopEdge)
+    while (open.Len() > 0 && !stopEdge)
     {
         // take the most promising HalfEdge out of the open list, put it
         // into the closed list
         // and add all possible ways from there to the open list.
 
-        eHalfEdge *e = open_heap.Remove(0);
+        eHalfEdge *e = open.Remove(0);
         tASSERT( e->origin_ < PATH_CLOSED );
 
         int origin = e->origin_;
         origin |= PATH_CLOSED;
         e->origin_ = static_cast<ePATH_ORIGIN>(origin);
 
-        closed_heap.Insert(e);
+        closed.Insert(e);
 
         // check if we are at the goal
         if (e->Face() == stopFace)
@@ -323,7 +323,7 @@ void eHalfEdge::PossiblePath( ePATH_ORIGIN newOrigin, REAL minLength ) // tell t
     {
         // completely new entry.
         tASSERT( Heap() == 0 );
-        SetMinPathLength( minLength, open_heap, newOrigin );
+        SetMinPathLength( minLength, open, newOrigin );
 
 #ifdef DEBUG
         //      con << "adding " << *Point() << ", " << Vec() << ", origin "
@@ -333,8 +333,8 @@ void eHalfEdge::PossiblePath( ePATH_ORIGIN newOrigin, REAL minLength ) // tell t
     else if( minLength <  MinPathLength() && origin_ < PATH_CLOSED)
     {
         // just update our info; the path got shorter.
-        tASSERT( Heap() != &closed_heap );
-        SetMinPathLength( minLength, open_heap, newOrigin );
+        tASSERT( Heap() != &closed );
+        SetMinPathLength( minLength, open, newOrigin );
 
 #ifdef DEBUG
         //      con << "updating " << *Point() << ", " << Vec() << ", origin "
@@ -350,9 +350,9 @@ tHeapBase *eHalfEdge::Heap() const
     if (origin_ >= PATH_NONE)
         return NULL;
     if (origin_ >= PATH_CLOSED)
-        return &closed_heap;
+        return &closed;
 
-    return &open_heap;
+    return &open;
 }
 
 

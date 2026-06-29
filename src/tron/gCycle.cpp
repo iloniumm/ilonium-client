@@ -1,13 +1,39 @@
+/*
 
+*************************************************************************
+
+ArmageTron -- Just another Tron Lightcycle Game in 3D.
+Copyright (C) 2000  Manuel Moos (manuel@moosnet.de)
+
+**************************************************************************
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+  
+***************************************************************************
+
+*/
 
 #include "gCycle.h"
+#include "ModMenu.h"
 #include "TrailRenderer.h"
 #ifndef DEDICATED
 #include "DemoPlayer.h"
 #endif
 #include "nConfig.h"
 #include "rModel.h"
-
+//#include "eTess.h"
 #include "eGrid.h"
 #include "rTexture.h"
 #include "eTimer.h"
@@ -46,7 +72,7 @@
 #include "rRender.h"
 #endif
 
-
+// TODO: get rid of this
 #include "tDirectories.h"
 
 #include <cmath>
@@ -61,11 +87,11 @@ public:
     virtual ~gRubberWaypointObject() {}
 
     virtual bool Timestep(REAL currentTime) {
-        
+        // true = destroy, false = keep alive
         if (currentTime - creationTime_ > sg_modWaypointsLifetime) {
-            return true; 
+            return true; // destroy after configured lifetime
         }
-        return false; 
+        return false; // keep alive
     }
     
 #ifndef DEDICATED
@@ -79,10 +105,10 @@ public:
         if (age > fadeStart) alpha = (sg_modWaypointsLifetime - age) / 2.0f;
         if (alpha <= 0) return;
         
-        
+        // pulsing effect
         REAL pulse = 0.7f + 0.3f * sin(age * 3.0f);
         
-        
+        // ========== 3D Diamond Marker ==========
         {
             ModelMatrix();
             glPushMatrix();
@@ -91,12 +117,12 @@ public:
             glDisable(GL_TEXTURE_2D);
             
             REAL diamondSize = 0.4f * pulse;
-            REAL diamondHeight = 3.0f + 0.3f * sin(age * 2.0f); 
+            REAL diamondHeight = 3.0f + 0.3f * sin(age * 2.0f); // bobbing up and down
             
-            
+            // diamond body
             glColor4f(color_.r, color_.g, color_.b, alpha * 0.8f);
             glBegin(GL_TRIANGLES);
-            
+            // top half
             glVertex3f(0, 0, diamondHeight + diamondSize);
             glVertex3f(diamondSize, 0, diamondHeight);
             glVertex3f(0, diamondSize, diamondHeight);
@@ -113,7 +139,7 @@ public:
             glVertex3f(0, -diamondSize, diamondHeight);
             glVertex3f(diamondSize, 0, diamondHeight);
             
-            
+            // bottom half
             glVertex3f(0, 0, diamondHeight - diamondSize);
             glVertex3f(0, diamondSize, diamondHeight);
             glVertex3f(diamondSize, 0, diamondHeight);
@@ -131,7 +157,7 @@ public:
             glVertex3f(0, -diamondSize, diamondHeight);
             glEnd();
             
-            
+            // vertical line from ground to diamond
             glColor4f(color_.r, color_.g, color_.b, alpha * 0.4f);
             glBegin(GL_LINES);
             glVertex3f(0, 0, 0);
@@ -141,7 +167,7 @@ public:
             glPopMatrix();
         }
         
-        
+        // ========== Screen-space text overlay ==========
         {
             float modelviewMatrix[16], projectionMatrix[16];
             float x, y, z, w;
@@ -175,7 +201,7 @@ public:
 
             glTranslatef(xp, yp, 0.);
             
-            
+            // colored bar background
             {
                 float bar_w = 0.12f;
                 float bar_h = 0.025f;
@@ -183,7 +209,7 @@ public:
                 
                 glDisable(GL_TEXTURE_2D);
                 
-                
+                // dark background
                 glColor4f(0, 0, 0, alpha * 0.6f);
                 glBegin(GL_QUADS);
                 glVertex2f(-bar_w/2, bar_y);
@@ -192,7 +218,7 @@ public:
                 glVertex2f(-bar_w/2, bar_y + bar_h);
                 glEnd();
                 
-                
+                // colored fill showing ratio
                 REAL maxRubber = sg_rubberCycle;
                 REAL ratio = (maxRubber > 0.001f) ? (amount_ / maxRubber) : 0.0f;
                 if (ratio > 1.0f) ratio = 1.0f;
@@ -205,7 +231,7 @@ public:
                 glVertex2f(-bar_w/2 + 0.003f, bar_y + bar_h - 0.003f);
                 glEnd();
                 
-                
+                // border
                 glColor4f(1.0f, 1.0f, 1.0f, alpha * 0.7f);
                 glBegin(GL_LINE_LOOP);
                 glVertex2f(-bar_w/2, bar_y);
@@ -217,7 +243,7 @@ public:
                 glEnable(GL_TEXTURE_2D);
             }
             
-            
+            // text label
             rTextField::SetBlendColor(tColor(1,1,1,alpha));
             char rubTxt[16];
             snprintf(rubTxt, sizeof(rubTxt), "%.1f", amount_);
@@ -242,11 +268,11 @@ private:
     REAL creationTime_;
 };
 
-
+// also used in gWall.cpp
 bool sg_gnuplotDebug = false;
 
 #define GNUPLOT_DEBUG
-
+// #define DELAYEDTURN_DEBUG
 
 #ifdef GNUPLOT_DEBUG
 static tSettingItem<bool> sg_("DEBUG_GNUPLOT",sg_gnuplotDebug);
@@ -260,16 +286,16 @@ static bool sg_predictWalls=true;
 static tSettingItem< bool > sg_predictWallsConf( "PREDICT_WALLS", sg_predictWalls );
 #endif
 
-
+//  *****************************************************************
 
 static nNOInitialisator<gCycle> cycle_init(320,"cycle");
 
+//  *****************************************************************
 
+// static nVersionFeature sg_DoubleSpeed( 1 );
 
-
-
-
-
+//tCONTROLLED_PTR(ePlayerNetID)   lastEnemyInfluence;  	// the last enemy wall we encountered
+//REAL							lastTime;				// the time it was drawn at
 bool headlights=1;
 extern bool cycleprograminited;
 
@@ -282,7 +308,7 @@ static tSettingItem<float> conf_smoothMinSpeed ("CYCLE_SMOOTH_MIN_SPEED", sg_cyc
 static float sg_cycleSyncSmoothThreshold = .2f;
 static tSettingItem<float> conf_smoothThreshold ("CYCLE_SMOOTH_THRESHOLD", sg_cycleSyncSmoothThreshold);
 
-static REAL sg_enemyChatbotTimePenalty = 30.0f;   
+static REAL sg_enemyChatbotTimePenalty = 30.0f;   //!< penalty for victim in chatbot mode
 static tSettingItem<REAL> sg_enemyChatbotTimePenaltyConf( "ENEMY_CHATBOT_PENALTY", sg_enemyChatbotTimePenalty );
 extern REAL sg_suicideTimeout;
 
@@ -300,10 +326,10 @@ static inline void clamp(REAL &c, REAL min, REAL max){
 }
 
 
-REAL		gCycle::wallsStayUpDelay=8.0f;	
+REAL		gCycle::wallsStayUpDelay=8.0f;	// the time the cycle walls stay up ( negative values: they stay up forever )
 
-REAL		gCycle::wallsLength=-1.0f;		
-REAL		gCycle::explosionRadius=4.0f;	
+REAL		gCycle::wallsLength=-1.0f;		// the maximum total length of the walls
+REAL		gCycle::explosionRadius=4.0f;	// the radius of the holes blewn in by an explosion
 
 static		nSettingItem<REAL> *c_pwsud = NULL, *c_pwl = NULL, *c_per = NULL;
 
@@ -318,12 +344,12 @@ void gCycle::PrivateSettings()
     c_per  =&c_er;
 }
 
-
+// sound speed divisor
 static REAL sg_speedCycleSound=15;
 static nSettingItem<REAL> c_ss("CYCLE_SOUND_SPEED",
                                sg_speedCycleSound);
 
-
+// time after spawning it takes the cycle to start building a wall
 static REAL sg_cycleWallTime=0.0;
 static nSettingItemWatched<REAL>
 sg_cycleWallTimeConf("CYCLE_WALL_TIME",
@@ -331,7 +357,7 @@ sg_cycleWallTimeConf("CYCLE_WALL_TIME",
                      nConfItemVersionWatcher::Group_Bumpy,
                      14);
 
-
+// time after spawning during which a cycle can't be killed
 static REAL sg_cycleInvulnerableTime=0.0;
 static nSettingItemWatched<REAL>
 sg_cycleInvulnerableTimeConf("CYCLE_INVULNERABLE_TIME",
@@ -339,7 +365,7 @@ sg_cycleInvulnerableTimeConf("CYCLE_INVULNERABLE_TIME",
                              nConfItemVersionWatcher::Group_Bumpy,
                              12);
 
-
+// time after spawning during which a cycle can't be killed
 static bool sg_cycleFirstSpawnProtection=false;
 static nSettingItemWatched<bool>
 sg_cycleFirstSpawnProtectionConf("CYCLE_FIRST_SPAWN_PROTECTION",
@@ -347,7 +373,7 @@ sg_cycleFirstSpawnProtectionConf("CYCLE_FIRST_SPAWN_PROTECTION",
                                  nConfItemVersionWatcher::Group_Bumpy,
                                  12);
 
-
+// time intevals between server-client syncs
 static REAL sg_syncIntervalEnemy=1;
 static tSettingItem<REAL> c_sie( "CYCLE_SYNC_INTERVAL_ENEMY",
                                  sg_syncIntervalEnemy );
@@ -356,12 +382,12 @@ static REAL sg_syncIntervalSelf=.1;
 static tSettingItem<REAL> c_sis( "CYCLE_SYNC_INTERVAL_SELF",
                                  sg_syncIntervalSelf );
 
-
+// flag controlling case-by-case-niceness for older clients
 static bool sg_avoidBadOldClientSync=true;
 static tSettingItem<bool> c_sbs( "CYCLE_AVOID_OLDCLIENT_BAD_SYNC",
                                  sg_avoidBadOldClientSync );
 
-
+// fast forward factor for extrapolating sync
 static REAL sg_syncFF=10;
 static tSettingItem<REAL> c_sff( "CYCLE_SYNC_FF",
                                  sg_syncFF );
@@ -370,7 +396,7 @@ static int sg_syncFFSteps=1;
 static tSettingItem<int> c_sffs( "CYCLE_SYNC_FF_STEPS",
                                  sg_syncFFSteps );
 
-
+// client side bugfix: local tunneling is avoided on syncs
 static nVersionFeature sg_NoLocalTunnelOnSync( 4 );
 
 static REAL sg_GetSyncIntervalSelf( gCycle* cycle )
@@ -381,9 +407,9 @@ static REAL sg_GetSyncIntervalSelf( gCycle* cycle )
         return sg_syncIntervalEnemy * 10;
 }
 
-
-
-
+// moviepack hack
+//static bool moviepack_hack=false;       // do we use it?
+//static tSettingItem<bool> ump("MOVIEPACK_HACK",moviepack_hack);
 
 static int score_hole=0;
 static tSettingItem<int> s_h("SCORE_HOLE",score_hole);
@@ -400,7 +426,7 @@ static tSettingItem<int> s_k("SCORE_KILL",score_kill);
 static int score_suicide=-4;
 static tSettingItem<int> s_s("SCORE_SUICIDE",score_suicide);
 
-
+// input control
 
 uActionPlayer gCycle::s_brake("CYCLE_BRAKE", -9);
 static uActionPlayer s_brakeToggle("CYCLE_BRAKE_TOGGLE", -9);
@@ -411,27 +437,27 @@ uActionPlayer gCycle::se_perfectTurnRight("CYCLE_PERFECT_RIGHT", -9);
 uActionPlayer gCycle::se_autoEscapeLeft("CYCLE_AUTOESCAPE_LEFT", -9);
 uActionPlayer gCycle::se_autoEscapeRight("CYCLE_AUTOESCAPE_RIGHT", -9);
 
+// [MOD] AutoEscape Configuration
+REAL sg_autoEscapeRubberMargin = 0.15f;
+tConfItem<REAL> c_autoEscapeMargin("AUTOESCAPE_RUBBER_MARGIN", sg_autoEscapeRubberMargin);
 
-REAL sg_autoEscapeRubberMargin = 0.0f;
+bool sg_autoEscapePingComp = true;
+tConfItem<bool> c_autoEscapePingComp("AUTOESCAPE_PING_COMP", sg_autoEscapePingComp);
 
-
-bool sg_autoEscapePingComp = false;
-
-
-
+// [MOD] Perfect Turn Static Calibration (0 = rubber-only mode)
 REAL sg_perfectTurnCalibration = 0.0f;
-
+tConfItem<REAL> c_perfectTurnCalibration("PERFECT_TURN_CALIBRATION", sg_perfectTurnCalibration);
 
 static eWavData cycle_run("moviesounds/engine.wav","sound/cyclrun.wav");
 static eWavData turn_wav("moviesounds/cycturn.wav","sound/expl.wav");
 static eWavData scrap("sound/expl.wav");
 
-
-
+// a class of textures where the transparent part of the
+// image is replaced by the player color
 class gTextureCycle: public rSurfaceTexture
 {
-    gRealColor color_; 
-    bool wheel; 
+    gRealColor color_; // player color
+    bool wheel; // wheel or body
 public:
     gTextureCycle(rSurface const & surface, const gRealColor& color,bool repx=0,bool repy=0,bool wheel=false);
 
@@ -451,7 +477,7 @@ gTextureCycle::gTextureCycle(rSurface const & surface, const gRealColor& color,b
 void gTextureCycle::ProcessImage(SDL_Surface *im)
 {
 #ifndef DEDICATED
-    
+    // blend transparent texture parts with cycle color
     tVERIFY(SDL_BYTESPERPIXEL(im->format) == 4);
     GLubyte R=int(color_.r*255);
     GLubyte G=int(color_.g*255);
@@ -489,12 +515,12 @@ void gTextureCycle::OnSelect(bool enforce){
 #endif
 }
 
-
+// from gCycleMovement.cpp
 extern void sg_RubberValues( ePlayerNetID const * player, REAL speed, REAL & max, REAL & effectiveness );
 extern REAL sg_brakeCycle;
 extern REAL sg_cycleBrakeDeplete;
 
-
+// in release mode, default values should always be used. in debug mode, we want to experiment :)
 #ifdef DEBUG
 #ifndef DEDICATED
 #define DEBUGCHATBOT
@@ -551,7 +577,13 @@ class Sensor: public gSensor
                 hitDistance_ = o->GetDistance();
         }
 
-        
+        /*
+        // do detection and additional stuff
+        void detect( REAL range )
+        {
+            gSensor::detect( range );
+        }
+        */
 
         virtual void PassEdge(const eWall *ww,REAL time,REAL a,int r)
         {
@@ -567,7 +599,7 @@ class Sensor: public gSensor
 
         bool DoExtraDetectionStuff()
         {
-            
+            // move towards the beginning of a wall
             lrSuggestion_ = -lr;
 
             switch ( type )
@@ -577,11 +609,11 @@ class Sensor: public gSensor
                 lrSuggestion_ = 0;
                 return true;
             default:
-                
-                
+                // unless it is an enemy, follow his wall instead (uncomment for a nasty cowardy campbot)
+                // lrSuggestion *= -1;
             case gSENSOR_SELF:
                 {
-                    
+                    // determine whether we're hitting the front or back half of his wall
                     if ( !ehit )
                         return true;
                     eWall * wall = ehit->GetWall();
@@ -594,10 +626,10 @@ class Sensor: public gSensor
                     if ( !hitOwner_ )
                         return true;
 
-                    
+                    // gCycleChatBot & enemyChatBot = Get( hitOwner_ );
 
                     REAL wallAlpha = playerWall->Edge()->Ratio( before_hit );
-                    
+                    // that's an unreliable source
                     if ( wallAlpha < 0 )
                         wallAlpha = 0;
                     if ( wallAlpha > 1 )
@@ -606,7 +638,7 @@ class Sensor: public gSensor
                     hitTime_       = playerWall->Time( wallAlpha );
                     windingNumber_ = playerWall->WindingNumber();
 
-                    
+                    // don't see new walls
                     if ( hitTime_ > hitOwner_->LastTime() - sg_chatBotNewWallBlindness && hitOwner_ != owned )
                     {
                         ehit = NULL;
@@ -614,18 +646,25 @@ class Sensor: public gSensor
                         return false;
                     }
 
-                    
+                    // REAL cycleDistance = hitOwner_->GetDistance();
 
-                    
+                    // REAL wallStart = 0;
 
-                    
+                    /*
+                    if ( gCycle::WallsLength() > 0 )
+                    {
+                        wallStart = cyclePos - playerWall->Cycle()->ThisWallsLength();
+                        if ( wallStart < 0 )
+                            wallStart = 0;
+                    }
+                    */
                 }
             }
 
             return true;
         }
 
-        
+        // check how far the hit wall extends straight into the given direction
         REAL HitWallExtends( eCoord const & dir, eCoord const & origin )
         {
             if ( !ehit || !ehit->Other() )
@@ -645,11 +684,11 @@ class Sensor: public gSensor
             return ret;
         }
 
-        gCycle * hitOwner_;     
-        REAL     hitTime_;      
-        REAL     hitDistance_;  
-        short    lrSuggestion_; 
-        int      windingNumber_; 
+        gCycle * hitOwner_;     // the owner of the hit wall
+        REAL     hitTime_;      // the time the hit wall was built at
+        REAL     hitDistance_;  // the distance of the wall to the cycle that built it
+        short    lrSuggestion_; // sensor's oppinon on whether moving to the left or right of the hit wall is recommended (-1 for left, +1 for right)
+        int      windingNumber_; // the number of turns (with sign) the cycle has taken
     };
 
     gCycleChatBot( gCycle * owner )
@@ -666,12 +705,12 @@ class Sensor: public gSensor
 #endif
     }
 
-    
+    // describes walls we like. We like enemy walls. We like to go between them.
     class WallHug
     {
     public:
-        gCycle const * owner_;  
-        REAL lastTimeSeen_;    
+        gCycle const * owner_;  // the cycle the walls we like belong to
+        REAL lastTimeSeen_;    // the last time we saw such a wall
 
         WallHug()
                 : owner_ ( NULL )
@@ -680,14 +719,14 @@ class Sensor: public gSensor
         }
     };
 
-    
+    // promote seen walls to possible wallhug replacements
     void FindHugReplacement( Sensor const & sensor )
     {
         gCycle const * owner = sensor.hitOwner_;
         if (!owner)
             return;
 
-        
+        // store as possible replacement
         if ( !hugReplacement_.owner_ && sensor.type != gSENSOR_SELF &&
                 owner != hugLeft_.owner_ &&
                 owner != hugRight_.owner_ )
@@ -696,25 +735,25 @@ class Sensor: public gSensor
             hugReplacement_.lastTimeSeen_ = nextChatAI_;
         }
 
-        
+        // update timestamps
         if ( owner == hugLeft_.owner_ )
             hugLeft_.lastTimeSeen_ = nextChatAI_;
         if ( owner == hugRight_.owner_ )
             hugRight_.lastTimeSeen_ = nextChatAI_;
     }
 
-    
-    
+    // determines the distance between two sensors; the size should give the likelyhood
+    // to survive if you pass through a gap between the two selected walls
     REAL Distance( Sensor const & a, Sensor const & b )
     {
-        
+        // make sure a is left from b
         if ( a.Direction() * b.Direction() < 0 )
             return Distance( b, a );
 
         bool self = a.type == gSENSOR_SELF || b.type == gSENSOR_SELF;
         bool rim  = a.type == gSENSOR_RIM || b.type == gSENSOR_RIM;
 
-        
+        // avoid. own. walls.
         REAL selfHatred = 1;
         if ( a.type == gSENSOR_SELF )
         {
@@ -737,14 +776,14 @@ class Sensor: public gSensor
             }
         }
 
-        
+        // some big distance to return if we don't know anything better
         REAL bigDistance = owner_->MaxWallsLength();
         if ( bigDistance <= 0 )
             bigDistance = owner_->GetDistance();
 
         if ( a.hitOwner_ != b.hitOwner_ )
         {
-            
+            // different owners? Great, there has to be a way through!
             REAL ret =
                 a.hitDistance_ + b.hitDistance_;
 
@@ -752,16 +791,16 @@ class Sensor: public gSensor
             {
                 ret = bigDistance * .001 + ret * .01 + ( a.before_hit - b.before_hit).Norm();
 
-                
+                // we love going between the rim and enemies
                 if ( !self )
                     ret = bigDistance * 2;
             }
 
-            
-            
+            // minimal factor should be 1, this path should never return something smaller than the
+            // paths where only one cycle's walls are hit
             ret *= 16;
 
-            
+            // or empty space
             if ( a.type == gSENSOR_NONE || b.type == gSENSOR_NONE )
                 ret *= 2;
 
@@ -769,27 +808,33 @@ class Sensor: public gSensor
         }
         else if ( rim )
         {
-            
+            // at least one rim wall? Take the distance between the hit positions.
             return ( a.before_hit - b.before_hit).Norm() * selfHatred;
         }
         else if ( a.type == gSENSOR_NONE && b.type == gSENSOR_NONE )
         {
-            
+            // empty space! Woo!
             return owner_->GetDistance() * 256;
         }
         else if ( a.lr != b.lr )
         {
-            
+            // different directions? Also great!
             return ( fabsf( a.hitDistance_ - b.hitDistance_ ) + .25 * bigDistance ) * selfHatred;
         }
-        
+        /*
+        else if ( - 2 * a.lr * (a.windingNumber_ - b.windingNumber_ ) > owner_->Grid()->WindingNumber() )
+        {
+            // this looks like a way out to me
+            return fabsf( a.hitDistance_ - b.hitDistance_ ) * 10 * selfHatred;
+        }
+        */
         else
         {
-            
+            // well, the longer the wall segment between the two points, the better.
             return fabsf( a.hitDistance_ - b.hitDistance_ ) * selfHatred;
         }
 
-        
+        // default: hit distance
         return ( a.before_hit - b.before_hit).Norm() * selfHatred;
     }
 
@@ -797,7 +842,7 @@ class Sensor: public gSensor
     {
         tASSERT( cycle );
 
-        
+        // create
         if ( cycle->chatBot_.get() == 0 )
             cycle->chatBot_.reset( new gCycleChatBot( cycle ) );
 
@@ -814,11 +859,11 @@ class Sensor: public gSensor
     REAL rlLastTime;
 #endif
 
-    
+    // does the main thinking
     void Activate( REAL currentTime )
     {
 #ifdef RLBOT
-        
+        // hack chatbot for crazy turning
         {
             if (!owner_->Alive() || !owner_->Vulnerable() )
             {
@@ -854,15 +899,15 @@ class Sensor: public gSensor
         }
 #endif
 
-        
+        // is it already time for activation?
         if ( currentTime < nextChatAI_ )
             return;
 
-        REAL lookahead = sg_chatBotRange;  
-        REAL minstep   = sg_chatBotMinTimestep; 
-        REAL maxstep   = sg_chatBotMinTimestep * 4 * ( 1 + .1 * tReproducibleRandomizer::GetInstance().Get() );  
+        REAL lookahead = sg_chatBotRange;  // seconds to plan ahead
+        REAL minstep   = sg_chatBotMinTimestep; // minimum timestep between thoughts in seconds
+        REAL maxstep   = sg_chatBotMinTimestep * 4 * ( 1 + .1 * tReproducibleRandomizer::GetInstance().Get() );  // maximum timestep between thoughts in seconds
 
-        
+        // chat AI wasn't active yet, so don't start immediately
         if ( nextChatAI_ <= EPS )
         {
             nextChatAI_ = sg_chatBotDelay + currentTime;
@@ -871,19 +916,19 @@ class Sensor: public gSensor
 
         timeOnChatAI_ += currentTime - nextChatAI_;
 
-        
+        // cylce data
         REAL speed = owner_->Speed();
         eCoord dir = owner_->Direction();
         eCoord pos = owner_->Position();
 
-        
+        // make chat AI worse over time
         if ( sn_GetNetState() != nSTANDALONE )
         {
             REAL qualityFactor = ( timeOnChatAI_ * sg_chatBotDecay );
             if ( qualityFactor > 1 )
             {
                 minstep *= qualityFactor;
-                
+                // maxstep *= qualityFactor;
             }
         }
 
@@ -898,7 +943,7 @@ class Sensor: public gSensor
 
         REAL minMoveOn = 0, maxMoveOn = 0, moveOn = 0;
 
-        
+        // get extra time we get through rubber usage
         REAL rubberGranted, rubberEffectiveness;
         sg_RubberValues( owner_->player, speed, rubberGranted, rubberEffectiveness );
         REAL rubberTime = ( rubberGranted - owner_->GetRubber() )*rubberEffectiveness/speed;
@@ -908,13 +953,13 @@ class Sensor: public gSensor
         {
             turnedRecently_ = false;
 
-            
+            // these checks can hit our last wall and fail. Temporarily set it to NULL.
             tJUST_CONTROLLED_PTR< gNetPlayerWall > lastWall = owner_->lastWall;
             owner_->lastWall = NULL;
 
             REAL narrowFront = 1;
 
-            
+            // cast four diagonal rays
             Sensor forwardLeft ( owner_, pos, scanDir.Turn(+1,+1 ) );
             Sensor backwardLeft( owner_, pos, scanDir.Turn(-1,+narrowFront) );
             forwardLeft.detect(1);
@@ -924,10 +969,10 @@ class Sensor: public gSensor
             forwardRight.detect(1);
             backwardRight.detect(1);
 
-            
+            // do we have a hug replacement candiate? If so, take it.
             if ( hugReplacement_.owner_ && !hugLeft_.owner_ && !hugRight_.owner_ )
             {
-                
+                // first time hugging? let the status quo decide.
                 int lr = 0;
                 if ( backwardLeft.hitOwner_ == hugReplacement_.owner_ )
                     lr--;
@@ -967,14 +1012,14 @@ class Sensor: public gSensor
             FindHugReplacement( backwardLeft );
             FindHugReplacement( backwardRight );
 
-            
+            // determine survival chances in the four directions
             REAL frontOpen = Distance ( forwardLeft, forwardRight );
             REAL leftOpen  = Distance ( forwardLeft, backwardLeft );
             REAL rightOpen = Distance ( forwardRight, backwardRight );
             REAL rearOpen = Distance ( backwardLeft, backwardRight );
 
             Sensor self( owner_, pos, scanDir.Turn(-1, 0) );
-            
+            // fake entries
             self.before_hit = pos;
             self.windingNumber_ = owner_->windingNumber_;
             self.type = gSENSOR_SELF;
@@ -986,14 +1031,47 @@ class Sensor: public gSensor
             self.lr = 1;
             REAL rearRightOpen = Distance( backwardRight, self );
 
-            
+            /*
+            // override: don't camp (too much)
+            if ( forwardRight.type == gSENSOR_SELF &&
+                    forwardLeft.type == gSENSOR_SELF &&
+                    backwardRight.type == gSENSOR_SELF &&
+                    backwardLeft.type == gSENSOR_SELF &&
+                    front.type == gSENSOR_SELF &&
+                    forwardRight.lr == front.lr &&
+                    forwardLeft.lr == front.lr &&
+                    backwardRight.lr == front.lr &&
+                    backwardLeft.lr == front.lr &&
+                    frontOpen + leftOpen + rightOpen < owner_->GetDistance() * .5 )
+            {
+                turnedRecently_ = true;
+                if ( front.lr > 0 )
+                {
+                    if ( leftOpen > minstep * speed )
+                        // force a turn to the left
+                        rightOpen = 0;
+                    else if ( front.hit * range < 2 * minstep )
+                        // force a preliminary turn to the right that will allow us to reverse
+                        frontOpen = 0;
+                }
+                else
+                {
+                    if ( rightOpen > minstep * speed )
+                        // force a turn to the right
+                        leftOpen = 0;
+                    else if ( front.hit * range < 2 * minstep )
+                        // force a preliminary turn to the left that will allow us to reverse
+                        frontOpen = 0;
+                }
+            }
+            */
 
-            
+            // override rim hugging
             if ( forwardRight.type == gSENSOR_SELF &&
                     forwardLeft.type == gSENSOR_RIM &&
                     backwardRight.type == gSENSOR_SELF &&
                     backwardLeft.type == gSENSOR_RIM &&
-                    
+                    // backwardLeft.hit < .1 &&
                     forwardRight.lr == -1 &&
                     backwardRight.lr == -1 )
             {
@@ -1014,7 +1092,7 @@ class Sensor: public gSensor
                     forwardRight.type == gSENSOR_RIM &&
                     backwardLeft.type == gSENSOR_SELF &&
                     backwardRight.type == gSENSOR_RIM &&
-                    
+                    // backwardRight.hit < .1 &&
                     forwardLeft.lr == 1 &&
                     backwardLeft.lr == 1 )
             {
@@ -1031,7 +1109,7 @@ class Sensor: public gSensor
                 }
             }
 
-            
+            // get the best turn direction
             uActionPlayer * bestAction = ( leftOpen > rightOpen ) ? &gCycle::se_turnLeft : &gCycle::se_turnRight;
             int             bestDir      = ( leftOpen > rightOpen ) ? 1 : -1;
             REAL            bestOpen     = ( leftOpen > rightOpen ) ? leftOpen : rightOpen;
@@ -1041,24 +1119,24 @@ class Sensor: public gSensor
             Sensor direct ( owner_, pos, scanDir.Turn( 0, bestDir) );
             direct.detect( 1 );
 
-            
+            // restore last wall
             owner_->lastWall = lastWall;
 
-            
-            
+            // only turn if the hole has a shape that allows better entry after we do a zig-zag, or if we're past the good turning point
+            // see how the survival chance is distributed between forward and backward half
             REAL forwardHalf  = Distance ( direct, bestForward );
             REAL backwardHalf = Distance ( direct, bestBackward );
 
             REAL forwardOverhang  = bestForward.HitWallExtends( bestForward.Direction(), pos );
             REAL backwardOverhang  = bestBackward.HitWallExtends( bestForward.Direction(), pos );
 
-            
+            // we have to move forward this much before we can hope to turn
             minMoveOn = bestBackward.HitWallExtends( dir, pos );
 
-            
+            // maybe the direct to the side sensor is better?
             REAL minMoveOnOther = direct.HitWallExtends( dir, pos );
 
-            
+            // determine how far we can drive on
             maxMoveOn      = bestForward.HitWallExtends( dir, pos );
             REAL maxMoveOnOther = front.HitWallExtends( dir, pos );
             if ( maxMoveOn > maxMoveOnOther )
@@ -1070,10 +1148,10 @@ class Sensor: public gSensor
                 minMoveOn = minMoveOnOther;
             }
 
-            
+            // best place to turn
             moveOn = .5 * ( minMoveOn * ( 1 + rubberRatio ) + maxMoveOn * ( 1 - rubberRatio ) );
 
-            
+            // hit the brakes before you hit anything and if it's worth it
             bool brake = sg_brakeCycle > 0 &&
                          front.hit * lookahead * sg_cycleBrakeDeplete < owner_->GetBrakingReservoir() &&
                          sg_brakeCycle * front.hit * lookahead < 2 * speed * owner_->GetBrakingReservoir() &&
@@ -1082,17 +1160,34 @@ class Sensor: public gSensor
             if ( frontOpen < bestOpen &&
                     ( forwardOverhang <= backwardOverhang || ( minMoveOn < 0 && moveOn < minstep * speed ) ) )
             {
-                
-                
+                // FindHugReplacement( direct );
+                // REAL expectedBackwardHalf = ( direct.before_hit - bestBackward.before_hit ).Norm();
 
-                
-                
-                
+                // if ( ( ( forwardHalf + backwardHalf > bestOpen * 2 || backwardHalf > frontOpen * 10 || backwardHalf > expectedBackwardHalf * 1.01 ) && frontOpen < bestOpen ) ||
+                // rubberTime * .5 + minspace * lookahead < minstep )
+                //                {
                 turnedRecently_ = true;
 
                 minMoveOn = maxMoveOn = moveOn = 0;
 
-                
+                /*
+                if (
+                    ( ( ( bestBackward.type == gSENSOR_ENEMY || bestBackward.type == gSENSOR_TEAMMATE ) && bestBackward.hitDistance_ < bestBackward.hit * lookahead * speed ) ||
+                      direct.hit * lookahead + rubberTime < owner_->GetTurnDelay() ) &&
+                    ( bestBackward.hit * lookahead + rubberTime < owner_->GetTurnDelay() ||
+                      bestForward.hit * lookahead + rubberTime < owner_->GetTurnDelay() )
+                )
+                {
+                    // override: stupid turn into certain death, turn it around if that makes it less stupid
+                    uActionPlayer * newBestAction = ( leftOpen > rightOpen ) ? &gCycle::se_turnLeft : &gCycle::se_turnRight;
+                    Sensor newDirect ( owner_, pos, scanDir.Turn( 0, -bestDir) );
+                    newDirect.detect( 1 );
+                    if ( newDirect.hit > direct.hit ||
+                            newDirect.hit * lookahead + rubberTime > owner_->GetTurnDelay() )
+                        owner_->Act( newBestAction, 1 );
+                }
+                else
+                */
                 {
                     if ( !CanMakeTurn( bestAction ) )
                     {
@@ -1107,7 +1202,7 @@ class Sensor: public gSensor
             }
             else
             {
-                
+                // the best
                 REAL bestSoFar = frontOpen > bestOpen ? frontOpen : bestOpen;
                 bestSoFar *= ( 10 * ( 1 - rubberRatio ) + 1 );
 
@@ -1118,7 +1213,7 @@ class Sensor: public gSensor
 
                     bool goLeft = rearLeftOpen > rearRightOpen;
 
-                    
+                    // dead end. reverse into the opposite direction of the front wall
                     uActionPlayer * bestAction = goLeft ? &gCycle::se_turnLeft : &gCycle::se_turnRight;
                     uActionPlayer * otherAction = !goLeft ? &gCycle::se_turnLeft : &gCycle::se_turnRight;
                     Sensor &        bestForward  = goLeft ? forwardLeft : forwardRight;
@@ -1126,7 +1221,7 @@ class Sensor: public gSensor
                     Sensor &        otherForward  = !goLeft ? forwardLeft : forwardRight;
                     Sensor &        otherBackward  = !goLeft ? backwardLeft : backwardRight;
 
-                    
+                    // space in the two directions available for turns
                     REAL bestHit = bestForward.hit > bestBackward.hit ? bestBackward.hit : bestForward.hit;
                     REAL otherHit = otherForward.hit > otherBackward.hit ? otherBackward.hit : otherForward.hit;
 
@@ -1138,12 +1233,12 @@ class Sensor: public gSensor
                         return;
                     }
 
-                    
+                    // well, after a short turn to the right if space is tight
                     if ( bestHit * lookahead < owner_->GetTurnDelay() + rubberTime )
                     {
                         if ( otherHit < bestForward.hit * 2 && front.hit * lookahead > owner_->GetTurnDelay() * 2 )
                         {
-                            
+                            // wait a bit, perhaps there will be a better spot
                             wait = true;
                         }
                         else
@@ -1156,10 +1251,10 @@ class Sensor: public gSensor
 
                             owner_->Act( otherAction, 1 );
 
-                            
+                            // there needs to be space ahead to finish the maneuver correctly
                             if ( maxMoveOn < speed * owner_->GetTurnDelay() )
                             {
-                                
+                                // there isn't. oh well, turn into the wrong direction completely, see if I care
                                 owner_->Act( otherAction, 1 );
                                 wait = true;
                             }
@@ -1176,10 +1271,10 @@ class Sensor: public gSensor
                 }
             }
 
-            
+            // execute brake command
             owner_->Act( &gCycle::s_brake, brake ? 1 : -1 );
 
-            
+            // swap hugged walls if we're in fact grinding them the other way round
             if ( hugLeft_.owner_ == backwardRight.hitOwner_ ||
                     hugRight_.owner_ == backwardLeft.hitOwner_ )
             {
@@ -1189,26 +1284,26 @@ class Sensor: public gSensor
             }
         }
 
-        
+        // REAL mintime = minspace * lookahead;
 
-        
-        
+        // try again soon
+        //        REAL newmintime = mintime * .5 - minstep * .2 * tReproducibleRandomizer::GetInstance().Get();
 
-        
-        
-        
+        // clamp
+        // if ( newmintime < minstep )
+        // newmintime = minstep;
 
-        
-        
-        
-        
+        // add slack, acceleration and rubber
+        // if ( owner_->acceleration > 0 )
+        // mintime -= owner_->acceleration * mintime * mintime / speed;
+        // mintime -= .1 * minstep - rubberTime * .3;
 
-        
-        
-        
-        
-        
-        
+        // if the next step gets us too close to the wall to do anything useful,
+        // bring us really close right away.
+        // if ( mintime - newmintime > minstep )
+        // {
+        // mintime = newmintime;
+        // }
 
         REAL space = moveOn;
         REAL minTime = space/speed;
@@ -1222,26 +1317,26 @@ class Sensor: public gSensor
         {
             minTime = maxstep;
         }
-        
+        // minTime = 0;
 
         nextChatAI_ = currentTime + minTime;
         timeOnChatAI_ += minTime;
     }
 
-    REAL nextChatAI_;        
+    REAL nextChatAI_;        //!< the next time the chat AI can be active
 private:
-    REAL timeOnChatAI_;      
-    short lastTurn_;         
-    REAL nextTurn_;          
-    bool turnedRecently_;    
-    gCycle * owner_;         
+    REAL timeOnChatAI_;      //!< the total time the player was on chat AI this round
+    short lastTurn_;         //!< the last turn the chat AI made
+    REAL nextTurn_;          //!< the next turn if one is planned
+    bool turnedRecently_;    //!< whether the cycle was turned or almost turned recently
+    gCycle * owner_;         //!< owner of chatbot
 
-    WallHug hugLeft_;              
-    WallHug hugRight_;             
-    WallHug hugReplacement_;       
+    WallHug hugLeft_;              //!< the wall we like to have on our left side
+    WallHug hugRight_;             //!< the wall we like to have on our right side
+    WallHug hugReplacement_;       //!< a possible replacement candidate for one of the hugged walls
 };
 
-
+//  *****************************************************************
 
 static void sg_ArchiveCoord( eCoord & coord, int level )
 {
@@ -1255,14 +1350,14 @@ static void sg_ArchiveReal( REAL & real, int level )
     tRecorderSync< REAL >::Archive( section, level, real );
 }
 
+//  *****************************************************************
 
 
 
+//  *****************************************************************
 
 
-
-
-
+// take pos,dir and time from a cycle
 gDestination::gDestination(const gCycleMovement &c)
         :chatting(false)
         ,turns(0)
@@ -1287,7 +1382,7 @@ gDestination::gDestination(const gCycle &c)
     CopyFrom( c );
 }
 
-
+// or from a message
 gDestination::gDestination(nMessage &m, unsigned short & cycle_id )
         :gameTime(0),distance(0),speed(0),
         hasBeenUsed(false),
@@ -1337,7 +1432,7 @@ void gDestination::CopyFrom(const gCycleMovement &other)
     if ( other.Owner() && other.Player() )
         chatting = other.Player()->IsChatting();
 
-    
+    // cheat. If rubber ran out, backdate the time.
     if ( other.RubberDepleteTime() > 0 )
     {
         gameTime = other.RubberDepleteTime();
@@ -1348,26 +1443,26 @@ void gDestination::CopyFrom(const gCycle &other)
 {
     CopyFrom( static_cast<const gCycleMovement&>(other) );
 
-    
+    // correct distance
     distance 	+= other.correctDistanceSmooth;
 }
 
-
-
-
-
-
-
-
-
-
-
+// *******************************************************************************************
+// *
+// *	CompareWith
+// *
+// *******************************************************************************************
+//!
+//!		@param	other	the destination to compare with
+//!		@return			-1 if this destination came earler, +1 if other was earler, 0 if no difference can be found
+//!
+// *******************************************************************************************
 
 int gDestination::CompareWith( const gDestination & other ) const
 {
-    
+    // compare distances, but use the network message ID ( they are always increasing, the distance may stagnate or in extreme cases run backwards ) as main sort criterion
 
-    
+    // compare message IDs with overflow ( if both are at good values )
     if ( messageID > 1 && other.messageID > 1 )
     {
         short messageIDDifference = messageID - other.messageID;
@@ -1377,13 +1472,13 @@ int gDestination::CompareWith( const gDestination & other ) const
             return 1;
     }
 
-    
+    // compare travelled distance
     if ( distance < other.distance )
         return -1;
     else if ( distance > other.distance )
         return 1;
 
-    
+    // no relevant difference found
     return 0;
 }
 
@@ -1393,7 +1488,7 @@ public:
     gFloatCompressor( REAL min, REAL max )
             : min_( min ), max_( max ){}
 
-    
+    // write compressed float to message
     void Write( nMessage& m, REAL value ) const
     {
         clamp( value, min_, max_ );
@@ -1409,7 +1504,7 @@ public:
         return  min_ + compressed * ( max_ - min_ )/maxShort_;
     }
 private:
-    REAL min_, max_;  
+    REAL min_, max_;  // minimal and maximal expected value
 
     static const unsigned short maxShort_;
 
@@ -1420,7 +1515,7 @@ const unsigned short gFloatCompressor::maxShort_ = 0xFFFF;
 
 static gFloatCompressor compressZeroOne( 0, 1 );
 
-
+// write all the data into a nMessage
 void gDestination::WriteCreate(nMessage &m, unsigned short cycle_id ){
     m << position;
     m << direction;
@@ -1433,7 +1528,7 @@ void gDestination::WriteCreate(nMessage &m, unsigned short cycle_id ){
         flags |= 0x02;
     m << flags;
 
-    
+    // store message ID for later reference
     messageID = m.MessageID();
 
     m.Write( cycle_id );
@@ -1463,14 +1558,14 @@ gDestination *gDestination::RightAfter(gDestination *list, REAL dist){
     return ret;
 }
 
-
+// insert yourself into a list ordered by gameTime
 void gDestination::InsertIntoList(gDestination **l){
     if (!l)
         return;
 
     RemoveFromList();
 
-    
+    // let message find its place
     while (l && *l && CompareWith( **l ) > 0 )
         l = &((*l)->next);
 
@@ -1485,10 +1580,24 @@ void gDestination::InsertIntoList(gDestination **l){
 
 
 void gDestination::RemoveFromList(){
-    
+    /*
+       if (!list)
+           return;
 
-    
-    
+       while (list && *list && *list != this)
+           list = &((*list)->next);
+
+       tASSERT(list);
+       tASSERT(*list);
+
+       (*list) = next;
+       next=NULL;
+       list=NULL;
+       
+      */
+
+    // z-man: HUH? I don't understand the code above any more and it seems to be leaky.
+    // This simple alternative sounds better:
 
     if(list)
         *list = next;
@@ -1499,31 +1608,31 @@ void gDestination::RemoveFromList(){
     list = 0;
 }
 
-
-
-
-
-
-
-
-
-
+// *******************************************************************************************
+// *
+// *	GetGameTime
+// *
+// *******************************************************************************************
+//!
+//!		@return		game time of the command
+//!
+// *******************************************************************************************
 
 REAL gDestination::GetGameTime( void ) const
 {
     return this->gameTime;
 }
 
-
-
-
-
-
-
-
-
-
-
+// *******************************************************************************************
+// *
+// *	GetGameTime
+// *
+// *******************************************************************************************
+//!
+//!		@param	gameTime	game time of the command to fill
+//!		@return		A reference to this to allow chaining
+//!
+// *******************************************************************************************
 
 gDestination const & gDestination::GetGameTime( REAL & gameTime ) const
 {
@@ -1531,16 +1640,16 @@ gDestination const & gDestination::GetGameTime( REAL & gameTime ) const
     return *this;
 }
 
-
-
-
-
-
-
-
-
-
-
+// *******************************************************************************************
+// *
+// *	SetGameTime
+// *
+// *******************************************************************************************
+//!
+//!		@param	gameTime	game time of the command to set
+//!		@return		A reference to this to allow chaining
+//!
+// *******************************************************************************************
 
 gDestination & gDestination::SetGameTime( REAL gameTime )
 {
@@ -1548,15 +1657,15 @@ gDestination & gDestination::SetGameTime( REAL gameTime )
     return *this;
 }
 
-
+// ********************************************************
 
 static void new_destination_handler(nMessage &m)
 {
-    
+    // read the destination
     unsigned short cycle_id;
     gDestination *dest=new gDestination(m, cycle_id );
 
-    
+    // and the ID of the cycle the destination is added to
     nNetObject *o=nNetObject::ObjectDangerous(cycle_id);
     if (o && &o->CreatorDescriptor() == &cycle_init){
         if ((sn_GetNetState() == nSERVER) && (m.SenderID() != o->Owner()))
@@ -1572,7 +1681,7 @@ static void new_destination_handler(nMessage &m)
                     if ( c->Player() && !dest->Chatting() )
                         c->Player()->Activity();
 
-                    
+                    // fill default gametime
                     if ( dest->GetGameTime() < -100 )
                         dest->SetGameTime( se_GameTime()+c->Lag()*3 );
 
@@ -1582,8 +1691,8 @@ static void new_destination_handler(nMessage &m)
             }
     }
 
-    
-    
+    // delete the destination if it has not been used
+    // TODO: exception safety!
     delete dest;
 }
 
@@ -1613,72 +1722,72 @@ void gCycle::OnNotifyNewDestination( gDestination* dest )
 #ifdef GNUPLOT_DEBUG
     if ( sg_gnuplotDebug && Player() )
     {
-        std::ofstream f( Player()->GetPlayerUserName() + "_sync", std::ios::app );
+        std::ofstream f( Player()->GetUserName() + "_sync", std::ios::app );
         f << dest->position.x << " " << dest->position.y << "\n";
     }
 #endif
 
     gCycleMovement::OnNotifyNewDestination( dest );
 
-    
+    //  if (sn_GetNetState()==nSERVER || ::sn_myNetID == owner)
     if (sn_GetNetState()==nCLIENT && ::sn_myNetID == Owner())
         BroadCastNewDestination(this,dest);
 
     if ( extrapolator_ )
     {
-        
+        // add destination and try to squeeze it into the schedule.
         extrapolator_->NotifyNewDestination( dest );
     }
 
-    
-    
+    // start a new simulation in any case. The server may simulate the movement a bit differently at the turn.
+    // resimulate_ = ( sn_GetNetState() == nCLIENT );
 
-    
+    // detect lag slides
     if( sn_GetNetState() == nSERVER )
     {
-        
+        // see how far we should be simulated in an ideal world
         REAL simTime=se_GameTime() - Lag();
 
-        REAL lag = simTime - dest->gameTime;  
-        REAL lagOffset = simTime - lastTime;  
+        REAL lag = simTime - dest->gameTime;  // the real lag
+        REAL lagOffset = simTime - lastTime;  // difference between real lag and practical lag (what we need to compensate)
         if ( sn_GetNetState() == nSERVER )
         {
             eLag::Report( Owner(), lag );
             if ( currentWall && currentWall->Wall() && rubberSpeedFactor >= 1-EPS )
             {
-                lag -= lagOffset; 
+                lag -= lagOffset; // switch to practical lag
 
-                
+                // no compensation? Just quit.
                 if ( lag < 0 )
                     return;
 
-                
+                // see how much we can go back
                 REAL minDist   = currentWall->Wall()->Pos(0);
                 REAL maxGoBack = ( distance - minDist ) * .8;
 
-                
+                // see how much we should go back
                 REAL stepBack = distance - dest->distance;
 
                 if ( rubberSpeedFactor < 1-EPS )
                 {
-                    
+                    // make the correction distance based so we don't loosen a grind
                     maxGoBack = stepBack;
                 }
 
-                
+                // clamp so we don't go back too far
                 if ( stepBack > maxGoBack )
                 {
                     stepBack = maxGoBack;
                     lag = rubberSpeedFactor*stepBack/verletSpeed_;
                 }
 
-                
-                
+                // ask lag compensation how much we are allowed to go back; switch to real lag
+                // for the credit
                 lag = eLag::TakeCredit( Owner(), lag + lagOffset ) - lagOffset;
 
-                
-                
-                
+                // don't go back further than last sync to the owner.
+                // old clients get doubly confused and produce an extra
+                // evil lag slide.
                 static nVersionFeature noConfusionFromMoveBack( 16 );
                 if( !noConfusionFromMoveBack.Supported( Owner() ) && 
                     lastTime - lag < lastSyncOwnerGameTime_ )
@@ -1686,25 +1795,25 @@ void gCycle::OnNotifyNewDestination( gDestination* dest )
                     lag = lastTime - lastSyncOwnerGameTime_;
                 }
 
-                
+                // no compensation? Just quit.
                 if ( lag < 0 )
                     return;
 
-                
+                // go back in time
                 if ( rubberSpeedFactor >= 1-EPS )
                 {
-                    
+                    // rubber is inactive, basic timestep is enough
                     TimestepCore( lastTime - lag );
                 }
                 else if ( 0 )
                 {
-                    
+                    // rubber is active. Take care!
 
-                    
+                    // just extrapolate the movement backwards
                     REAL step = lag * verletSpeed_;
                     lastTime -= lag;
 
-                    
+                    // rubber is a bit tricker, we need the effectiveness
                     REAL rubberGranted, rubberEffectiveness;
                     sg_RubberValues( player, verletSpeed_, rubberGranted, rubberEffectiveness );
                     if ( rubberEffectiveness > 0 )
@@ -1713,19 +1822,19 @@ void gCycle::OnNotifyNewDestination( gDestination* dest )
                     if ( rubber < 0 )
                         rubber = 0;
 
-                    
+                    // position and distance are easy
                     step *= rubberSpeedFactor;
                     distance -= step;
                     pos = pos - dirDrive * step;
 
-                    
+                    // undo acceleration
                     verletSpeed_ -= acceleration * lag;
                 }
 
-                
+                // see if we went back too far (should almost never happen)
                 if ( distance < minDist )
                 {
-                    
+                    // st_Breakpoint();
                     TimestepCore( lastTime + ( minDist - distance )/verletSpeed_ );
                 }
             }
@@ -1734,17 +1843,17 @@ void gCycle::OnNotifyNewDestination( gDestination* dest )
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
+// *******************************************************************************************
+// *
+// *	OnDropTempWall
+// *
+// *******************************************************************************************
+//!
+//!		@param	wall	   the wall the other cycle is grinding
+//!		@param	pos	       the position of the grind
+//!     @param  dir        the direction the raycast triggering the gridding comes from
+//!
+// *******************************************************************************************
 
 void gCycle::OnDropTempWall( gPlayerWall * wall, eCoord const & position, eCoord const & dir )
 {
@@ -1753,20 +1862,20 @@ void gCycle::OnDropTempWall( gPlayerWall * wall, eCoord const & position, eCoord
     unsigned short idrec = ID();
     tRecorderSync< unsigned short >::Archive( "_ON_DROP_WALL", 8, idrec );
 
-    
+    // determine if the grinded wall is current enough
     bool wallRight = ( currentWall && ( wall->NetWall() == currentWall || wall->NetWall() == lastWall ) );
 
-    
+    // don't drop if we already dropped a short time ago
     if ( wallRight && currentWall->Edge()->Vec().NormSquared() < verletSpeed_ * verletSpeed_ * sg_minDropInterval * sg_minDropInterval )
         wallRight = false;
 
     tRecorderSync< bool >::Archive( "_ON_DROP_WALL_RIGHT", 8, wallRight );
 
-    
-    
+    // drop the current wall if eiter this or the last wall is grinded
+    // gNetPlayerWall * nw = wall->NetWall();
     if ( wallRight )
     {
-        
+        // calculate relative position of grinding in wall; if alpha is positive, it's already too late
         REAL alpha = currentWall->Edge()->Edge(0)->Ratio( position );
         tRecorderSync< REAL >::Archive( "_ON_DROP_WALL_ALPHA", 8, alpha );
         if ( alpha > -.5 )
@@ -1774,31 +1883,31 @@ void gCycle::OnDropTempWall( gPlayerWall * wall, eCoord const & position, eCoord
             unsigned short idrec = ID();
             tRecorderSync< unsigned short >::Archive( "_ON_DROP_WALL_DROP", 8, idrec );
 
-            
+            // just request the drop, Timestep() will execute it later
             dropWallRequested_ = true;
 
-            
-            
+            // bend last driving direction to -dir. That way, should the grinder overtake this cycle,
+            // it will end up on the right side of his wall.
             lastDirDrive = -dir;
         }
     }
 }
 
+// ************************************************************
 
 
 
 
+// ************************************************************
 
 
-
-
-
+// the time the cycle walls stay up ( negative values: they stay up forever )
 void 	gCycle::SetWallsStayUpDelay	( REAL delay )
 {
     c_pwsud->Set( delay );
 }
 
-
+// how much rubber usage shortens the walls
 static REAL sg_cycleRubberWallShrink = 0;
 static nSettingItemWatched<REAL>
 sg_cycleRubberWallShrinkConf("CYCLE_RUBBER_WALL_SHRINK",
@@ -1806,7 +1915,7 @@ sg_cycleRubberWallShrinkConf("CYCLE_RUBBER_WALL_SHRINK",
                              nConfItemVersionWatcher::Group_Bumpy,
                              12);
 
-
+// make walls grow with distance traveled
 static REAL sg_cycleDistWallShrink = 0;
 static nSettingItemWatched<REAL>
 sg_cycleDistWallShrinkConf("CYCLE_DIST_WALL_SHRINK",
@@ -1821,7 +1930,7 @@ sg_cycleDistWallShrinkOffsetConf("CYCLE_DIST_WALL_SHRINK_OFFSET",
                                  nConfItemVersionWatcher::Group_Bumpy,
                                  12);
 
-
+// calculates the effect of driving distance to wall length
 static REAL sg_CycleWallLengthFromDist( REAL distance )
 {
     REAL len = gCycle::WallsLength();
@@ -1830,7 +1939,7 @@ static REAL sg_CycleWallLengthFromDist( REAL distance )
         return len;
     }
 
-    
+    // make base length longer or shorter, depending on the sign of sg_cycleDistWallShrink
     REAL d = sg_cycleDistWallShrinkOffset - distance;
     if ( d > 0 )
         len -= sg_cycleDistWallShrink * d;
@@ -1838,97 +1947,97 @@ static REAL sg_CycleWallLengthFromDist( REAL distance )
     return len;
 }
 
-
+// the current length of the walls of this cycle
 REAL gCycle::ThisWallsLength() const
 {
-    
+    // get distance influence
     REAL len = sg_CycleWallLengthFromDist( distance );
     if ( len <= 0 )
     {
         return len;
     }
 
-    
+    // apply rubber shortening
     return len - GetRubber() * sg_cycleRubberWallShrink;
 }
 
 
-
+// the speed the end of the trail currently receeds with
 REAL gCycle::WallEndSpeed() const
 {
     REAL rubberMax, rubberEffectiveness;
     sg_RubberValues( player, Speed(), rubberMax, rubberEffectiveness );
 
-    
+    // basic speed from cycle movement
     REAL speed = rubberSpeedFactor * Speed();
 
-    
+    // take distance shrinking into account
     REAL d = sg_cycleDistWallShrinkOffset - distance;
     if ( d > 0 )
         speed *= ( 1 - sg_cycleDistWallShrink );
 
-    
+    // speed from rubber usage and shringing
     if ( rubberEffectiveness > 0 )
         speed += Speed() * ( 1 - rubberSpeedFactor ) * sg_cycleRubberWallShrink / rubberEffectiveness;
 
     return speed;
 }
 
-
+// the maximum total length of the walls
 REAL gCycle::MaxWallsLength() const
 {
     REAL len = sg_CycleWallLengthFromDist( distance );
 
-    
-    
+    // exception: if the wall grows faster than it receeds, take the maximum, because the wall will
+    // grow backwards
     if ( sg_cycleDistWallShrink > 1 )
     {
         len = wallsLength;
     }
 
-    
+    // if the wall grows from rubber use, add the maximal growth
     if ( sg_cycleRubberWallShrink >= 0 || sg_rubberCycle < 0 )
         return len;
     else
         return len - sg_cycleRubberWallShrink * sg_rubberCycle;
 }
 
-
+// the maximum total length of the walls
 void 	gCycle::SetWallsLength			( REAL length)
 {
     c_pwl->Set( length );
 }
 
-
+// the radius of the holes blewn in by an explosion
 void 	gCycle::SetExplosionRadius		( REAL radius)
 {
     c_per->Set( radius );
 }
 
+//  *****************************************************************
 
-
-
+// copies relevant info from other cylce
 void gCycleExtrapolator::CopyFrom( const gCycleMovement& other )
 {
-    
+    // delegate
     gCycleMovement::CopyFrom( other );
 
-    
+    // set parent
     parent_ = &other;
 
-    
+    // copy distance
     trueDistance_ = GetDistance();
 }
 
-
+// copies relevant info from sync data and everything else from other cycle
 void gCycleExtrapolator::CopyFrom( const SyncData& sync, const gCycle& other )
 {
-    
+    // delegate
     gCycleMovement::CopyFrom( sync, other );
 
-    
+    //eFace* face1 = currentFace;
     MoveSafely( other.lastGoodPosition_, sync.time, sync.time );
-    
+    //eFace* face2 = currentFace;
     MoveSafely( sync.pos, sync.time, sync.time );
 
 #ifdef DEBUG_X
@@ -1940,19 +2049,19 @@ void gCycleExtrapolator::CopyFrom( const SyncData& sync, const gCycle& other )
     }
 #endif
 
-    
+    // set parent
     parent_ = &other;
 
-    
+    // set last turn
     lastTurnPos_ = sync.lastTurn;
 
-    
+    // copy distance
     trueDistance_ = GetDistance();
 
-    
-    
-    
-    
+    // make a small timestep backwards if we passed the next
+    // destination. While this makes us react a tad later to lag slides,
+    // it avoids lag slide false positives, which later cause real
+    // lag slides.
     if( eLag::Feature().Supported(0) )
     {
         gDestination *dest = GetCurrentDestination();
@@ -1961,8 +2070,8 @@ void gCycleExtrapolator::CopyFrom( const SyncData& sync, const gCycle& other )
             REAL distToDest = eCoord::F( dest->position - pos, dirDrive );
             if( distToDest < 0 )
             {
-                
-                
+                // instead of doing a full simulation, just trust the data from the
+                // destination.
                 pos = dest->position;
                 lastTime = dest->gameTime;
                 distance = dest->distance;
@@ -1977,7 +2086,7 @@ gCycleExtrapolator::gCycleExtrapolator(eGrid *grid, const eCoord &pos,const eCoo
         ,trueDistance_( 0 )
         ,parent_( 0 )
 {
-    
+    // an extrapolator should not be visible as a gameobject from the outside
     eFace * currentFaceBack = currentFace;
     RemoveFromList();
     currentFace = currentFaceBack;
@@ -1985,12 +2094,34 @@ gCycleExtrapolator::gCycleExtrapolator(eGrid *grid, const eCoord &pos,const eCoo
         currentFace = grid->FindSurroundingFace( pos, currentFace );
 }
 
-
+// gCycleExtrapolator::gCycleExtrapolator(nMessage &m);
 gCycleExtrapolator::~gCycleExtrapolator()
 {
 }
 
+/*
+// returns the current destination
+gDestination* gCycleExtrapolator::GetCurrentDestination() const
+{
+    return currentDestination;
 
+    // the code below does not appear to be such a good idea after all...
+    if ( currentDestination )
+    {
+        return currentDestination;
+    }
+    else
+    {
+        tASSERT( parent_ );
+
+        // return a destination with the current parent position
+        static gDestination parentPos( *parent_ );
+        parentPos.missable = false;
+        parentPos.CopyFrom( *parent_ );
+        return &parentPos;
+    }
+}
+*/
 
 bool gCycleExtrapolator::EdgeIsDangerous(const eWall *ww, REAL time, REAL alpha ) const
 {
@@ -1999,18 +2130,18 @@ bool gCycleExtrapolator::EdgeIsDangerous(const eWall *ww, REAL time, REAL alpha 
     {
         gNetPlayerWall* nw = w->NetWall();
 
-        
+        // get time the wall was built
         REAL builtTime = w->Time(alpha);
 
-        
+        // is the wall built in the future ( happens during extrapolation )
         if ( builtTime > time )
             return false;
 
-        
+        // ignore temporary walls in some cases, they may not be real
         if ( nw && nw->Preliminary() && w->Cycle() == parent_ && fabs( dirDrive * w->Vec() ) < EPS )
             return false;
 
-        
+        // ignore recent walls of parent cycle
         gCycle *otherPlayer=w->Cycle();
         if (otherPlayer==parent_ &&
                 ( time < builtTime + 2 * GetTurnDelay() || GetDistance() < w->Pos( alpha ) + .01 * sg_delayCycle*Speed()/SpeedMultiplier()  )
@@ -2018,7 +2149,7 @@ bool gCycleExtrapolator::EdgeIsDangerous(const eWall *ww, REAL time, REAL alpha 
             return false;
     }
 
-    
+    // delegate
     return bool(parent_) && parent_->EdgeIsDangerous( ww, time, alpha ) && gCycleMovement::EdgeIsDangerous( ww, time, alpha );
 }
 
@@ -2038,19 +2169,19 @@ void gCycleExtrapolator::PassEdge(const eWall *ww,REAL time,REAL a,int){
 
 bool gCycleExtrapolator::TimestepCore(REAL currentTime, bool calculateAcceleration)
 {
-    
+    // determine a suitable next destination
     gDestination destDefault( *parent_ ), *dest=GetCurrentDestination();
     if ( !dest )
     {
         dest = &destDefault;
     }
 
-    
-    
-    
+    // correct distance
+    // distance = dest->distance - DistanceToDestination( *dest );
+    // REAL distanceBefore = GetDistance();
     tASSERT(std::isfinite(distance));
 
-    
+    // delegate
     bool ret = false;
     try{
         ret = gCycleMovement::TimestepCore( currentTime, calculateAcceleration );
@@ -2060,22 +2191,28 @@ bool gCycleExtrapolator::TimestepCore(REAL currentTime, bool calculateAccelerati
         return false;
     }
 
-    
-    
+    // update true distance
+    // trueDistance_ += GetDistance() - distanceBefore;
     trueDistance_ = distance;
 
     return ret;
 }
 
-
+/*
+bool gCycleExtrapolator::DoTurn( int dir )
+{
+    // delegate
+    return gCycleMovement::DoTurn( dir );
+}
+*/
 
 nDescriptor &gCycleExtrapolator::CreatorDescriptor() const{
-    
+    // should never be called
     tASSERT( 0 );
     return cycle_init;
 }
 
-
+//  *****************************************************************
 
 const eTempEdge* gCycle::Edge(){
     if (currentWall)
@@ -2091,19 +2228,36 @@ const gPlayerWall* gCycle::CurrentWall(){
         return NULL;
 }
 
+/*
+const gPlayerWall* gCycle::LastWall(){
+    if (lastWall)
+        return lastWall->Wall();
+    else
+        return NULL;
+}
+*/
 
+/*
+static tString lala_bodyTexture("Anonymous/original/textures/cycle_body.png");
+static nSettingItem<tString> gg_tex("TEXTURE_CYCLE_BODY", lala_bodyTexture);
+//static tConfItemLine g_tex("CYCLE_BODY", sg_bodyTexture);
+//static tSettingItem<tString> gg_tex("TEXTURE_CYCLE_BODY", sg_bodyTexture);
+static tString lala_wheelTexture("Anonymous/original/textures/cycle_wheel.png");
+static nSettingItem<tString> gg_wheelTexture("TEXTURE_CYCLE_WHEEL", lala_wheelTexture);
 
+static tString lala_bikeTexture("Anonymous/original/moviepack/bike.png");
+static nSettingItem<tString> lalala_bikeTexture("TEXTURE_MP_BIKE", lala_bikeTexture);
+*/
 
-
-
+// HACK! Flexible model loader that eats anything a moviepack currently can throw at it.
 #ifndef DEDICATED
 struct gCycleVisuals
 {
-    rModel *customModel, *bodyModel, *frontModel, *rearModel; 
-    gTextureCycle *customTexture, *bodyTexture, *wheelTexture; 
-    gRealColor color; 
-    bool mpType;      
-    int  mpPreference; 
+    rModel *customModel, *bodyModel, *frontModel, *rearModel; // cycle models
+    gTextureCycle *customTexture, *bodyTexture, *wheelTexture; // cycle textures
+    gRealColor color; // cycle color
+    bool mpType;      // true if moviepack type model/texture can be used
+    int  mpPreference; // the user preference for the texture/model search path
 
     gCycleVisuals( gRealColor const & a_color )
     {
@@ -2125,7 +2279,7 @@ struct gCycleVisuals
 
     enum Slot{ SLOT_CUSTOM=0, SLOT_BODY=1, SLOT_WHEEL=2, SLOT_MAX=3 };
 
-    
+    // loads a specific texture from a specific folder
     static rSurface * LoadTextureSafe2( Slot slot, int mp )
     {
         static std::unique_ptr<rSurface> cache[SLOT_MAX][2];
@@ -2147,7 +2301,7 @@ struct gCycleVisuals
             return NULL;
     }
 
-    
+    // load one texture from the prefered folder (or the other one as fallback)
     gTextureCycle * LoadTextureSafe( Slot slot, bool wheel )
     {
         rSurface * surface = LoadTextureSafe2( slot, mpPreference );
@@ -2160,7 +2314,7 @@ struct gCycleVisuals
         return NULL;
     }
 
-    
+    // load textures from the specified folder (or the other one) and the format the model has just been read for
     bool LoadTextures()
     {
         if ( mpType )
@@ -2181,13 +2335,13 @@ struct gCycleVisuals
         }
     }
 
-    
+    // loads a model, checking before if the file exists
     static rModel * LoadModelSafe( char const * filename )
     {
         return rModel::GetModel(filename);
     }
 
-    
+    // load a model of specified type from a specified directory
     bool LoadModel( bool a_mpType, bool mpFolder )
     {
         mpType = a_mpType;
@@ -2214,26 +2368,26 @@ struct gCycleVisuals
         }
     }
 
-    
+    // tries to load everything from the given data folder
     bool LoadModel2( bool mp )
     {
-        
+        // first, try the right type, then the 'unnatural' choice
         return LoadModel( mp, mp ) || LoadModel( !mp, mp );
     }
 
-    
+    // top level load function: tries to load all variations, starting with passed moviepack folder flag
     bool LoadModel( bool mp )
     {
         mpPreference = mp ? 1 : 0;
 
-        
+        // delegate to try loading both formats from both directories
         return LoadModel2( mp ) || LoadModel2( !mp );
     }
 };
 #endif
 
 #ifndef DEDICATED
-
+// renders a cycle even after it died
 class gCycleWallRenderer: public eReferencableGameObject
 {
 public:
@@ -2244,7 +2398,7 @@ public:
         AddToList();
     }
 
-#if 0 
+#if 0 // not required
     virtual ~gCycleWallRenderer()
     {
     }
@@ -2277,7 +2431,7 @@ private:
 #endif
 
 void gCycle::MyInitAfterCreation(){
-
+// create wall renderer
 #ifndef DEDICATED
     new gCycleWallRenderer( this );
 #endif
@@ -2289,7 +2443,7 @@ void gCycle::MyInitAfterCreation(){
     lastTexB_ = -1.f;
     lastTexUpdateTime_ = 0.0;
 
-    
+    // [MOD] Rubber waypoint init
     modPeakRubberInSpot = 0.0f;
     modWasUsingRubber = false;
     modLastRubberAmount = 0.0f;
@@ -2297,13 +2451,13 @@ void gCycle::MyInitAfterCreation(){
     modRubberAtEventStart = 0.0f;
     modSpotPosition = pos;
 
-    
+    // [MOD] Initialize intent variables
     intentTurnLeft = false;
     intentTurnRight = false;
     intentAutoEscapeDir = 0;
     previousFrameRubber = 0.0f;
 
-    
+    // --- ANTI-360 SLIDING WINDOW Initialization ---
     rightTurnCount = 0;
     leftTurnCount = 0;
     for (int i = 0; i < 3; i++) {
@@ -2312,13 +2466,13 @@ void gCycle::MyInitAfterCreation(){
     }
 
 #ifdef DEBUG
-    
+    // con << "creating cycle.\n";
 #endif
     engine  = tNEW(eSoundPlayer)(cycle_run,true);
     turning = tNEW(eSoundPlayer)(turn_wav);
     spark   = tNEW(eSoundPlayer)(scrap);
 
-    
+    //correctDistSmooth=correctTimeSmooth=correctSpeedSmooth=0;
     correctDistanceSmooth = 0;
 
     resimulate_ = false;
@@ -2353,8 +2507,8 @@ void gCycle::MyInitAfterCreation(){
 
     if (sn_GetNetState()!=nCLIENT){
         if(!player)
-        { 
-            
+        { // distribute AI colors
+            // con << current_ai << ':' << take_ai << ':' << maxmindist <<  "\n\n\n";
             color_.r=1;
             color_.g=1;
             color_.b=1;
@@ -2373,7 +2527,7 @@ void gCycle::MyInitAfterCreation(){
         se_MakeColorValid( trailColor_.r, trailColor_.g, trailColor_.b, .5f );
     }
 
-    
+    // load model and texture
 #ifndef DEDICATED
     gCycleVisuals visuals( color_ );
     if ( !visuals.LoadModel( mp ) )
@@ -2385,10 +2539,10 @@ void gCycle::MyInitAfterCreation(){
 
     mp = visuals.mpType;
 
-    
+    // transfer models and textures
     if ( mp )
     {
-        
+        // use moviepack style body and texture
         customModel = visuals.customModel;
         visuals.customModel = 0;
         customTexture = visuals.customTexture;
@@ -2396,7 +2550,7 @@ void gCycle::MyInitAfterCreation(){
     }
     else
     {
-        
+        // use classic style body and texture
         body = visuals.bodyModel;
         visuals.bodyModel = 0;
         front = visuals.frontModel;
@@ -2412,12 +2566,39 @@ void gCycle::MyInitAfterCreation(){
 
         mp = false;
     }
-#endif 
+#endif // DEDICATED
 
-    
+    /*
+      the old, less flexible, loading code
+
+    if (mp)
+    {
+        customModel=new rModel("moviepack/cycle.ASE","moviepack/cycle.ase");
+    }
+    else{
+        body=new rModel("models/cycle_body.mod");
+        front=new rModel("models/cycle_front.mod");
+        rear=new rModel("models/cycle_rear.mod");
+    }
+
+    if (mp)
+    {
+        // static rSurface bike(lala_bikeTexture);
+        static rSurface bike("moviepack/bike.png");
+        customTexture=new gTextureCycle(bike,color_,0,0);
+    }
+    else{
+        static rSurface body("textures/cycle_body.png");
+        static rSurface wheel("textures/cycle_wheel.png");
+        //static rSurface body((const char*) lala_bodyTexture);
+        //static rSurface wheel((const char*) lala_wheelTexture);
+        wheelTex=new gTextureCycle(wheel,color_,0,0,true);
+        bodyTex=new gTextureCycle(body,color_,0,0);
+    }
+    */
 
 #ifdef DEBUG
-    
+    //con << "Created cycle.\n";
 #endif
     nextSyncOwner=nextSync=tSysTimeFloat()-1;
     lastSyncOwnerGameTime_ = 0;
@@ -2428,7 +2609,7 @@ void gCycle::MyInitAfterCreation(){
     grid->AddGameObjectInteresting(this);
 
     spawnTime_=lastTimeAnim=lastTime;
-    
+    // set spawn time to infinite past if this is the first spawn
     if ( !sg_cycleFirstSpawnProtection && spawnTime_ <= 1.0 )
     {
         spawnTime_ = -1E+20;
@@ -2440,7 +2621,7 @@ void gCycle::MyInitAfterCreation(){
     if ( turning )
         turning->End();
 
-    
+    // add to game grid
     this->AddToList();
 
     predictPosition_ = pos;
@@ -2448,11 +2629,11 @@ void gCycle::MyInitAfterCreation(){
 #ifdef GNUPLOT_DEBUG
     if ( sg_gnuplotDebug && Player() )
     {
-        std::ofstream f( Player()->GetPlayerUserName() + "_step" );
+        std::ofstream f( Player()->GetUserName() + "_step" );
         f << pos.x << " " << pos.y << "\n";
-        std::ofstream g( Player()->GetPlayerUserName() + "_sync" );
+        std::ofstream g( Player()->GetUserName() + "_sync" );
         g << pos.x << " " << pos.y << "\n";
-        std::ofstream h( Player()->GetPlayerUserName() + "_turn" );
+        std::ofstream h( Player()->GetUserName() + "_turn" );
         h << pos.x << " " << pos.y << "\n";
     }
 #endif
@@ -2490,7 +2671,7 @@ gCycle::gCycle(eGrid *grid, const eCoord &pos,const eCoord &d,ePlayerNetID *p)
 
     MyInitAfterCreation();
 
-    
+    // [MOD] Initialize Intents!
     intentTurnLeft = false;
     intentTurnRight = false;
     intentAutoEscapeDir = 0;
@@ -2498,7 +2679,7 @@ gCycle::gCycle(eGrid *grid, const eCoord &pos,const eCoord &d,ePlayerNetID *p)
     debug_lastTurnDir = 0;
     previousFrameRubber = 0.0f;
 
-    
+    // --- ANTI-360 SLIDING WINDOW Initialization ---
     rightTurnCount = 0;
     leftTurnCount = 0;
     for (int i = 0; i < 3; i++) {
@@ -2514,9 +2695,9 @@ gCycle::gCycle(eGrid *grid, const eCoord &pos,const eCoord &d,ePlayerNetID *p)
 
 gCycle::~gCycle(){
 #ifdef DEBUG
-    
+    //  con << "deleting cylce...\n";
 #endif
-    
+    // clear the destination list
 
     tDESTROY(engine);
     tDESTROY(turning);
@@ -2532,14 +2713,17 @@ gCycle::~gCycle(){
         delete bodyTex;
     }
 #ifdef DEBUG
-    
+    //con << "Deleted cycle.\n";
 #endif
-    
+    /*
+      delete currentPos;
+      delete last_turn;
+    */
 }
 
 void gCycle::OnRemoveFromGame()
 {
-    
+    // keep this cycle alive during this function
     tJUST_CONTROLLED_PTR< gCycle > keep;
 
     if ( this->GetRefcount() > 0 )
@@ -2552,7 +2736,7 @@ void gCycle::OnRemoveFromGame()
             RequestSync();
     }
 
-    
+    // make sure we're dead, so our walls know they need to time out.
     if ( Alive() )
     {
         Die( lastTime );
@@ -2566,10 +2750,10 @@ void gCycle::OnRemoveFromGame()
     gCycleMovement::OnRemoveFromGame();
 }
 
-
+// called when the round ends
 void gCycle::OnRoundEnd()
 {
-    
+    // give survival bonus
     if ( Alive() && player )
     {
         Player()->AddScore( score_survive, tOutput("$player_win_survive"), tOutput() );
@@ -2585,75 +2769,75 @@ static inline void rotate(eCoord &r,REAL angle){
 }
 
 #ifdef MACOSX
-
+// Sparks have a large performance problem on Macs. See https://forums3.armagetronad.net/viewtopic.php?t=2167
 bool crash_sparks=false;
 #else
 bool crash_sparks=true;
 #endif
 
+//static bool forceTime=false;
 
-
-
+// from nNetwork.C
 extern REAL planned_rate_control[MAXCLIENTS+2];
 
-
+//! intermediate data for position prediction
 struct gPredictPositionData
 {
-    REAL maxSpaceReport; 
+    REAL maxSpaceReport; //!< maximum space to report in front
 #ifdef DEDICATED
-    REAL rubberStart;    
+    REAL rubberStart;    //!< distance from a wall rubber starts to get activated
 #endif
 };
 
-
-
-
-
-
-
-
-
-
+// *******************************************************************************************
+// *
+// *	PreparePredictPosition()
+// *
+// *******************************************************************************************
+//!
+//!     @param  data data to be passed to CalculatePredictPosition() later
+//!
+// *******************************************************************************************
 void gCycle::PreparePredictPosition( gPredictPositionData & data )
 {
-    
+    // don't cast a ray by default
     data.maxSpaceReport = 0;
 #ifdef DEDICATED
     if ( sg_predictWalls )
     {
-        
+        // predict to the maximum time anyone else may be simulated up to
         REAL maxTime = lastTime + MaxSimulateAhead() + GetMaxLazyLag();
         REAL predictDT = maxTime - lastTime;
         REAL lookAhead = predictDT * verletSpeed_;
 
-        
+        // see how far we can go before rubber kicks in
         data.rubberStart = verletSpeed_ / RubberSpeed();
 
-        
+        // store max lookahead plus rubber safety
         data.maxSpaceReport = lookAhead + data.rubberStart;
     }
 #else
     data.maxSpaceReport = verletSpeed_ * se_PredictTime() * rubberSpeedFactor;
 #endif
 
-    
+    // request a raycast of the right length
     maxSpaceMaxCast_ = data.maxSpaceReport;
 }
 
-
-
-
-
-
-
-
-
-
-
+// *******************************************************************************************
+// *
+// *	CalculatePredictPosition()
+// *
+// *******************************************************************************************
+//!
+//!     @param  data data from PreparePredictPosition()
+//!		@return the time up to which the cycle's position was predicted
+//!
+// *******************************************************************************************
 
 REAL gCycle::CalculatePredictPosition( gPredictPositionData & data )
 {
-    
+    // predict position
     REAL predictTime = lastTime;
     {
 #ifdef DEDICATED
@@ -2666,13 +2850,13 @@ REAL gCycle::CalculatePredictPosition( gPredictPositionData & data )
 
             if ( spaceAhead > 0 )
             {
-                
+                // store consistent prediction position and  time
                 predictPosition_ = pos + dirDrive * spaceAhead;
                 predictTime = lastTime + spaceAhead/verletSpeed_;
             }
         }
 #else
-        
+        // predict half a frame time
         predictTime += se_PredictTime();
         predictPosition_ = pos+correctPosSmooth + dirDrive * GetMaxSpaceAhead( data.maxSpaceReport );
 #endif
@@ -2687,23 +2871,23 @@ bool gCycle::Timestep(REAL currentTime){
         Player()->TrailColor(trailColor_.r, trailColor_.g, trailColor_.b);
     }
 
-    
+    // clear out dangerous info when we're done
     gMaxSpaceAheadHitInfoClearer hitInfoClearer( maxSpaceHit_ );
 
-    
+    // archive rubber speed for later comparison
     REAL rubberSpeedFactorBack = rubberSpeedFactor;
 
-    
-    
+    // if ( Owner() == sn_myNetID )
+    //    con << pos << ',' << distance << ',' << eCoord::F( dirDrive, pos ) - distance << '\n';
 
-    
+    // request the right space ahead for wall extrapolation
     gPredictPositionData predictPositionData;
     PreparePredictPosition( predictPositionData );
 
-    
+    // drop current wall if it was requested
     if ( dropWallRequested_ )
     {
-        
+        // but don't do so too often globally (performance)
         static double nextDrop = 0;
         double time = tSysTimeFloat();
         if ( time >= nextDrop )
@@ -2724,53 +2908,53 @@ bool gCycle::Timestep(REAL currentTime){
 #ifdef GNUPLOT_DEBUG
     if ( sg_gnuplotDebug && Player() )
     {
-        std::ofstream f( Player()->GetPlayerUserName() + "_step", std::ios::app );
+        std::ofstream f( Player()->GetUserName() + "_step", std::ios::app );
         f << pos.x << " " << pos.y << "\n";
     }
 #endif
-    
-    
-    
+    // timewarp test debug code
+    //if ( Player() && Player()->IsHuman() )
+    //    currentTime -= .1;
 
-    
+    // don't timestep when you're dead
     if ( !Alive() )
     {
-        
+        // die completely
         Die( lastTime );
 
-        
-        
+        // and let yourself be removed from the lists so we don't have to go
+        // through this again.
         return true;
     }
 
-    
+    // [MOD] Store DT before physics updates lastTime for AutoEscape math
     REAL autoEscapeDt = currentTime - lastTime;
 
-    
+    // Debug archive position and speed
     sg_ArchiveCoord( pos, 7 );
     sg_ArchiveReal( verletSpeed_, 7 );
 
     if ( !destinationList && sn_GetNetState() == nCLIENT )
     {
-        
+        // insert emergency first destination without broadcasting it
         gDestination* dest = tNEW(gDestination)(*this);
         dest->messageID = 0;
         dest->distance = -.001;
         dest->InsertIntoList(&destinationList);
     }
 
-    
+    // start new extrapolation
     if ( !extrapolator_ && resimulate_ )
         ResetExtrapolator();
 
-    
+    // extrapolate state from server and copy state when finished
     if ( extrapolator_ )
     {
         REAL dt = ( currentTime - lastTime ) * sg_syncFF / sg_syncFFSteps;
 #ifdef DEBUG
-        
-        
-        
+        // dt *= 10.101;
+        //if ( !resimulate_ )
+        //	dt *= .1;
 #endif
         for ( int i = sg_syncFFSteps - 1; i>= 0; --i )
         {
@@ -2784,25 +2968,25 @@ bool gCycle::Timestep(REAL currentTime){
 
     bool ret = false;
 
-    
+    // nothing special if simulating backwards
     if (currentTime < lastTime)
     {
         ret = gCycleMovement::Timestep(currentTime);
     }
-    
+    // no targets are given
     else if ( !currentDestination && pendingTurns.empty() )
     {
-        
-        
-        
-        if (false && (intentTurnLeft || intentTurnRight) && Alive()) {
+        // ================================================================
+        // [MOD] PERFECT TURN — Rubber Exploitation Seal
+        // ================================================================
+        if ((intentTurnLeft || intentTurnRight) && Alive()) {
             int tDir = intentTurnRight ? 1 : -1;
 
             gSensor fwdSensor(this, pos, dirDrive);
             fwdSensor.detect(200.0f);
             REAL distToWallFront = fwdSensor.hit;
 
-            
+            // Visual flag at wall target
             eCoord wallPoint = pos + dirDrive * distToWallFront;
             eDebugLine::SetTimeout(0.15f);
             eDebugLine::SetColor(0.0f, 1.0f, 1.0f);
@@ -2850,7 +3034,7 @@ bool gCycle::Timestep(REAL currentTime){
 
         previousFrameRubber = GetRubber();
 
-        
+        // [MOD] Post-Turn Gap Telemetry
         if (debug_GapTimerTicks > 0) {
             debug_GapTimerTicks--;
             if (debug_GapTimerTicks == 0 && Alive()) {
@@ -2880,7 +3064,7 @@ bool gCycle::Timestep(REAL currentTime){
             }
         }
 
-        
+        // chatting? activate chatbot
         if ( bool(player) &&
                 player->IsHuman() &&
                 ( sg_chatBotAlwaysActive || player->IsChatting() ) &&
@@ -2916,7 +3100,7 @@ bool gCycle::Timestep(REAL currentTime){
     }
     else
     {
-        
+        // just basic movement to do: let base class handle that.
         try
         {
             gCycleMovement::Timestep(currentTime);
@@ -2928,7 +3112,7 @@ bool gCycle::Timestep(REAL currentTime){
         }
     }
 
-    
+    // do the rest of the timestep
     try
     {
         if ( currentTime > lastTime )
@@ -2944,15 +3128,15 @@ bool gCycle::Timestep(REAL currentTime){
 
     if ( Alive() && currentWall )
     {
-        
-        
-        
+        // z-man: the next two lines are a very bad idea. This lets walls stick out on the other side while you're using up your rubber.
+        //if ( sn_GetNetState() != nSERVER )
+        //    wallEndPos = pos + dirDrive * ( verletSpeed_ * se_PredictTime() );
 
-        
+        // but using the predicted position which halts at walls may work
         currentWall->Update(predictTime, PredictPosition() );
     }
 
-    
+    // checkpoint wall when rubber starts to get used
     if ( currentWall )
     {
         if ( rubberSpeedFactor >= .99 && rubberSpeedFactorBack < .99 )
@@ -2975,14 +3159,14 @@ bool gCycle::Timestep(REAL currentTime){
 
     if ( sn_GetNetState()==nSERVER )
     {
-        
+        // do an emergency sync when rubber starts to get used, it may come unexpected to clients
         if ( rubberSpeedFactor < .99 && rubberSpeedFactorBack >= .99 )
         {
             RequestSyncOwner();
         }
     }
 
-    
+    // check whether simulation has fallen too far behind the requested time
 #ifdef DEDICATED
     if ( Alive() && currentTime > lastTime + Lag() + 1 )
     {
@@ -2996,16 +3180,16 @@ bool gCycle::Timestep(REAL currentTime){
     }
 #endif
 
-    
+#if !PUBLIC_BUILD
     extern REAL sg_rubberCycle;
-    if (false && intentAutoEscapeDir != 0 && Alive()) {
+    if (intentAutoEscapeDir != 0 && Alive()) {
         REAL currentRubber = GetRubber();
-        
+        // autoEscapeDt is computed at top of Timestep(), before lastTime update
         
         if (autoEscapeDt > 0.0001f) {
             REAL rubberDelta = currentRubber - previousFrameRubber;
             
-            
+            // Only trigger if we are actively burning rubber
             if (rubberDelta > 0.001f) {
                 REAL rubberBurnRate = rubberDelta / autoEscapeDt;
                 REAL rubberLeft = sg_rubberCycle - currentRubber - sg_autoEscapeRubberMargin; 
@@ -3013,30 +3197,31 @@ bool gCycle::Timestep(REAL currentTime){
                 
                 REAL timeToDeath = rubberLeft / rubberBurnRate;
                 
-                
+                // Correct Ping Fetching
                 REAL pingSeconds = 0.0f;
                 if (sg_autoEscapePingComp && sn_GetNetState() == nCLIENT) {
                     pingSeconds = sn_Connections[0].ping.GetPing(); 
                 }
                 
-                
+                // RRT is strictly network delay (half-ping)
                 REAL requiredReactionTime = pingSeconds * 0.5f;
                 
                 if (timeToDeath <= requiredReactionTime) {
                     Turn(intentAutoEscapeDir);
-                    intentAutoEscapeDir = 0; 
+                    intentAutoEscapeDir = 0; // Disarm
                     con << "0xffff44[ AUTO-ESCAPE: PERFECT JUMP ]\n";
                 }
             }
         }
     }
+#endif
 
-    
+    // [MOD] Store previous frame rubber for NEXT frame's calculation
     previousFrameRubber = GetRubber();
     return ret;
 }
 
-
+// lets a value decay smoothly
 static void DecaySmooth( REAL& smooth, REAL relSpeed, REAL minSpeed, REAL clamp )
 {
 #ifdef DEBUG
@@ -3047,31 +3232,31 @@ static void DecaySmooth( REAL& smooth, REAL relSpeed, REAL minSpeed, REAL clamp 
     }
 #endif
 
-    
+    // increase correction speed if the value is out of bounds
     if ( clamp > 0 )
         relSpeed *= ( 1 + smooth * smooth / ( clamp * clamp ) );
 
-    
+    // nothing to do
     if ( smooth == 0 )
     {
         return;
     }
 
-    
+    // calculate speed from relative speed
     REAL speed = smooth * relSpeed;
 
-    
+    // apply minimal correction
     if ( fabs( speed ) < minSpeed )
         speed = std::copysign ( minSpeed , smooth );
 
-    
+    // don't overshoot
     if ( fabs( speed ) > fabs( smooth ) )
         smooth = 0;
     else
         smooth -= speed;
 }
 
-
+// clamps a cycle displacement to non-confusing values
 static REAL ClampDisplacement( gCycle* cycle, eCoord& displacement, const eCoord& lookout, const eCoord& pos )
 {
     gSensor sensor( cycle, pos, lookout );
@@ -3079,7 +3264,7 @@ static REAL ClampDisplacement( gCycle* cycle, eCoord& displacement, const eCoord
     if ( sensor.ehit && sensor.hit >= 0 && sensor.hit < 1 )
     {
 #ifdef DEBUG_X
-        
+        // repeat sensor
         gSensor sensor( cycle, pos, lookout );
         sensor.detect(1);
 #endif
@@ -3088,7 +3273,7 @@ static REAL ClampDisplacement( gCycle* cycle, eCoord& displacement, const eCoord
     return sensor.hit;
 }
 
-
+// from gCycleMovement.cpp
 REAL sg_GetSparksDistance();
 
 
@@ -3098,44 +3283,44 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
     if (!std::isfinite(skewDot))
         skewDot=0;
 
-    
+    // eCoord oldpos=pos;
 
     REAL ts=(currentTime-lastTime);
 
     clamp(ts, -10, 10);
-    
+    //clamp(correctTimeSmooth, -100, 100);
     clamp(correctDistanceSmooth, -100, 100);
-    
+    //clamp(correctSpeedSmooth, -100, 100);
 
-    
-    
-    
+    // scale factor for smoothing. It is always used as
+    // value += smooth * smooth_correction;
+    // smooth_correction -= smooth * smooth_correction;
 
     REAL smooth = 0;
 
     if ( ts > 0 )
     {
-        
+        // go a bit of the way
         smooth = 1 - 1/( 1 + ts / sg_cycleSyncSmoothTime );
     }
 
-    
-    
-    
-    
-    
-    
+    //if ( smooth > 0)
+    //{
+    //    REAL scd = correctDistanceSmooth * smooth;
+    //    distance += scd;
+    //    correctDistanceSmooth -= scd;
+    // }
 
-    
+    // handle distance correction
     TransferPositionCorrectionToDistanceCorrection();
 
-    
-    
-    
+    // apply smooth position correction
+    // smooth = .5f;
+    //correctPosSmooth = eCoord(0,0);
 
-    
+    // correctPosSmooth = correctPosSmooth * ( 1 - smooth );
 
-    
+    //if ( 0 )
 
     REAL animts=currentTime-lastTimeAnim;
     if (animts<0 || !std::isfinite(animts))
@@ -3143,25 +3328,25 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
     else
         lastTimeAnim=currentTime;
 
-    
+    // handle decaying of smooth position correction
     {
-        
+        // let components of smooth position correction decay
         REAL minSpeed = sg_cycleSyncSmoothMinSpeed * Speed() * animts;
         REAL clamp    = sg_cycleSyncSmoothThreshold * Speed();
 
         DecaySmooth( correctPosSmooth.x, smooth, minSpeed, clamp );
         DecaySmooth( correctPosSmooth.y, smooth, minSpeed, clamp );
 
-        
+        // do sanity checks
         if ( correctPosSmooth.NormSquared() > EPS )
         {
-            
+            // cast ray to make sure corrected position lies on the right side of walls
             ClampDisplacement( this, correctPosSmooth, correctPosSmooth * 2, pos );
 
-            
+            // same for negative direction, players should see it when they are close to a wall
             ClampDisplacement( this, correctPosSmooth, -correctPosSmooth, pos );
 
-            
+            // cast another some rays into the future
             eCoord lookahead = dirDrive * ( 2 * correctPosSmooth.Norm() );
             ClampDisplacement( this, correctPosSmooth, lookahead, pos );
         }
@@ -3178,21 +3363,21 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
     if ( extension < sparksDistance )
         extension = sparksDistance;
 
-    
+    //    REAL step=speed*ts; // +.5*acceleration*ts*ts;
 
-    
+    // animate cycle direction
     {
-        
+        // move it a bit closer to dirDrive
         dir=dir+dirDrive*animts*verletSpeed_*3;
 
-        
+        // if it's too far away from dirDrive, clamp it
         eCoord dirDistance = dir - dirDrive;
         REAL dist = dirDistance.NormSquared();
         const REAL maxDist = .8;
         if (dirDistance.NormSquared() > maxDist)
             dir = dirDrive + dirDistance* (1/sqrt(dist/maxDist));
 
-        
+        // normalize
         dir=dir*(1/sqrt(dir.NormSquared()));
     }
 
@@ -3200,28 +3385,28 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
         eCoord oldPos = pos;
 
         if ( Alive() ){
-            
+            // delegate core work to base class
             try
             {
-                
+                // start building wall
                 REAL startBuildWallAt = spawnTime_ + sg_cycleWallTime;
                 if ( !currentWall && currentTime > startBuildWallAt  )
                 {
-                    
+                    // simulate right to the spot where the wall should begin
                     if ( currentTime < startBuildWallAt )
                         if ( gCycleMovement::TimestepCore( startBuildWallAt, calculateAcceleration ) )
                             return true;
                     calculateAcceleration = true;
 
-                    
+                    // build the wall, modifying the spawn time to make sure it happens
                     REAL lastSpawn = spawnTime_;
                     spawnTime_ += -1E+20;
                     DropWall();
                     spawnTime_ = lastSpawn;
-                    lastTurnPos_ = pos; 
+                    lastTurnPos_ = pos; // hack last turn position to generate good wall
                 }
 
-                
+                // simulate rest of frame
                 if ( gCycleMovement::TimestepCore( currentTime, calculateAcceleration ) )
                     return true;
             }
@@ -3229,12 +3414,12 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
             {
                 KillAt( death.pos_ );
 
-                
+                // death exceptions are precise; we can safely take over the position from it
                 oldPos = death.pos_;
             }
         }
 
-        
+        // die where you started
         if ( !Alive() )
         {
             MoveSafely(oldPos,currentTime,currentTime);
@@ -3243,40 +3428,40 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
     }
 
     if (Alive() && sg_modWaypointsEnabled) {
-        
+        // [MOD] Rubber waypoint logic — controlled by mod settings
         REAL currentRubber = GetRubber();
         if (currentRubber > modLastRubberAmount + 0.001f) {
-            
+            // we are rubbing
             if (!modWasUsingRubber) {
                 modWasUsingRubber = true;
                 modPeakRubberInSpot = currentRubber;
                 modRubberAtEventStart = currentRubber;
                 modSpotPosition = this->pos;
             } else {
-                
+                // update peak
                 if (currentRubber > modPeakRubberInSpot) {
                     modPeakRubberInSpot = currentRubber;
                 }
             }
         } else if (modWasUsingRubber && currentRubber < modLastRubberAmount) {
-            
+            // stopped rubbing — check conditions before spawning waypoint
             bool shouldSpawn = (modPeakRubberInSpot >= sg_modWaypointsMinRubber);
 
-            
+            // Cooldown check
             if (shouldSpawn && (se_GameTime() - modLastWaypointTime < sg_modWaypointsCooldown)) {
                 shouldSpawn = false;
             }
 
-            
+            // Wall type filter: when enemy walls OFF, only rim/arena walls allowed
             if (shouldSpawn && !sg_modWaypointsEnemyWalls) {
-                
+                // Detect wall ahead using a short sensor
                 gSensor fwd(this, modSpotPosition, dirDrive);
                 fwd.detect(1.0f);
                 if (fwd.ehit) {
                     gPlayerWall *pw = dynamic_cast<gPlayerWall*>(fwd.ehit->GetWall());
                     if (pw) {
-                        
-                        
+                        // It's ANY player wall (own or enemy) — skip waypoint
+                        // Only rim/arena walls (non-gPlayerWall) are allowed
                         shouldSpawn = false;
                     }
                 }
@@ -3294,11 +3479,11 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
                 new gRubberWaypointObject(this->Grid(), modSpotPosition, modPeakRubberInSpot, wpColor);
                 modLastWaypointTime = se_GameTime();
 
-                
+                // [MOD] Console log: rubber event
                 REAL rubberEventVal = modPeakRubberInSpot - modRubberAtEventStart;
                 if (this->Player()) {
                     tColoredString playerName;
-                    playerName << this->Player()->GetPlayerUserName();
+                    playerName << this->Player()->GetUserName();
                     con << "Player " << playerName << ": Rubber event " << rubberEventVal << "\n";
                 }
             }
@@ -3308,13 +3493,13 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
         modLastRubberAmount = currentRubber;
     }
 
-    
+    // Debug archive position and speed
     sg_ArchiveCoord( pos, 7 );
     sg_ArchiveReal( verletSpeed_, 7 );
 
     if (Alive()){
 #ifndef DEDICATED
-        
+        // animate skew
         gSensor fl(this,pos,dirDrive.Turn(1,1));
         gSensor fr(this,pos,dirDrive.Turn(1,-1));
 
@@ -3329,7 +3514,7 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
 
         REAL lr=(fl.hit-fr.hit)/extension;
 
-        
+        // ODE for skew
         const REAL skewrelax=24;
         skewDot-=128*(skew+lr/2)*animts;
         skewDot/=1+skewrelax*animts;
@@ -3346,7 +3531,7 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
             skew = -fl.hit * fac;
         }
 
-        
+        // generate sparks
         eCoord sparkpos,sparkdir;
 
         if (fl.ehit && fl.hit<=sparksDistance){
@@ -3401,10 +3586,13 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
             }
         }
 #endif
-        
+        /*
+          if (fl.hit+fr.hit<extension*.4)
+          Kill();
+        */
     }
 
-    
+    // clamp skew
     if (skew>.5){
         skew=.5;
         skewDot=0;
@@ -3419,13 +3607,13 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
     {
         if (nextSync < tSysTimeFloat() )
         {
-            
+            // delay syncs for old clients when there is a wall ahead; they would tunnel locally
             REAL lookahead = Speed() * sg_syncIntervalEnemy*.5;
             if ( !sg_avoidBadOldClientSync || sg_NoLocalTunnelOnSync.Supported( Owner() ) || GetMaxSpaceAhead( lookahead ) >= lookahead )
             {
                 RequestSync(false);
 
-                
+                // checkpoint wall for better collision accuracy, only required on the server
                 if ( currentWall )
                     currentWall->Checkpoint();
             }
@@ -3437,7 +3625,7 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
                   Owner() != 0 &&
                   sn_Connections[Owner()].bandwidthControl_.Control( nBandwidthControl::Usage_Planning ) > 200 )
         {
-            
+            // sync only to the owner (provided there is enough bandwidth available)
             RequestSyncOwner();
         }
     }
@@ -3447,30 +3635,46 @@ bool gCycle::TimestepCore(REAL currentTime, bool calculateAcceleration ){
 
 
 void gCycle::InteractWith(eGameObject *target,REAL,int){
-    
+    /*
+      if (alive && target->type()==ArmageTron_CYCLE){
+         gCycle *c=(gCycle *)target;
+         if (c->alive){
+      const eEdge *current_eEdge=Edge();
+      const eEdge *other_eEdge=c->Edge();
+      if(current_eEdge && other_eEdge){
+      ePoint *meet=current_eEdge->IntersectWith(other_eEdge);
+      if (meet){ // somebody is going to die!
+      REAL ratio=current_eEdge->Ratio(*meet);
+      REAL time=CurrentWall()->Time(ratio);
+      PassEdge(other_eEdge,time,other_eEdge->Ratio(*meet),0);
+      }
+      }
+         }
+      }
+    */
 }
 
-
-
-
-
-
-
-
-
-
+// *******************************************************************************************
+// *
+// *	Die
+// *
+// *******************************************************************************************
+//!
+//!		@param	time	the time of death
+//!
+// *******************************************************************************************
 
 void gCycle::Die( REAL time )
 {
     if ( sn_GetNetState() == nSERVER )
     {
-        
+        // request one last sync
         RequestSync( true );
     }
 
     if( player && Alive() )
     {
-        
+        // death is hardly good timing.
         player->AnalyzeTiming( -1 );
     }
 
@@ -3493,12 +3697,12 @@ void gCycle::Die( REAL time )
     gCycleMovement::Die( time );
 
 
-    
+    // reset smoothing
     correctPosSmooth = eCoord();
     TransferPositionCorrectionToDistanceCorrection();
     predictPosition_ = pos;
 
-    
+    // delete all temporary walls of this cycle
     for ( int i = sg_netPlayerWalls.Len()-1; i >= 0; --i )
     {
         gNetPlayerWall * wall = sg_netPlayerWalls(i);
@@ -3514,26 +3718,26 @@ static eLadderLogWriter sg_deathSuicideWriter("DEATH_SUICIDE", true);
 static eLadderLogWriter sg_deathTeamkillWriter("DEATH_TEAMKILL", true);
 
 void gCycle::KillAt( const eCoord& deathPos){
-    
+    // don't kill invulnerable cycles
     if ( !Vulnerable() )
     {
         MoveSafely( deathPos, lastTime, lastTime );
         return;
     }
 
-    
+    // find the killer from the enemy influence storage
     ePlayerNetID const * constHunter = enemyInfluence.GetEnemy();
     ePlayerNetID * hunter = Player();
 
-    
+    // cast away const the safe way
     if ( constHunter && constHunter->Object() )
         hunter = constHunter->Object()->Player();
 
-    
+    // only take it if it is not too old
     if ( LastTime() - enemyInfluence.GetTime() > sg_suicideTimeout )
         hunter = NULL;
 
-    
+    // suicide?
     if ( !hunter )
         hunter = Player();
 
@@ -3546,14 +3750,14 @@ void gCycle::KillAt( const eCoord& deathPos){
             !dynamic_cast<gAIPlayer*>(hunter)     &&
             !dynamic_cast<gAIPlayer*>(Player())             &&
             hunter->IsAuth() && Player()->IsAuth())
-        nKrawall::ServerFrag(hunter->GetPlayerUserName(), Player()->GetPlayerUserName());
+        nKrawall::ServerFrag(hunter->GetUserName(), Player()->GetUserName());
 #endif
 
     if (hunter==Player())
     {
         if (hunter)
         {
-            sg_deathSuicideWriter << hunter->GetPlayerUserName();
+            sg_deathSuicideWriter << hunter->GetUserName();
             sg_deathSuicideWriter.write();
 
             if ( score_suicide )
@@ -3577,7 +3781,7 @@ void gCycle::KillAt( const eCoord& deathPos){
                 preyName << *Player();
                 preyName << tColoredString::ColorString(1,1,1);
                 if (Player()->CurrentTeam() != hunter->CurrentTeam()) {
-                    sg_deathFragWriter << Player()->GetPlayerUserName() << hunter->GetPlayerUserName();
+                    sg_deathFragWriter << Player()->GetUserName() << hunter->GetUserName();
                     sg_deathFragWriter.write();
 
                     win.SetTemplateParameter(3, preyName);
@@ -3592,7 +3796,7 @@ void gCycle::KillAt( const eCoord& deathPos){
                     }
                 }
                 else {
-                    sg_deathTeamkillWriter << Player()->GetPlayerUserName() << hunter->GetPlayerUserName();
+                    sg_deathTeamkillWriter << Player()->GetUserName() << hunter->GetUserName();
                     sg_deathTeamkillWriter.write();
 
                     tColoredString hunterName;
@@ -3606,12 +3810,12 @@ void gCycle::KillAt( const eCoord& deathPos){
                 hunter->AddScore(score_kill, win, lose);
             }
         }
-        
+        //	if (prey->player && (prey->player->CurrentTeam() != hunter->player->CurrentTeam()))
         if (Player())
             Player()->AddScore(score_die,tOutput(),"$player_lose_frag");
     }
 
-    
+    // set position to death position so the explosion is at the right place (I dimly remember this caused problems in an earlier attempt)
     this->pos = deathPos;
 
     Kill();
@@ -3637,30 +3841,30 @@ bool gCycle::EdgeIsDangerous(const eWall* ww, REAL time, REAL a) const{
 
         gNetPlayerWall *nw = w->NetWall();
 
-        
-        
-        
-        
-        
+        // check whether the wall is one of the walls no real collision is
+        // possible with. The lastNetWall is only checked for enemy cycles,
+        // because it can be an arbitrary wall for your own cycle. But for
+        // enemy cycles, it may be what lastWall should be, and the test
+        // prevents enemy cycles from getting stuck right after a turn.
         if( nw == currentWall || nw == lastWall || ( nw == lastNetWall && Owner() != sn_myNetID ) )
             return false;
 
-        
-        
-        
-        
-        
-        
+        // see if the wall is from another player and from the future.
+        // if it is, it's not dangerous, this cycle was here first.
+        // on passing the wall later, the other cycle will be pushed back
+        // to the collision point or killed if that is no longer possible.
+        // z-man notes: I've got the vaque feeling something like this was
+        // here before, but got thrown out again for making problems.
         if ( gJustChecking::justChecking && w->CycleMovement() != static_cast< const gCycleMovement * >( this ) && w->Time(a) > time )
         {
-            
-            
-            
-            
+            // One problem with this is that you kill teammates if they can't
+            // be pushed back, whereas we'd just use our rubber to survive.
+            // So we should first check whether the other player should be
+            // protected.
             gCycle const * otherPlayer = w->Cycle();
-            if ( !otherPlayer || 
-                    otherPlayer->Team() != this->Team() || 
-                    !otherPlayer->currentWall || w == otherPlayer->currentWall->Wall() 
+            if ( !otherPlayer || // valididy
+                    otherPlayer->Team() != this->Team() || // team protection
+                    !otherPlayer->currentWall || w == otherPlayer->currentWall->Wall() // pushback protection, if the other player can be pushed back, it's all right as well
                )
                 return false;
         }
@@ -3669,7 +3873,7 @@ bool gCycle::EdgeIsDangerous(const eWall* ww, REAL time, REAL a) const{
     return gCycleMovement::EdgeIsDangerous( ww, time, a );
 }
 
-
+// turn future walls of a cycle into gaping holes of nothingness if it indeed belongs to the cycle
 static void sg_KillFutureWall( gCycle * cycle, gNetPlayerWall * wall )
 {
     if ( cycle && wall && wall->Cycle() == cycle && wall->Pos(1) > cycle->GetDistance() )
@@ -3678,14 +3882,14 @@ static void sg_KillFutureWall( gCycle * cycle, gNetPlayerWall * wall )
     }
 }
 
-
+// turn future walls of a cycle into gaping holes of nothingness
 static void sg_KillFutureWalls( gCycle * cycle )
 {
 #ifdef DEBUG_X
     con << "Removing future walls of the cylce that just got killed mercilessly.\n";
 #endif
 
-    
+    // handle future walls that won't be drawn after all. Just make them a big hole.
     if ( sn_GetNetState() != nCLIENT )
     {
         int i;
@@ -3706,16 +3910,16 @@ static eLadderLogWriter sg_sacrificeWriter("SACRIFICE", true);
 
 void gCycle::PassEdge(const eWall *ww,REAL time,REAL a,int){
     {
-        
+        // deactivate time check
         gJustChecking thisIsSerious;
 
         if (!EdgeIsDangerous(ww,time,a) || !Alive() )
         {
-            
+            // request a sync for everyone if this is a non-bogus wall passage, maybe not all clients know the wall is passable
             if ( ( !currentWall || ww != currentWall->Wall() ) && ( !lastWall || ww != lastWall->Wall() ) )
                 RequestSyncAll();
             
-            
+            // check whether we drove through a hole in an enemy wall made by a teammate
             gPlayerWall const * w = dynamic_cast< gPlayerWall const * >( ww );
             if ( Alive() && w && score_hole )
             {
@@ -3726,23 +3930,23 @@ void gCycle::PassEdge(const eWall *ww,REAL time,REAL a,int){
                     if ( holer && holer != this && holer->Player() &&
                          Player() &&
                          w->Cycle() && w->Cycle()->Player() &&
-                         holer->Player()->CurrentTeam() == Player()->CurrentTeam() &&       
-                         w->Cycle()->Player()->CurrentTeam() != Player()->CurrentTeam()  
+                         holer->Player()->CurrentTeam() == Player()->CurrentTeam() &&       // holer must have been a teammate 
+                         w->Cycle()->Player()->CurrentTeam() != Player()->CurrentTeam()  // wall must have been an enemy
                         )
                     {
-                        
+                        // this test must come last, it resets the flag.
                         if ( explosion->AccountForHole() )
                         {
-                            sg_sacrificeWriter << Player()->GetPlayerUserName() << holer->Player()->GetPlayerUserName() << w->Cycle()->Player()->GetPlayerUserName();
+                            sg_sacrificeWriter << Player()->GetUserName() << holer->Player()->GetUserName() << w->Cycle()->Player()->GetUserName();
                             sg_sacrificeWriter.write();
                             if ( score_hole > 0 )
                             {
-                                
+                                // positive hole score goes to the holer
                                 sg_HoleScore( *holer );
                             }
                             else
                             {
-                                
+                                // negative hole score to the driver
                                 sg_HoleScore( *this );
 
                             }
@@ -3760,16 +3964,16 @@ void gCycle::PassEdge(const eWall *ww,REAL time,REAL a,int){
 #endif
     }
 
-    
+    // request a sync to bring everyone up to date about the cycle passing/getting stuck on this wall
     RequestSyncOwner();
 
 #ifdef DEBUG_X
-    
+    // keep other cycle around
     tJUST_CONTROLLED_PTR<gCycleExtrapolator> keepOther( extrapolator_ );
 
     ResetExtrapolator();
 
-    
+    // extrapolate state from server and copy state when finished
     REAL dt = 1;
     for ( int i = 9; i>= 0; --i )
     {
@@ -3792,25 +3996,25 @@ void gCycle::PassEdge(const eWall *ww,REAL time,REAL a,int){
         REAL otherTime = w->Time(a);
         if(otherPlayer && time < otherTime*(1-EPS) )
         {
-            
+            // also send updates about the other cylce
             otherPlayer->RequestSyncOwner();
 
-            
+            // get the distance of the wall
             REAL wallDist = w->Pos(a);
-            
+            // get the distance the cycle is simulated up to
             REAL cycleDist = w->Cycle()->distance;
-            
+            // comparing these two gives an accurate criterion whether the wall is extrapolated
             if ( wallDist > cycleDist * (1 + EPS ) )
             {
                 static bool fix = false;
-                
+                // it's an extrapolation wall, don't simulate further.
                 if ( fix && lastTime > se_GameTime() - 2 * Lag() - GetMaxLazyLag() )
                     throw gCycleStop();
                 else
                     return;
             }
 
-            
+            // we were first!
             if ( otherPlayer->Vulnerable() )
             {
                 static bool tryToSaveFutureWallOwner = true;
@@ -3818,9 +4022,9 @@ void gCycle::PassEdge(const eWall *ww,REAL time,REAL a,int){
 
                 if ( tryToSaveFutureWallOwner && otherPlayer->currentWall && w == otherPlayer->currentWall->Wall() )
                 {
-                    
-                    
-                    
+                    // teleport the other cycle back to the point before the collision; its next timestep
+                    // will simulate the collision again from the right viewpoint
+                    // determine the distance of the pushback
                     REAL d = otherPlayer->GetDistanceSinceLastTurn() * .001;
                     if ( d < .01 )
                         d = .01;
@@ -3831,34 +4035,34 @@ void gCycle::PassEdge(const eWall *ww,REAL time,REAL a,int){
                     {
                         saved = true;
 
-                        
+                        // do the move
                         otherPlayer->MoveSafely( collPos-otherPlayer->dirDrive*d, otherPlayer->LastTime(), otherTime - d/otherPlayer->Speed() );
                         otherPlayer->currentWall->Update( otherPlayer->lastTime, otherPlayer->pos );
                         otherPlayer->dropWallRequested_ = false;
 
-                        
+                        // drop our wall so collisions are more accurate
                         dropWallRequested_ = true;
                     }
                 }
 
-                
-                
-                
+                // another possibility: if the walls are very short compared to rubber, we could
+                // get away with just accounding for some rubber on the cycle that we'd need to kill
+                // otherwise.
                 if ( !saved && verletSpeed_ >= 0 && this->ThisWallsLength() > 0 )
                 {
                     REAL dt = otherTime - time;
 
-                    
-                    
+                    // this long would the other cycle have to sit in front of our wall
+                    // before he's released by the end
                     REAL wallTimeLeft = this->ThisWallsLength()/verletSpeed_ - dt;
 
                     if ( wallTimeLeft < 0 )
                     {
-                        
+                        // isn't hit at all
                         return;
                     }
 
-                    
+                    // check how much rubber would be used
                     REAL max, effectiveness;
                     sg_RubberValues( otherPlayer->Player(), otherPlayer->verletSpeed_, max, effectiveness );
                     if ( effectiveness > 0 )
@@ -3867,33 +4071,33 @@ void gCycle::PassEdge(const eWall *ww,REAL time,REAL a,int){
 
                         otherPlayer->rubber += rubberToEat;
                         if ( otherPlayer->rubber > max )
-                            otherPlayer->rubber = max; 
+                            otherPlayer->rubber = max; // too much rubber used
                         else
-                            saved = true;              
+                            saved = true;              // within bounds, he may survive
                     }
                 }
 
                 if ( !saved && sn_GetNetState() != nCLIENT )
                 {
-                    
+                    // err, trouble. Can't push the other guy back far enough. Better kill him.
                     if ( currentWall )
                         otherPlayer->enemyInfluence.AddWall( currentWall->Wall(), lastTime, 0, otherPlayer );
                     otherPlayer->distance = wallDist;
                     otherPlayer->DropWall();
                     otherPlayer->KillAt( collPos );
 
-                    
+                    // get rid of future walls
                     sg_KillFutureWalls( otherPlayer );
                 }
             }
         }
-        else 
+        else // sad but true
         {
-            
+            // this cycle has to die here unless it has rubber left or is invulnerable (checked on catching the exception, and besides, this code path isn't called for invulnerable cycles)
             throw gCycleDeath( collPos );
 
-            
-            
+            //			REAL dist = w->Pos( a );
+            //			const_cast<gPlayerWall*>(w)->BlowHole( dist - explosionRadius, dist + explosionRadius );
         }
     }
     else
@@ -3918,7 +4122,7 @@ REAL gCycle::PathfindingModifier( const eWall *w ) const
 
 
 bool gCycle::Act(uActionPlayer *Act, REAL x){
-    
+    // don't accept premature input
     if (se_mainGameTimer && ( se_mainGameTimer->speed <= 0 || se_mainGameTimer->Time() < -1 ) )
         return false;
 
@@ -3926,23 +4130,23 @@ bool gCycle::Act(uActionPlayer *Act, REAL x){
         RequestSync(false);
 
     if(se_turnLeft==*Act && x>.5){
-        
+        // [MOD] Anti-360 Lock: check BEFORE sending the turn
         extern bool sg_modAnti360LockEnabled;
         extern REAL sn_anti360Window;
         if (sg_modAnti360LockEnabled && Alive()) {
             REAL now = tSysTimeFloat();
-            
+            // Check: would this be the 4th consecutive LEFT turn within the window?
             if (leftTurnCount >= 3 && (now - leftTurnTimes[0]) <= sn_anti360Window) {
-                
+                // BLOCKED - eat the input silently
                 return true;
             }
-            
-            rightTurnCount = 0; 
+            // Track this left turn attempt
+            rightTurnCount = 0; // opposite direction resets
             if (leftTurnCount < 3) {
                 leftTurnTimes[leftTurnCount] = now;
                 leftTurnCount++;
             } else {
-                
+                // Slide the window: drop oldest, add newest
                 leftTurnTimes[0] = leftTurnTimes[1];
                 leftTurnTimes[1] = leftTurnTimes[2];
                 leftTurnTimes[2] = now;
@@ -3952,23 +4156,23 @@ bool gCycle::Act(uActionPlayer *Act, REAL x){
         return true;
     }
     else if(se_turnRight==*Act && x>.5){
-        
+        // [MOD] Anti-360 Lock: check BEFORE sending the turn
         extern bool sg_modAnti360LockEnabled;
         extern REAL sn_anti360Window;
         if (sg_modAnti360LockEnabled && Alive()) {
             REAL now = tSysTimeFloat();
-            
+            // Check: would this be the 4th consecutive RIGHT turn within the window?
             if (rightTurnCount >= 3 && (now - rightTurnTimes[0]) <= sn_anti360Window) {
-                
+                // BLOCKED - eat the input silently
                 return true;
             }
-            
-            leftTurnCount = 0; 
+            // Track this right turn attempt
+            leftTurnCount = 0; // opposite direction resets
             if (rightTurnCount < 3) {
                 rightTurnTimes[rightTurnCount] = now;
                 rightTurnCount++;
             } else {
-                
+                // Slide the window: drop oldest, add newest
                 rightTurnTimes[0] = rightTurnTimes[1];
                 rightTurnTimes[1] = rightTurnTimes[2];
                 rightTurnTimes[2] = now;
@@ -3978,7 +4182,7 @@ bool gCycle::Act(uActionPlayer *Act, REAL x){
         return true;
     }
     else if(s_brake==*Act){
-        
+        //SendControl(lastTime,&brake,x);
         unsigned short newBraking=(x>0);
         if ( braking != newBraking )
         {
@@ -3997,27 +4201,65 @@ bool gCycle::Act(uActionPlayer *Act, REAL x){
         }
         return true;
     }
-    
+#if !PUBLIC_BUILD
+    // [MOD] Handle Perfect Turn Intent (Hold Action)
     else if(Act->internalName == "CYCLE_PERFECT_LEFT") {
+        bool pressed = (x > 0.5f);
+        if (intentTurnLeft != pressed) {
+            intentTurnLeft = pressed;
+            if (pressed) {
+                intentTurnRight = false;
+                con << "0x44ff44[ PERFECT TURN: ARMED LEFT ]\n";
+            } else {
+                con << "0xff4444[ PERFECT TURN: OFF ]\n";
+            }
+        }
         return true;
     }
     else if(Act->internalName == "CYCLE_PERFECT_RIGHT") {
+        bool pressed = (x > 0.5f);
+        if (intentTurnRight != pressed) {
+            intentTurnRight = pressed;
+            if (pressed) {
+                intentTurnLeft = false;
+                con << "0x44ff44[ PERFECT TURN: ARMED RIGHT ]\n";
+            } else {
+                con << "0xff4444[ PERFECT TURN: OFF ]\n";
+            }
+        }
         return true;
     }
-    
+    // [MOD] Handle Auto Escape Intent (Hold Action)
     else if(Act->internalName == "CYCLE_AUTOESCAPE_LEFT") {
+        bool pressed = (x > 0.5f);
+        if (pressed && intentAutoEscapeDir != -1) {
+            intentAutoEscapeDir = -1;
+            con << "0x44ff44[ AUTO ESCAPE: ARMED LEFT ]\n";
+        } else if (!pressed && intentAutoEscapeDir == -1) {
+            intentAutoEscapeDir = 0;
+            con << "0xff4444[ AUTO ESCAPE: OFF ]\n";
+        }
         return true;
     }
     else if(Act->internalName == "CYCLE_AUTOESCAPE_RIGHT") {
+        bool pressed = (x > 0.5f);
+        if (pressed && intentAutoEscapeDir != 1) {
+            intentAutoEscapeDir = 1;
+            con << "0x44ff44[ AUTO ESCAPE: ARMED RIGHT ]\n";
+        } else if (!pressed && intentAutoEscapeDir == 1) {
+            intentAutoEscapeDir = 0;
+            con << "0xff4444[ AUTO ESCAPE: OFF ]\n";
+        }
         return true;
     }
+#endif
     return false;
 }
 
-
+// client side bugfix: network sync messages get actually used
 static nVersionFeature sg_SyncsAreUsed( 5 );
 
-
+// temporarily override driving directions on wall drops
 static eCoord const * sg_fakeDirDrive = NULL;
 class gFakeDirDriveSetter
 {
@@ -4036,7 +4278,7 @@ private:
     eCoord const * lastFakeDir_;
 };
 
-
+// Настройка окна времени для Anti-360 лока (в секундах)
 REAL sn_anti360Window = 1.0f;
 static tConfItem<REAL> sn_anti360WindowConf("ANTI_360_WINDOW", sn_anti360Window);
 
@@ -4053,7 +4295,7 @@ bool gCycle::DoTurn(int d)
 #ifdef GNUPLOT_DEBUG
     if ( sg_gnuplotDebug && Player() )
     {
-        std::ofstream f( Player()->GetPlayerUserName() + "_turn", std::ios::app );
+        std::ofstream f( Player()->GetUserName() + "_turn", std::ios::app );
         f << pos.x << " " << pos.y << "\n";
     }
 #endif
@@ -4061,7 +4303,7 @@ bool gCycle::DoTurn(int d)
     if (d >  1) d =  1;
     if (d < -1) d = -1;
 
-    
+    // [MOD] Anti-360 Lock was moved to Act() for proper input-level blocking
 
     if (Alive()){
         if ( turning )
@@ -4086,8 +4328,8 @@ bool gCycle::DoTurn(int d)
                 RequestSync();
             }
 
-            
-            
+            // hack: while dropping the wall, turn around dirDrive.
+            // this makes FindCurrentFace work better.
             {
                 FindCurrentFace();
                 REAL factor = -16;
@@ -4108,14 +4350,14 @@ bool gCycle::DoTurn(int d)
 
 void gCycle::DropWall( bool buildNew )
 {
-    
+    // keep this cycle alive
     tJUST_CONTROLLED_PTR< gCycle > keep( this->GetRefcount()>0 ? this : 0 );
 
-    
+    // drop last net wall if it is outdated
     if ( lastWall && lastNetWall && lastWall->Time(.5) > lastNetWall->Time(0) )
         lastNetWall = 0;
 
-    
+    // update and drop current wall
     if(currentWall)
     {
         lastWall=currentWall;
@@ -4127,8 +4369,8 @@ void gCycle::DropWall( bool buildNew )
     if ( buildNew && lastTime >= spawnTime_ + sg_cycleWallTime )
         currentWall=new gNetPlayerWall(this,pos,dirDrive,lastTime,distance);
 
-    
-    
+    // grid datastructures change on inserting a wall, better recheck
+    // all game objects. Temporarily override this cycle's driving direction.
     eCoord dirDriveBack = dirDrive;
     if ( sg_fakeDirDrive )
         dirDrive = *sg_fakeDirDrive;
@@ -4144,12 +4386,12 @@ void gCycle::DropWall( bool buildNew )
     }
     dirDrive = dirDriveBack;
 
-    
+    // reset flag
     dropWallRequested_ = false;
 }
 
 void gCycle::Kill(){
-    
+    // keep this cycle alive
     tJUST_CONTROLLED_PTR< gCycle > keep( this->GetRefcount()>0 ? this : 0 );
 
     if (sn_GetNetState()!=nCLIENT){
@@ -4157,36 +4399,55 @@ void gCycle::Kill(){
         if (Alive() && grid && GOID() >= 0 ){
             Die( lastTime );
             tNEW(gExplosion)(grid, pos,lastTime, color_, this );
-            
+            //	 eEdge::SeethroughHasChanged();
 
             if ( currentWall )
             {
-                
-                
-                
-                
+                // z-man: updating the wall so it reflects exactly the position of death looks like
+                // a good idea, but unfortunately, the collision position reported from above
+                // is inaccurate. It's better not to use it at all, or the cycle's wall will stick out
+                // a bit on the other side of the wall it crashed into.
 
-                
+                // but if prediction was active, do it anyway
                 if ( currentWall->Pos(1) > distance || currentWall->Time(1) > lastTime )
                     currentWall->Update( lastTime, pos );
 
-                
+                // copy the wall into the grid, but not directly; the grid datastructures are probably currently traversed. Kill() is called from eGameObject::Move().
                 currentWall->CopyIntoGrid( 0 );
 
                 currentWall = NULL;
             }
         }
     }
-    
-    
-    
-    
+    // z-man: another stupid idea. Why would we need a destination when we're dead?
+    //    else if (Owner() == ::sn_myNetID)
+    //        AddDestination();
+    /*
+      else if (owner!=::sn_myNetID)
+      speed=-.01;
+    */
 }
 
+/*
+void gCycle::Turbo(bool turbo){
+    if (turbo && speed<30){
+        speed=40;
+        Turn(0);
+    }
 
+    if (!turbo && speed>=30){
+        speed=20;
+        Turn(0);
+    }
+}
+*/
 
 static rFileTexture cycle_shad(rTextureGroups::TEX_FLOOR,"textures/shadow.png",0,0,true);
-
+/*
+static tString lala_cycle_shad("Anonymous/original/textures/shadow.png");
+static nSettingItem<tString> lalala_cycle_shad("TEXTURE_CYCLE_SHADOW", lala_cycle_shad);
+rFileTexture cycle_shad(rTextureGroups::TEX_FLOOR, lala_cycle_shad, 0,0,true);
+*/
 
 #define ENABLE_OLD_LAG_O_METER
 
@@ -4208,7 +4469,7 @@ static tSettingItem< int > sg_blinkFrequencyConf( "CYCLE_BLINK_FREQUENCY", sg_bl
 
 
 #ifndef DEDICATED
-
+// put meriton's classes into a namespace so they can't possibly conflict with other code, especially the Colour class. --wrtl
 namespace gLaggometer {
 class Colour {
 public:
@@ -4273,7 +4534,7 @@ public:
     void render(REAL lag);
 };
 
-
+//! returns whether the sprial intersects its counterpart
 bool LagOMeterRenderer::drawTriangle(eCoord loc, int winding, REAL lag, int inc) {
     eCoord outer = loc + directions.get(winding) * lag;
     if (outer.y * inc > 0.01f) {
@@ -4324,7 +4585,7 @@ public:
         eCoord outer = midle + directions.get(directions.ahead() + 2 * i) * .05f;
 
         BeginLineStrip();
-        
+        //Colour::black.toGl();
         color.toGl();
         glVertex2f(inner.x, inner.y);
 
@@ -4336,7 +4597,7 @@ public:
         RenderEnd();
     }
     void render() {
-        
+        //return; // disable, for now
         glShadeModel(GL_SMOOTH);
         line(-1);
         line(0);
@@ -4407,7 +4668,7 @@ void gCycleWallsDisplayListManager::RenderAllWithDisplayList( eCamera const * ca
     glDisable(GL_CULL_FACE);
     
     gNetPlayerWall * run = 0;
-    
+    // transfer walls with display list into their list
 
     int wallsWithPossibleDisplayList = 0;
     run = wallList_;
@@ -4420,7 +4681,7 @@ void gCycleWallsDisplayListManager::RenderAllWithDisplayList( eCamera const * ca
         }
         else
         {
-            
+            // wall has expired, remove it
             if ( cycle->ThisWallsLength() > 0 && cycle->GetDistance() - cycle->MaxWallsLength() > run->EndPos() )
                 
             {
@@ -4430,28 +4691,28 @@ void gCycleWallsDisplayListManager::RenderAllWithDisplayList( eCamera const * ca
         run = next;
     }
 
-    
+    // clear display list if needed
     bool tailExpired=false;
     if ( CannotHaveList( wallsWithDisplayListMinDistance_, cycle ) )
     {
         tailExpired=true;
         displayList_.Clear(0);
     }
-    
+    // check if enough new walls are present to warrant altering the display list
     else if ( wallsWithPossibleDisplayList >= 3 ||
          wallsWithPossibleDisplayList * 5 > wallsInDisplayList_ )
     {
-        
+        // yes? Ok, rebuild the list in this case, too
         displayList_.Clear(0);
     }
 
-    
+    // call display list
     if ( displayList_.Call() )
     {
         return;
     }
 
-    
+    // remove and render walls without display list
     run = wallsWithDisplayList_;
     while( run )
     {
@@ -4473,7 +4734,7 @@ void gCycleWallsDisplayListManager::RenderAllWithDisplayList( eCamera const * ca
             {
                 run->Insert( wallsWithDisplayList_ );
             
-                
+                // clear the wall's own display list, it will no longer be needed
                 run->ClearDisplayList(0, -1);
             }
         
@@ -4486,7 +4747,7 @@ void gCycleWallsDisplayListManager::RenderAllWithDisplayList( eCamera const * ca
         return;
     }
 
-    
+    // fill display list
     rDisplayListFiller filler( displayList_ );
 
     if ( rDisplayList::IsRecording() )
@@ -4494,7 +4755,7 @@ void gCycleWallsDisplayListManager::RenderAllWithDisplayList( eCamera const * ca
         wallsWithDisplayListMinDistance_ = 1E+30;
         wallsInDisplayList_ = 0;
 
-        
+        // bookkeeping of walls in the display list
         run = wallsWithDisplayList_;
         while( run )
         {
@@ -4508,7 +4769,7 @@ void gCycleWallsDisplayListManager::RenderAllWithDisplayList( eCamera const * ca
         }
     }
 
-    
+    // render walls with display list
     RenderAll( camera, cycle, wallsWithDisplayList_ );
 }
 
@@ -4519,7 +4780,7 @@ void gCycleWallsDisplayListManager::RenderAll( eCamera const * camera, gCycle * 
         return;
     }
 
-    
+    // first, render all lines
     sr_DepthOffset(true);
     if ( rTextureGroups::TextureMode[rTextureGroups::TEX_WALL] != 0 )
         glDisable(GL_TEXTURE_2D);
@@ -4558,11 +4819,11 @@ void gCycleWallsDisplayListManager::RenderAll( eCamera const * camera, gCycle * 
         else
             glDisable(GL_TEXTURE_2D);
 
-        
+        // Render all walls directly (so they get collected)
         RenderAll( camera, cycle, wallList_ );
         RenderAll( camera, cycle, wallsWithDisplayList_ );
         
-        
+        // Draw the collected instanced trails and clear!
         if (!g_collectedTrails.empty()) {
             float viewMatrix[16];
             float projectionMatrix[16];
@@ -4575,23 +4836,23 @@ void gCycleWallsDisplayListManager::RenderAll( eCamera const * camera, gCycle * 
         return;
     }
 
-    
+    // render everything you can with a display list
     RenderAllWithDisplayList( camera, cycle );
 
-    
+    // then, render the rest
     RenderAll( camera, cycle, wallList_ );
 }
 
 void gCycle::UpdateTexturesColor() {
 #ifndef DEDICATED
-    
+    // Only recreate if color has actually changed
     if (lastTexR_ == color_.r && lastTexG_ == color_.g && lastTexB_ == color_.b) {
         return;
     }
 
     double now = tSysTimeFloat();
     if (now - lastTexUpdateTime_ < 0.033) {
-        return; 
+        return; // Limit texture updates to 30 FPS
     }
     lastTexUpdateTime_ = now;
 
@@ -4637,9 +4898,17 @@ void gCycle::Render(const eCamera *cam){
 #ifndef DEDICATED
     UpdateTexturesColor();
 #endif
-    
+    /*
+    // for use when there's rendering problems on one specific occasion
+    static int counter = 0;
+    ++ counter;
+    if ( counter == -1 )
+    {
+        st_Breakpoint();
+    }
+    */
 
-    
+    // are we blinking from invulnerability?
     bool blinking = false;
     if ( lastTime > spawnTime_ && !Vulnerable() )
     {
@@ -4665,10 +4934,28 @@ void gCycle::Render(const eCamera *cam){
             || !std::isfinite(skew))
         st_Breakpoint();
     if (Alive()){
-        
+        //con << "Drawing cycle at " << pos << '\n';
 
 #ifdef DEBUG
-        
+        /*     {
+        	   gDestination *l = destinationList;
+        	   glDisable(GL_LIGHTING);
+        	   glColor3f(1,1,1);
+        	   while(l){
+        	   if (l == currentDestination)
+        	   glColor3f(0,1,0);
+
+        	   glBegin(GL_LINES);
+        	   glVertex3f(l->position.x, l->position.y, 0);
+        	   glVertex3f(l->position.x, l->position.y, 100);
+        	   glEnd();
+
+        	   if (l == currentDestination)
+        	   glColor3f(0,1,1);
+
+        	   l=l->next;
+        	   }
+        	   } */
 #endif
 
         GLfloat color[4]={1,1,1,1};
@@ -4705,7 +4992,7 @@ void gCycle::Render(const eCamera *cam){
         glMultMatrixf(&m[0][0]);
 
         glPushMatrix();
-        
+        //glTranslatef(-1.84,0,0);
         if (!mp)
             glTranslatef(-1.5,0,0);
 
@@ -4787,17 +5074,22 @@ void gCycle::Render(const eCamera *cam){
         }
 
 
-        
-        
+        //     TexMatrix();
+        //     IdentityMatrix();
         ModelMatrix();
 
-        
+        /*
+          glDisable(GL_TEXTURE_GEN_S);
+          glDisable(GL_TEXTURE_GEN_T);
+          glDisable(GL_TEXTURE_GEN_Q);
+          glDisable(GL_TEXTURE_GEN_R);
+        */
 
         glDisable(GL_LIGHT0);
         glDisable(GL_LIGHT1);
         glDisable(GL_LIGHTING);
 
-        
+        //glDisable(GL_TEXTURE);
         glDisable(GL_TEXTURE_2D);
         glColor3f(1,1,1);
 
@@ -4862,9 +5154,9 @@ void gCycle::Render(const eCamera *cam){
         }
 
 #ifdef USE_HEADLIGHT
-        
+        // Headlight contributed by Jonathan
         if(headlights) {
-            if(!cycleprograminited) { 
+            if(!cycleprograminited) { // set to false on every sr_InitDisplay, without it I lost my program when I switched to windowed
                 const char *program =
                     "!!ARBfp1.0\
                     \
@@ -4894,14 +5186,14 @@ void gCycle::Render(const eCamera *cam){
 #else			
             glProgramLocalParameter4fARB(GL_FRAGMENT_PROGRAM_ARB, 0, 0, 0, verletSpeed_ * verletSpeed_, 0);
 #endif
-            glPushAttrib(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
-            glEnable(GL_FRAGMENT_PROGRAM_ARB); 
+            glPushAttrib(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // blend func and depth mask. Efficient or not, glPushAttrib/glPopAttrib is a quick way to manage state.
+            glEnable(GL_FRAGMENT_PROGRAM_ARB); // doesn't check if it exists...
 
-            const unsigned sensors = 32; 
+            const unsigned sensors = 32; // actually one more
             const double mul = 0.25 * M_PI / sensors;
             const double add = -0.125 * M_PI;
 
-            double size = gArena::SizeMultiplier() * 500 * M_SQRT2; 
+            double size = gArena::SizeMultiplier() * 500 * M_SQRT2; // is M_SQRT2 in your math.h?
             GLfloat array[sensors+2][5];
 
             array[0][0] = 0;
@@ -4930,7 +5222,7 @@ void gCycle::Render(const eCamera *cam){
             glBlendFunc(GL_ONE, GL_ONE);
             glDepthMask(GL_FALSE);
 
-            glColor3fv(reinterpret_cast<GLfloat *>(&color_)); 
+            glColor3fv(reinterpret_cast<GLfloat *>(&color_)); // 8-)
             glEnableClientState(GL_VERTEX_ARRAY);
             glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 
@@ -4948,17 +5240,17 @@ void gCycle::Render(const eCamera *cam){
             glPopMatrix();
             glPopAttrib();
         }
-#endif 
-        
+#endif // USE_HEADLIGHT
+        // Name
         RenderName( cam );
 
 
-        
+        // shadow:
 
         sr_DepthOffset(true);
 
 
-        REAL h=0;
+        REAL h=0;//se_cameraZ*.005+.03;
 
         glEnable(GL_CULL_FACE);
 
@@ -4983,7 +5275,7 @@ void gCycle::Render(const eCamera *cam){
 
         glDisable(GL_CULL_FACE);
 
-        
+        // sr_laggometer;
 
 
         REAL f=verletSpeed_;
@@ -5029,22 +5321,22 @@ void gCycle::Render(const eCamera *cam){
         extern bool sg_noclipCinematic;
         if(sg_laggometerUseOld) {
             if (sn_GetNetState() != nSTANDALONE && sr_laggometer && f*l>.5 && !sg_noclipCinematic) {
-                
+                //&& owner!=::sn_myNetID){
                 glPushMatrix();
 
                 glColor3f(1,1,1);
-                
+                //glDisable(GL_TEXTURE);
                 glDisable(GL_TEXTURE_2D);
 
                 glTranslatef(0,0,h);
-                
+                //glScalef(.5*f,.5*f,.5*f);
 
-                
+                // compensate for the .5 scaling further up
                 f *= 2 * sg_laggometerScale;
 
                 glScalef(f,f,f);
 
-                
+                // move the sr_laggometer ahead a bit
                 if (!sr_predictObjects || sn_GetNetState()==nSERVER)
                     glTranslatef(l,0,0);
 
@@ -5076,23 +5368,23 @@ void gCycle::Render(const eCamera *cam){
         {
             glPushMatrix();
 
-            
+            //glDisable(GL_TEXTURE);
             glDisable(GL_TEXTURE_2D);
 
             glTranslatef(0,0,h);
-            
+            //glScalef(.5*f,.5*f,.5*f);
 
-            
+            // compensate for the .5 scaling further up
             f *= 2 * sg_laggometerScale;
 
             glScalef(f,f,f);
 
-            
+            // move the sr_laggometer back a bit
             if (sr_predictObjects || sn_GetNetState()==nSERVER) {
                 glTranslatef(-l,0,0);
             }
 
-            
+            // [MOD] Cinematic mode suppression
             extern bool sg_noclipCinematic;
             if (!sg_noclipCinematic)
             {
@@ -5111,14 +5403,14 @@ void gCycle::Render(const eCamera *cam){
 
         glPopMatrix();
 
-        
-        
-        
-        
+        // [MOD] Recursive Tree-Search Pathfinding Escape Vector
+        // Branches at every wall: forward / left 90° / right 90°
+        // Picks the route with the longest total survival distance (depth 4)
+        // Only renders for the local player's camera-followed cycle
         if (sg_modPathLineEnabled && cam && cam->Center() == this) {
 
-            
-            const int   PF_ARR_SIZE  = 8;   
+            // ---- Pathfinding data structures (stack-allocated) ----
+            const int   PF_ARR_SIZE  = 8;   // fixed max array size
             int pfDepth = (sg_modPathDepth >= 2 && sg_modPathDepth <= 6) ? sg_modPathDepth : 4;
             float pfRange = (float)((sg_modPathRange >= 50 && sg_modPathRange <= 200) ? sg_modPathRange : 120);
             const float PF_MARGIN    = 2.0f;
@@ -5131,28 +5423,28 @@ void gCycle::Render(const eCamera *cam){
                 float  totalDist;
             };
 
-            
+            // Best path found so far
             PfPath bestPath;
             bestPath.len = 0;
             bestPath.totalDist = 0;
 
-            
+            // ---- Recursive search (iterative stack to avoid real recursion) ----
             struct PfFrame {
                 eCoord pos;
                 eCoord dir;
-                float  accumulated;   
+                float  accumulated;   // distance accumulated before this frame
                 int    depth;
-                
+                // parent path so far
                 eCoord trail[PF_ARR_SIZE];
                 float  trailD[PF_ARR_SIZE];
                 int    trailLen;
             };
 
-            
+            // Stack: worst case 3^4 = 81 but pruning keeps it much smaller
             PfFrame stack[48];
             int stackTop = 0;
 
-            
+            // Seed the search
             eCoord startPos = PredictPosition();
             eCoord startDir = Direction();
             {
@@ -5174,7 +5466,7 @@ void gCycle::Render(const eCamera *cam){
 
                 float rem = pfRange - f.accumulated;
                 if (rem < 1.0f || f.trailLen >= PF_ARR_SIZE) {
-                    
+                    // Record path if it's the best
                     if (f.accumulated > bestPath.totalDist) {
                         bestPath.totalDist = f.accumulated;
                         bestPath.len = f.trailLen;
@@ -5186,12 +5478,12 @@ void gCycle::Render(const eCamera *cam){
                     continue;
                 }
 
-                
+                // Forward raycast
                 gSensor fwd(this, f.pos, f.dir);
                 fwd.detect(rem);
                 float fwdHit = fwd.hit;
 
-                
+                // If clear for a long distance or max depth, finalize this branch
                 if (fwdHit > rem * 0.9f || f.depth >= pfDepth) {
                     float adv = (fwdHit > PF_MARGIN) ? fwdHit - PF_MARGIN : fwdHit * 0.85f;
                     if (adv < 0.5f) adv = 0.5f;
@@ -5209,12 +5501,12 @@ void gCycle::Render(const eCamera *cam){
                     continue;
                 }
 
-                
+                // Wall is within range — advance to near it, then branch
                 float advToWall = (fwdHit > PF_MARGIN) ? fwdHit - PF_MARGIN : 0;
                 eCoord turnPos = f.pos + f.dir * advToWall;
                 float  turnAcc = f.accumulated + advToWall;
 
-                
+                // Prepare the trail up to the turn point
                 int newTrailLen = f.trailLen;
                 eCoord newTrail[PF_ARR_SIZE];
                 float  newTrailD[PF_ARR_SIZE];
@@ -5228,15 +5520,15 @@ void gCycle::Render(const eCamera *cam){
                     newTrailLen++;
                 }
 
-                
+                // Branch: try left 90°, right 90°, and a tight forward squeeze
                 eCoord dirs[3];
-                dirs[0] = eCoord(-f.dir.y,  f.dir.x); 
-                dirs[1] = eCoord( f.dir.y, -f.dir.x); 
-                dirs[2] = f.dir;                        
+                dirs[0] = eCoord(-f.dir.y,  f.dir.x); // left 90° CCW
+                dirs[1] = eCoord( f.dir.y, -f.dir.x); // right 90° CW
+                dirs[2] = f.dir;                        // forward (squeeze)
 
                 float branchRem = pfRange - turnAcc;
                 if (branchRem < 1.0f) {
-                    
+                    // Just record this path
                     if (turnAcc > bestPath.totalDist && newTrailLen > 0) {
                         bestPath.totalDist = turnAcc;
                         bestPath.len = newTrailLen;
@@ -5249,12 +5541,12 @@ void gCycle::Render(const eCamera *cam){
                 }
 
                 for (int b = 0; b < 3 && stackTop < 46; b++) {
-                    
+                    // Quick pre-check: is there any room in this direction?
                     gSensor probe(this, turnPos, dirs[b]);
                     probe.detect(branchRem);
-                    if (probe.hit < PF_MARGIN * 1.5f) continue; 
+                    if (probe.hit < PF_MARGIN * 1.5f) continue; // dead end, prune
 
-                    
+                    // For forward squeeze, only consider if there's meaningful room
                     if (b == 2 && probe.hit < PF_MARGIN * 4.0f) continue;
 
                     PfFrame &nf = stack[stackTop++];
@@ -5269,7 +5561,7 @@ void gCycle::Render(const eCamera *cam){
                     }
                 }
 
-                
+                // If no branches were pushed, record the current path
                 if (turnAcc > bestPath.totalDist && newTrailLen > 0) {
                     bestPath.totalDist = turnAcc;
                     bestPath.len = newTrailLen;
@@ -5280,7 +5572,7 @@ void gCycle::Render(const eCamera *cam){
                 }
             }
 
-            
+            // ---- Render the best path ----
             if (bestPath.len > 1) {
                 glPushAttrib(GL_ENABLE_BIT | GL_CURRENT_BIT | GL_LINE_BIT);
                 glDisable(GL_TEXTURE_2D);
@@ -5291,7 +5583,7 @@ void gCycle::Render(const eCamera *cam){
                 float pulse = 0.75f + 0.25f * sin(tSysTimeFloat() * 3.0f);
                 float td = bestPath.totalDist;
 
-                
+                // Glow pass (wide, dim)
                 glLineWidth(6.0f);
                 glBegin(GL_LINE_STRIP);
                 for (int i = 0; i < bestPath.len; i++) {
@@ -5301,7 +5593,7 @@ void gCycle::Render(const eCamera *cam){
                 }
                 glEnd();
 
-                
+                // Core path line
                 glLineWidth(2.5f);
                 glBegin(GL_LINE_STRIP);
                 for (int i = 0; i < bestPath.len; i++) {
@@ -5312,7 +5604,7 @@ void gCycle::Render(const eCamera *cam){
                 }
                 glEnd();
 
-                
+                // Diamond turn markers at intermediate nodes
                 for (int i = 1; i < bestPath.len - 1; i++) {
                     float dx = bestPath.nodes[i+1].x - bestPath.nodes[i].x;
                     float dy = bestPath.nodes[i+1].y - bestPath.nodes[i].y;
@@ -5337,7 +5629,7 @@ void gCycle::Render(const eCamera *cam){
         }
 
     } else {
-        
+        // Render Corpse Disappearance Timer
         extern bool sg_corpseTimerEnabled;
         extern bool sg_corpseTimerOverride;
         extern float sg_corpseTimerDuration;
@@ -5349,7 +5641,7 @@ void gCycle::Render(const eCamera *cam){
             REAL timeSinceDeath = se_GameTime() - deathTime;
             REAL rem = totalDelay - timeSinceDeath;
             if (rem > 0.0f && rem <= totalDelay) {
-                
+                // Projection
                 float modelviewMatrix[16], projectionMatrix[16];
                 float x, y, z, w;
                 float xp, yp, wp;
@@ -5386,12 +5678,12 @@ void gCycle::Render(const eCamera *cam){
                         glPushMatrix();
                         glLoadIdentity();
 
-                        
+                        // 1. Progress Bar
                         float ratio = rem / totalDelay;
                         if (ratio > 1.0f) ratio = 1.0f;
                         if (ratio < 0.0f) ratio = 0.0f;
 
-                        
+                        // Green to Red gradient as it decays
                         float r = 1.0f - ratio;
                         float g = ratio;
                         float b = 0.1f;
@@ -5403,7 +5695,7 @@ void gCycle::Render(const eCamera *cam){
 
                         glDisable(GL_TEXTURE_2D);
 
-                        
+                        // Empty background
                         glColor4f(0.1f, 0.1f, 0.1f, 0.5f);
                         BeginQuads();
                         Vertex(bar_x, bar_y);
@@ -5412,7 +5704,7 @@ void gCycle::Render(const eCamera *cam){
                         Vertex(bar_x, bar_y + bar_h);
                         RenderEnd();
 
-                        
+                        // Filled portion
                         if (ratio > 0.001f) {
                             float fill_w = bar_w * ratio;
                             glColor4f(r, g, b, 0.8f);
@@ -5424,7 +5716,7 @@ void gCycle::Render(const eCamera *cam){
                             RenderEnd();
                         }
 
-                        
+                        // Border
                         glColor4f(1.0f, 1.0f, 1.0f, 0.6f);
                         glLineWidth(1.0f);
                         BeginLineLoop();
@@ -5436,7 +5728,7 @@ void gCycle::Render(const eCamera *cam){
 
                         glEnable(GL_TEXTURE_2D);
 
-                        
+                        // 2. Text (e.g. "1.5s")
                         char buf[32];
                         snprintf(buf, sizeof(buf), "%.1fs", rem);
                         tString text(buf);
@@ -5456,9 +5748,9 @@ void gCycle::Render(const eCamera *cam){
     }
 }
 
-static REAL fadeOutNameAfter = 5.0f;	
-
-static bool showOwnName = 0;			
+static REAL fadeOutNameAfter = 5.0f;	/* 0: never show, < 0 always show */
+//static int fadeOutNameMode = 1;			// 0: never show, 1: show for fadeOutNameAfter, 2: always show
+static bool showOwnName = 0;			// show name on own cycle?
 
 bool sg_corpseTimerEnabled = true;
 static tSettingItem< bool > sg_corpseTimerConf( "CORPSE_TIMER_HUD", sg_corpseTimerEnabled );
@@ -5473,8 +5765,11 @@ int sg_corpseTrailStyle = 1;
 static tSettingItem< int > sg_corpseTrailStyleConf( "CORPSE_TRAIL_STYLE", sg_corpseTrailStyle );
 
 static tSettingItem< bool > sg_showOwnName( "SHOW_OWN_NAME", showOwnName );
-
+//static tSettingItem< int > sg_fadeOutNameMode( "FADEOUT_NAME_MODE", showOwnName )
 static tSettingItem< REAL > sg_fadeOutNameAfter( "FADEOUT_NAME_DELAY", fadeOutNameAfter );
+
+REAL sg_modNameSizeScale = 1.0;
+static tSettingItem< REAL > sg_modNameSizeScaleConf( "MOD_PLAYER_NAME_SCALE", sg_modNameSizeScale );
 
 
 void gCycle::RenderName( const eCamera* cam ) {
@@ -5486,29 +5781,29 @@ void gCycle::RenderName( const eCamera* cam ) {
     float xp, yp, wp;
     float alpha = 0.75;
 
-    if (fadeOutNameAfter == 0) return; 
-    if ( !cam->RenderingMain() ) return; 
-    if ( !showOwnName && cam->Player() == this->player ) return; 
+    if (fadeOutNameAfter == 0) return; /* XXX put that in ::Render() */
+    if ( !cam->RenderingMain() ) return; // no name in mirrored image
+    if ( !showOwnName && cam->Player() == this->player ) return; // don't show own name
 
-    
+    // [MOD] Suppress names and gauges in Cinematic Mode
     extern bool sg_noclipCinematic;
     extern bool sg_noclipHideNames;
     if (sg_noclipCinematic && sg_noclipHideNames) return;
 
     glPushMatrix();
-    
+    /* position sign above center of cycle */
     glTranslatef(0.8, 0, 2.0);
     glGetFloatv(GL_MODELVIEW_MATRIX, modelviewMatrix);
     glGetFloatv(GL_PROJECTION_MATRIX, projectionMatrix);
     glPopMatrix();
 
-    
+    /* get coordinates of sign */
     x = modelviewMatrix[12];
     y = modelviewMatrix[13];
     z = modelviewMatrix[14];
     w = modelviewMatrix[15];
 
-    
+    /* multiply by projection matrix */
     xp = projectionMatrix[0] * x + projectionMatrix[4] * y +
          projectionMatrix[8] * z + projectionMatrix[12] * w;
     yp = projectionMatrix[1] * x + projectionMatrix[5] * y +
@@ -5517,25 +5812,39 @@ void gCycle::RenderName( const eCamera* cam ) {
          projectionMatrix[11] * z + projectionMatrix[15] * w;
 
     if (wp <= 0) {
-        
+        /* behind camera */
         timeCameIntoView = 0;
         return;
     }
 
     xp /= wp;
     yp /= wp;
-    yp += rCHEIGHT_NORMAL;
+    yp += rCHEIGHT_NORMAL;// * 2.0;
 
     if (xp <= -1 || xp >= 1 || yp <= -1 || yp >= 1) {
-        
+        /* out of screen */
         timeCameIntoView = 0;
         return;
     }
 
-    
+    /* it is visible */
 
-    
-    
+    // Mod: always show the name/gauge, do not fade out.
+    /*
+    if (fadeOutNameAfter > 0) {
+        REAL now = tSysTimeFloat();
+        if (timeCameIntoView == 0)
+            timeCameIntoView = now;
+
+        if (now - timeCameIntoView > fadeOutNameAfter) {
+            return;
+        } else if (now - timeCameIntoView > fadeOutNameAfter - 1) {
+            // start to fade out
+            alpha = 0.75 - (now - timeCameIntoView -
+                            (fadeOutNameAfter - 1)) * 0.75;
+        }
+    }
+    */
 
     ModelMatrix();
     glPushMatrix();
@@ -5564,7 +5873,7 @@ void gCycle::RenderName( const eCamera* cam ) {
 
         glDisable(GL_TEXTURE_2D);
 
-        
+        // 1. Background (empty)
         glColor4f(0.1f, 0.1f, 0.1f, alpha * 0.6f);
         BeginQuads();
         Vertex(bar_x, bar_y);
@@ -5573,7 +5882,7 @@ void gCycle::RenderName( const eCamera* cam ) {
         Vertex(bar_x, bar_y + bar_h);
         RenderEnd();
 
-        
+        // 2. Filled portion
         if (usagePct > 0.001f) {
             float fill_w = bar_w * usagePct;
             glColor4f(r, g, b, alpha * 0.9f);
@@ -5585,7 +5894,7 @@ void gCycle::RenderName( const eCamera* cam ) {
             RenderEnd();
         }
 
-        
+        // 3. Border
         glColor4f(1.0f, 1.0f, 1.0f, alpha);
         glLineWidth(1.0f);
         BeginLineLoop();
@@ -5600,7 +5909,7 @@ void gCycle::RenderName( const eCamera* cam ) {
     
     tString nameToRender = this->player->GetColoredName();
     rTextField::SetBlendColor(tColor(1, 1, 1, alpha));
-    DisplayTextAutoWidth(xp, yp, nameToRender, rCHEIGHT_NORMAL, 0, 0);
+    DisplayTextAutoWidth(xp, yp, nameToRender, rCHEIGHT_NORMAL * sg_modNameSizeScale, 0, 0);
     rTextField::SetBlendColor(tColor(1, 1, 1, 1));
 
     ProjMatrix();
@@ -5612,14 +5921,40 @@ void gCycle::RenderName( const eCamera* cam ) {
 
 
 bool gCycle::RenderCockpitFixedBefore(bool){
-    
+    /*
+      if (alive)
+      return true;
+      else{
+      REAL rd=se_GameTime()-deathTime;
+      if (rd<1)
+         return true;
+      else{
+         REAL d=1.25-rd;
+         d*=8;
+         if (d<0) d=0;
+         glColor3f(d,d/2,d/4);
+         glDisable(GL_TEXTURE_2D);
+         glDisable(GL_TEXTURE);
+         glDisable(GL_DEPTH_TEST);
+         glRectf(-1,-1,1,1);
+         glColor4f(1,1,1,rd*(2-rd/2));
+         DisplayText(0,0,.05,.15,"You have been deleted.");
+         return false;
+      }
+      }
+    */
     return true;
 }
 
 void gCycle::SoundMix(Uint8 *dest,unsigned int len,
                       int viewer,REAL rvol,REAL lvol){
     if (Alive()){
-        
+        /*
+          if (!cycle_run.alt){
+          rvol*=4;
+          lvol*=4;
+          }
+        */
 
         if (engine)
             engine->Mix(dest,len,viewer,rvol,lvol,verletSpeed_/(sg_speedCycleSound * SpeedMultiplier()));
@@ -5641,20 +5976,20 @@ void gCycle::SoundMix(Uint8 *dest,unsigned int len,
 eCoord gCycle::PredictPosition() const {
     return predictPosition_;
 
-    
-    
+    //    eCoord p = pos + dir * (speed * se_PredictTime());
+    //    return p + correctPosSmooth;
 }
 
 eCoord gCycle::CamPos() const
 {
     return PredictPosition() + dir.Turn(0 ,-skew*z);
 
-    
-    
+    //    gSensor s(this,pos, PredictPosition() - pos );
+    //    s.detect(1);
 
-    
+    //    return s.before_hit + dir.Turn(0 ,-skew*z);
 
-    
+    // return pos + dir.Turn(0 ,-skew*z);
 }
 
 eCoord  gCycle::CamTop() const
@@ -5672,7 +6007,24 @@ void gCycle::PPDisplay(){
                 se_X_ToScreen(pos.x),
                 se_Y_ToScreen(pos.y),
                 PD_CreateColor(DoubleBuffer,R,G,B));
-    
+    /*
+      PD_PutPixel(DoubleBuffer,
+      se_X_ToScreen(pos.x+1),
+      se_Y_ToScreen(pos.y),
+      PD_CreateColor(DoubleBuffer,R,G,B));
+      PD_PutPixel(DoubleBuffer,
+      se_X_ToScreen(pos.x-1),
+      se_Y_ToScreen(pos.y),
+      PD_CreateColor(DoubleBuffer,R,G,B));
+      PD_PutPixel(DoubleBuffer,
+      se_X_ToScreen(pos.x),
+      se_Y_ToScreen(pos.y+1),
+      PD_CreateColor(DoubleBuffer,R,G,B));
+      PD_PutPixel(DoubleBuffer,
+      se_X_ToScreen(pos.x),
+      se_Y_ToScreen(pos.y-1),
+      PD_CreateColor(DoubleBuffer,R,G,B));
+    */
 }
 #endif
 
@@ -5680,7 +6032,7 @@ void gCycle::PPDisplay(){
 
 
 
-
+// cycle network routines:
 gCycle::gCycle(nMessage &m)
         :gCycleMovement(m),
         engine(NULL),
@@ -5698,9 +6050,9 @@ gCycle::gCycle(nMessage &m)
     dir = dirDrive;
 
     rubber=0;
-    
+    //correctTimeSmooth =0;
     correctDistanceSmooth =0;
-    
+    //correctSpeedSmooth =0;
 
     deathTime = 0;
     spawnTime_ = se_GameTime() + 100;
@@ -5714,13 +6066,13 @@ gCycle::gCycle(nMessage &m)
     se_MakeColorValid( color_.r, color_.g, color_.b, 1.0f );
     se_MakeColorValid( trailColor_.r, trailColor_.g, trailColor_.b, .5f );
 
-    
+    // set last time so that the first read_sync will not think this is old
     lastTimeAnim = lastTime = -EPS;
 
     nextSync = nextSyncOwner = -1;
     lastSyncOwnerGameTime_ = 0;
 
-    
+    // --- ANTI-360 SLIDING WINDOW Initialization ---
     rightTurnCount = 0;
     leftTurnCount = 0;
     for (int i = 0; i < 3; i++) {
@@ -5740,7 +6092,7 @@ void gCycle::WriteCreate(nMessage &m){
 static nVersionFeature sg_verletIntegration( 7 );
 
 void gCycle::WriteSync(nMessage &m){
-    
+    //	eNetGameObject::WriteSync(m);
 
     if( SyncedUser() == Owner() )
     {
@@ -5759,7 +6111,7 @@ void gCycle::WriteSync(nMessage &m){
     m << Position();
 
     REAL speed = verletSpeed_;
-    
+    // if the clients understand it, send them the real current speed
     if ( sg_verletIntegration.Supported() )
         speed = Speed();
 
@@ -5782,25 +6134,25 @@ void gCycle::WriteSync(nMessage &m){
     m.Write(turns);
     m.Write(braking);
 
-    
+    // write last turn position
     m << GetLastTurnPos();
 
-    
+    // write rubber
     compressZeroOne.Write( m, rubber/( sg_rubberCycle + .1 ) );
     compressZeroOne.Write( m, 1/( 1 + rubberMalus ) );
 
-    
+    // write last clientside sync message ID
     unsigned short lastMessageID = 0;
     if ( lastDestination )
         lastMessageID = lastDestination->messageID;
     m.Write(lastMessageID);
 
-    
+    // write brake
     compressZeroOne.Write( m, brakingReservoir );
 
-    
-    
-    
+    // set new sync times
+    // nextSync=tSysTimeFloat()+sg_syncIntervalEnemy;
+    // nextSyncOwner=tSysTimeFloat()+sg_GetSyncIntervalSelf( this );
 }
 
 bool gCycle::SyncIsNew(nMessage &m){
@@ -5834,20 +6186,20 @@ bool gCycle::SyncIsNew(nMessage &m){
 
 void gCycle::RequestSyncOwner()
 {
-    
+    // no more syncs when you're dead
     if ( !Alive() )
     {
         return;
     }
 
-    
+    // nothing to do on the client or if the cycle belongs to an AI
     if ( sn_GetNetState() != nSERVER || Owner() == 0 )
         return;
 
     REAL syncInterval = sg_GetSyncIntervalSelf( this );
     if ( nextSyncOwner < tSysTimeFloat() + syncInterval * 2.0 )
     {
-        
+        // postpone next sync so the notal number of syncs stays the same
         RequestSync( Owner(), false );
         nextSyncOwner += syncInterval;
     }
@@ -5855,26 +6207,26 @@ void gCycle::RequestSyncOwner()
 
 void gCycle::RequestSyncAll()
 {
-    
+    // no more syncs when you're dead
     if ( !Alive() )
     {
         return;
     }
 
-    
+    // nothing to do on the client or if the cycle belongs to an AI
     if ( sn_GetNetState() != nSERVER || Owner() == 0 )
         return;
 
     REAL syncInterval = sg_syncIntervalEnemy;
     if ( nextSync < tSysTimeFloat() + syncInterval * 2.0 )
     {
-        
+        // postpone next sync so the notal number of syncs stays the same
         RequestSync( false );
         nextSync += syncInterval;
     }
 }
 
-
+// resets the extrapolator to the last known state
 void gCycle::ResetExtrapolator()
 {
     resimulate_ = false;
@@ -5885,11 +6237,11 @@ void gCycle::ResetExtrapolator()
 
     extrapolator_->CopyFrom( lastSyncMessage_, *this );
 
-    
+    // simulate a bit, only to get current rubberSpeedFactor and acceleration
     extrapolator_->TimestepCore( extrapolator_->LastTime(), true );
 }
 
-
+// simulate the extrapolator at higher speed
 bool gCycle::Extrapolate( REAL dt )
 {
     tASSERT( extrapolator_ );
@@ -5899,21 +6251,21 @@ bool gCycle::Extrapolate( REAL dt )
     std::ignore = posBefore;
 #endif
 
-    
+    // calculate target time
     REAL newTime = extrapolator_->LastTime() + dt;
 
     bool ret = false;
 
-    
+    // clamp: don't simulate further than our current time
     if ( newTime >= lastTime )
     {
-        
+        // simulate extrapolator until now
         if( lastTime > extrapolator_->LastTime() )
         {
             eGameObject::TimestepThis( lastTime, extrapolator_ );
         }
 
-        
+        // test if there are real (the check for list does that) destinations left; we cannot call it finished if there are.
         gDestination* unhandledDestination = extrapolator_->GetCurrentDestination();
         ret = !unhandledDestination || !unhandledDestination->list;
         
@@ -5921,7 +6273,7 @@ bool gCycle::Extrapolate( REAL dt )
         {
             if ( unhandledDestination->gameTime < newTime - Lag() * 2 - sn_Connections[0].ping.GetPing()*2 - GetTurnDelay()*4 )
             {
-                
+                // emergency reset.
                 extrapolator_ = 0;
                 resimulate_ = true;
             }
@@ -5931,51 +6283,51 @@ bool gCycle::Extrapolate( REAL dt )
     }
     else
     {
-        
+        // simulate extrapolator as requested
         eGameObject::TimestepThis( newTime, extrapolator_ );
     }
 
-    
-    
-    
-    
-    
+    //eCoord posAfter = extrapolator_->Position();
+    //eDebugLine::SetTimeout( 1.0 );
+    //eDebugLine::SetColor( 1,0,0 );
+    //eDebugLine::Draw( posBefore, 8, posAfter, 4 );
+    //eDebugLine::Draw( posBefore, 4, posAfter, 4 );
 
     return ret;
 }
 
-
+// makes sure the given displacement does not cross walls
 void se_SanifyDisplacement( eGameObject* base, eCoord& displacement )
 {
     eCoord base_pos = base->Position();
-    
+    // eCoord reachable_pos = base->Position() + displacement;
 
     int timeout = 5;
     while( timeout > 0 )
     {
         --timeout;
 
-        
+        // cast ray fron sync_pos to reachable_pos
         gSensor test( base, base_pos, displacement );
         test.detect(1);
 
         if ( timeout == 0 )
         {
-            
+            // emergency exit; take something closely before the wall
             displacement = ( displacement ) * ( test.hit * .99 );
             break;
         }
 
         if ( !test.ehit )
         {
-            
+            // path is clear
             break;
         }
         else
         {
 #ifdef DEBUG
-            
-            
+            // see if the wall that was hit is nearly parallel to the desired move. maybe we should add
+            // special code for that. However, the projection idea seems to be universally robust.
             float p = test.ehit->Vec() * displacement;
             float m = se_EstimatedRangeOfMult( test.ehit->Vec(), displacement );
             if ( fabs(p) < m * .001 )
@@ -5984,11 +6336,11 @@ void se_SanifyDisplacement( eGameObject* base, eCoord& displacement )
             }
 #endif
 
-            
+            // project reachable_pos to the line that was hit
             REAL alpha = test.ehit->Ratio( base_pos + displacement );
             displacement = *test.ehit->Point() + test.ehit->Vec() * alpha - base_pos;
 
-            
+            // move it a bit closer to the known good position
             displacement = displacement * .99;
         }
     }
@@ -6001,32 +6353,32 @@ void gCycle::TransferPositionCorrectionToDistanceCorrection()
     correctDistanceSmooth = newCorrectDist;
 }
 
-
+// take over the extrapolator's data
 void gCycle::SyncFromExtrapolator()
 {
-    
+    // store old position
     eCoord oldPos = pos;
 
-    
+    // con << "Copy: " << LastTime() << ", " << extrapolator_->LastTime() << ", " << extrapolator_->Position() << ", " << pos << "\n";
 
     tASSERT( extrapolator_ );
 
-    
+    // delegate
     CopyFrom( *extrapolator_ );
 
-    
+    // adjust current wall (not essential, don't do it for the first wall)
     if ( currentWall && currentWall->tBeg > spawnTime_ + sg_cycleWallTime + .01f )
     {
-        
+        // update start position
         currentWall->beg = extrapolator_->GetLastTurnPos();
 
-        
+        // set begin distance as well
         REAL dBeg = extrapolator_->GetDistance() - eCoord::F( extrapolator_->Direction(), extrapolator_->Position() - extrapolator_->GetLastTurnPos() );
 
         currentWall->dbegin = dBeg;
         currentWall->coords_[0].Pos = dBeg;
 
-        
+        // and care for consistency
         int i;
         for ( i = currentWall->coords_.Len() -1 ; i>=0; --i )
         {
@@ -6036,50 +6388,50 @@ void gCycle::SyncFromExtrapolator()
         }
     }
 
-    
+    // transfer last turn position
     lastTurnPos_ = extrapolator_->GetLastTurnPos();
 
-    
+    // smooth position correction
     correctPosSmooth = correctPosSmooth + oldPos - pos;
 
 #ifdef DEBUG
     if ( correctPosSmooth.NormSquared() > .1f )
     {
         std::cout << "Lag slide! " << correctPosSmooth << "\n";
-
+//        resimulate_ = true;
     }
 #endif
 
-    
+    // calculate time difference between this cycle and extrapolator
     REAL dt = this->LastTime() - extrapolator_->LastTime();
 
-    
+    // extrapolate true distance ( the best estimate we have for the distance on the server )
     REAL trueDistance = extrapolator_->trueDistance_ + extrapolator_->Speed() * dt;
 
-    
-    
-    
+    // update distance correction
+    // con << 	correctDistanceSmooth << "," << trueDistance << "," << distance << "\n";
+    // correctDistanceSmooth = trueDistance - distance;
     distance = trueDistance;
     correctDistanceSmooth=0;
 
-    
+    // split away part in driving direction
     TransferPositionCorrectionToDistanceCorrection();
 
-    
-    
+    // make sure correction does not bring us to the wrong side of a wall
+    // se_SanifyDisplacement( this, correctPosSmooth );
 
-    
-    
-    
+    //eDebugLine::SetTimeout( 1.0 );
+    //eDebugLine::SetColor( 0,1,0 );
+    //eDebugLine::Draw( pos, 4, pos + dirDrive * 10, 14 );
 
-    
+    // delete extrapolator
     extrapolator_ = 0;
 }
 
 static int sg_useExtrapolatorSync=1;
 static tSettingItem<int> sg_useExtrapolatorSyncConf("EXTRAPOLATOR_SYNC",sg_useExtrapolatorSync);
 
-
+// make sure no correction moves the cycle backwards beyond the beginning of the last wall
 void ClampForward( eCoord& newPos, const eCoord& startPos, const eCoord& dir )
 {
     REAL forward = eCoord::F( newPos - startPos, dir )/dir.NormSquared();
@@ -6092,19 +6444,19 @@ extern REAL sg_cycleBrakeDeplete;
 
 void gCycle::ReadSync( nMessage &m )
 {
-    
+    // data from sync message
     SyncData sync;
 
-    short sync_alive;               
-    unsigned short sync_wall=0;     
+    short sync_alive;               // is this cycle alive?
+    unsigned short sync_wall=0;     // ID of wall
 
-    
+    // eCoord new_pos = pos;	// the extrapolated position
 
-    
-    
+    // warning: depends on the implementation of eNetGameObject::WriteSync
+    // since we don't call eNetGameObject::ReadSync.
     m >> sync.time;
 
-    
+    // reset values not sent with old protocol messages
     sync.rubber = rubber;
     sync.turns = turns;
     sync.braking = braking;
@@ -6113,9 +6465,9 @@ void gCycle::ReadSync( nMessage &m )
     m >> sync.dir;
     m >> sync.pos;
 
-    
-    
-    
+    //eDebugLine::SetTimeout( 1.0 );
+    //eDebugLine::SetColor( 1,1,1 );
+    //eDebugLine::Draw( lastSyncMessage_.pos, 0, lastSyncMessage_.pos, 20 );
 
     m >> sync.speed;
     m >> sync_alive;
@@ -6142,28 +6494,28 @@ void gCycle::ReadSync( nMessage &m )
     {
         rubberSent = true;
 
-        
+        // read rubber
         REAL preRubber, preRubberMalus;
         preRubber = compressZeroOne.Read( m );
         preRubberMalus = compressZeroOne.Read( m );
 
-        
+        // read last message ID
         m.Read(sync.messageID);
 
-        
+        // read braking reservoir
         sync.brakingReservoir = compressZeroOne.Read( m );
-        
+        // std::cout << "sync: " << sync.brakingReservoir << ":" << sync.braking << "\n";
 
-        
+        // undo skewing
         sync.rubber = preRubber * ( sg_rubberCycle + .1 );
         sync.rubberMalus = 1/preRubberMalus - 1;
 
-        
+        // extrapolation is probably safe
         canUseExtrapolatorMethod = sg_useExtrapolatorSync && lastTime > 0;
     }
     else
     {
-        
+        // try to extrapolate brake status backwards in time
         sync.brakingReservoir = brakingReservoir;
         if ( brakingReservoir > 0 && sync.braking )
             sync.brakingReservoir += ( lastTime - sync.time ) * sg_cycleBrakeDeplete;
@@ -6176,38 +6528,38 @@ void gCycle::ReadSync( nMessage &m )
             sync.brakingReservoir = 1;
     }
 
-    
+    // abort if sync is not new
     if ( lastSyncMessage_.time >= sync.time && lastSyncMessage_.turns >= sync.turns && sync_alive > 0 )
     {
-        
-        
-        
+        //eDebugLine::SetTimeout( 5 );
+        //eDebugLine::SetColor( 1,1,0);
+        //eDebugLine::Draw( lastSyncMessage_.pos, 1.5, lastSyncMessage_.pos, 5.0 );
         return;
     }
     lastSyncMessage_ = sync;
 
-    
+    // store last known good position: a bit before the last position confirmed by the server
     lastGoodPosition_ = sync.pos + ( sync.lastTurn - sync.pos ) *.01;
-    
+    // offset it a tiny bit by our last driving direction
     if ( eCoord::F( dirDrive, sync.dir ) > .99f*dirDrive.NormSquared() )
         lastGoodPosition_ = lastGoodPosition_ - this->lastDirDrive * .0001;
 
-    
-    
-    
+    //eDebugLine::SetTimeout( 2 );
+    //eDebugLine::SetColor( 0,1,0);
+    //eDebugLine::Draw( lastSyncMessage_.pos, 1.5, lastSyncMessage_.pos, 5.0 );
 
-    
+    // con << "Sync: " << lastTime << ", " << lastSyncMessage_.time << ", " << lastSyncMessage_.pos << ", " << pos << "\n";
 
     if ( canUseExtrapolatorMethod )
     {
-        
+        // reset extrapolator if information from server is more up to date
         if ( extrapolator_ && extrapolator_->LastTime() < lastSyncMessage_.time )
         {
             extrapolator_ = 0;
         }
     }
 
-    
+    // killed?
     if (Alive() && sync_alive!=1 && GOID() >= 0 && grid )
     {
         Die( lastSyncMessage_.time );
@@ -6221,7 +6573,7 @@ void gCycle::ReadSync( nMessage &m )
         return;
     }
 
-    
+    // no point going on if you're not alive
     if (!Alive())
     {
 #ifdef DEBUG
@@ -6232,7 +6584,7 @@ void gCycle::ReadSync( nMessage &m )
 
     gDestination emergency_aft(*this);
 
-    
+    // all the data was read. check where it fits in our destination list:
     gDestination *bef= GetDestinationBefore( lastSyncMessage_, destinationList );
     gDestination *aft=NULL;
     if (bef){
@@ -6240,17 +6592,17 @@ void gCycle::ReadSync( nMessage &m )
         if (!aft)
             aft=&emergency_aft;
 
-        
-        
-        
-        
-        
+        //eDebugLine::SetTimeout(1);
+        //eDebugLine::SetColor( 1,0,0 );
+        //eDebugLine::Draw( bef->position, 1.5, lastSyncMessage_.pos, 3.0 );
+        //eDebugLine::SetColor( 0,1,0 );
+        //eDebugLine::Draw( lastSyncMessage_.pos, 3.0, aft->position, 5.0 );
 
     }
 
 
-    
-    
+    // detect local tunneling by casting a ray from the server certified position
+    // to the next known client position
     if ( lastTime > 0 )
     {
         eCoord position = pos;
@@ -6259,7 +6611,7 @@ void gCycle::ReadSync( nMessage &m )
         eSensor tunnel( this, lastSyncMessage_.pos, position - lastSyncMessage_.pos );
         tunnel.detect( 1 );
 
-        
+        // use extrapolation to undo local tunneling
         if ( tunnel.ehit )
         {
             canUseExtrapolatorMethod = true;
@@ -6273,17 +6625,17 @@ void gCycle::ReadSync( nMessage &m )
     }
     else
     {
-        
+        // first sync. Accept the position without questioning it.
         pos = sync.pos;
         FindCurrentFace();
     }
 
-    
+    // determine whether we can use the distance based interpolating sync method here
     bool distanceBased = aft && aft != &emergency_aft && Owner() == sn_myNetID;
 
     if ( canUseExtrapolatorMethod && Owner()==sn_myNetID )
     {
-        
+        // exactlu resimulate from sync position for cycles controlled by this client
         resimulate_ = true;
 
         return;
@@ -6291,26 +6643,26 @@ void gCycle::ReadSync( nMessage &m )
 
     rubber = lastSyncMessage_.rubber;
 
-    
+    // bool fullSync = false;
 
-    
+    // try to get a distance value closer to the client's data by calculating the distance from the sync position to the next destination
     REAL interpolatedDistance = lastSyncMessage_.distance;
     if ( aft )
     {
         interpolatedDistance = aft->distance - sqrt((lastSyncMessage_.pos-aft->position).NormSquared());
     }
 
-    
-    
-    
-    
+    // determine true lag
+    // REAL lag = 1;
+    //if ( player )
+    //    lag = player->ping;
 
     if ( distanceBased )
     {
-        
+        // new way: correct our time and speed
 
 #ifdef DEBUG
-        
+        // destination *save = bef;
 #endif
 
         REAL ratio = (interpolatedDistance - bef->distance)/
@@ -6319,16 +6671,16 @@ void gCycle::ReadSync( nMessage &m )
         if (!std::isfinite(ratio))
             ratio = 0;
 
-        
+        // interpolate when the cycle was at the position the sync message was sent
         REAL interpolatedTime = bef->gameTime * (1-ratio) + aft->gameTime * ratio;
-        
+        // REAL interpolatedSpeed = bef->speed   * (1-ratio) + aft->speed    * ratio;
 
-        
+        // calculate deltas
         REAL correctTime  = ( lastSyncMessage_.time     - interpolatedTime     );
-        
+        // REAL correctSpeed = ( lastSyncMessage_.speed    - interpolatedSpeed    );
         REAL correctDist  = ( lastSyncMessage_.distance - interpolatedDistance );
 
-        
+        // don't trust high ratios too much; they may be skewed by rubber application
         {
             REAL factor = (1 - ratio) * 5;
             if ( factor < 1 )
@@ -6340,22 +6692,22 @@ void gCycle::ReadSync( nMessage &m )
             }
         }
 
-        
-        
-        
-        
-        
-        
+        //if (correctTime > 0)
+        //{
+        //    correctTime*=.5;
+        //    correctSpeed*=.5;
+        //    correctDist*=.5;
+        //}
 
-        
-        
-        
+        //correctTimeSmooth       += correctTime;
+        //correctSpeedSmooth      += correctSpeed;
+        // correctDistanceSmooth   += correctDist;
 
-        
+        // correctDistanceSmooth   += correctDist;
 
-        
+        // con << ratio << ", " << correctDist << ", " << correctTime << "\n";
 
-        
+        // correct distances according to sync
         {
             distance += correctDist;
             gDestination * run = bef;
@@ -6366,23 +6718,23 @@ void gCycle::ReadSync( nMessage &m )
             }
         }
 
-        
+        // correct time by adapting position and distance
         eCoord newPos = pos - Direction() * Speed() * correctTime;
         if ( currentWall )
         {
             ClampForward( newPos, currentWall->beg, Direction() );
         }
 
-        
+        // don't tunnel through walls
         {
-            const eCoord & safePos = pos; 
+            const eCoord & safePos = pos; // aft->position
             gSensor test( this, safePos , newPos - safePos );
             test.detect(1);
             if ( test.ehit )
             {
                 newPos = test.before_hit;
 
-                
+                // something bad must be going on, better recheck with accurate extrapolation
                 resimulate_ = true;
             }
         }
@@ -6392,63 +6744,77 @@ void gCycle::ReadSync( nMessage &m )
 
         MoveSafely( newPos, lastTime, lastTime );
 
-        
+        /*
+        REAL ts = lastSyncMessage_.time - lastTime;
+
+        //        eCoord intPos = pos + dirDrive * (ts * speed + .5 * ts*ts*acceleration);
+        eCoord intPos = pos + dirDrive * ( ts * ( speed + lastSyncMessage_.speed ) * .5 );
+        REAL  int_speed = speed + acceleration*ts;
+
+        dirDrive = lastSyncMessage_.dir;
+
+        correctPosSmooth = lastSyncMessage_.pos - intPos;
+
+        distance = lastSyncMessage_.distance - speed * ts - acceleration * ts*ts*.5;
+
+        //correctTimeSmooth = 0;
+        */
     }
     else
     {
-        
+        // direct sync
         if ( Owner() != sn_myNetID )
         {
-            
+            // direct extrapolation for cycles of other clients or if no turn is newer than the sync
             SyncEnemy( lastSyncMessage_.lastTurn );
 
-            
+            // update beginning of current wall
             if ( currentWall )
             {
                 currentWall->beg = lastSyncMessage_.lastTurn;
             }
 
-            
+            // update brake status
             AccelerationDiscontinuity();
             braking = lastSyncMessage_.braking;
 
-            
+            // store last turn
             lastTurnPos_ = lastSyncMessage_.lastTurn;
         }
         else
         {
-            
+            // same algorithm, but update smooth position correction so that there is no immediate visual change
             eCoord oldPos = pos + correctPosSmooth;
             SyncEnemy( lastSyncMessage_.lastTurn );
             correctPosSmooth = oldPos - pos;
         }
 
-        
+        // restore rubber meter
         if ( !rubberSent )
         {
             rubber = lastSyncMessage_.rubber;
         }
     }
 
-    
+    // if this happens during creation, ignore position correction
     if ( this->ID() == 0 )
     {
         correctPosSmooth = eCoord();
 
-        
+        // some other stuff that should happen on the first sync
 
-        
+        // estimate time of spawning (HACK)
         spawnTime_=lastTime;
         if ( verletSpeed_ > 0 )
             spawnTime_ -= distance/verletSpeed_;
 
-        
+        // set spawn time to infinite past if this is the first spawn
         if ( !sg_cycleFirstSpawnProtection && spawnTime_ <= 1.0 )
         {
             spawnTime_ = -1E+20;
         }
 
-        
+        // reset position and direction
         predictPosition_ = pos;
         dir = dirDrive;
         skew = skewDot = 0;
@@ -6467,47 +6833,47 @@ void gCycle::ReadSync( nMessage &m )
 
     sn_Update(turns,lastSyncMessage_.turns);
 
-    
-    
+    //if (fabs(correctTimeSmooth > 5))
+    //    st_Breakpoint();
 
-    
+    // calculate new winding number. Try to change it as little as possible.
     this->SetWindingNumberWrapped( Grid()->DirectionWinding(dirDrive) );
 
-    
+    // Resnap to the axis
     dirDrive = Grid()->GetDirection(windingNumberWrapped_);
 }
 
 void gCycle::SyncEnemy ( const eCoord& )
 {
-    
+    // keep this cycle alive
     tJUST_CONTROLLED_PTR< gCycle > keep( this->GetRefcount()>0 ? this : 0 );
 
     resimulate_ = false;
 
-    
+    // calculate turning
     bool turned = false;
     REAL turnDirection=( dirDrive*lastSyncMessage_.dir );
     REAL notTurned=eCoord::F( dirDrive, lastSyncMessage_.dir )/dirDrive.NormSquared();
 
-    
+    // the last known time
     REAL lastKnownTime = lastTime;
 
-    
+    // calculate the position of the last turn from the sync data
     if ( distance > 0 && ( notTurned < .99 || this->turns < lastSyncMessage_.turns ) )
     {
-        
+        // reset sound
         if (turning)
             turning->Reset();
 
-        
+        // update old wall as good as we can
         eCoord crossPos = lastSyncMessage_.pos;
         REAL crossDist = lastSyncMessage_.distance;
         REAL crossTime = lastSyncMessage_.time;
 
-        
-        
-        
-        
+        // calculate intersection of old and new trajectory (if only one turn was made)
+        // the second condition is for old servers that don't send the turn count; they
+        // don't support multiple axes, so we can possibly detect missed turns if
+        // the dot product of the current and last direction is negative.
         if (this->turns+1 >= lastSyncMessage_.turns && ( lastSyncMessage_.turns > 0 || notTurned > -.5 ) )
         {
             if ( fabs( turnDirection ) > .01 )
@@ -6522,15 +6888,15 @@ void gCycle::SyncEnemy ( const eCoord& )
                 tASSERT( fabs ( ( crossPos - pos ) * dirDrive ) < 1 );
                 tASSERT( fabs ( ( crossPos - lastSyncMessage_.pos ) * lastSyncMessage_.dir ) < 1 );
 
-                
+                // update the old wall
                 if (currentWall)
                     currentWall->Update(crossTime,crossPos);
             }
         }
         else
         {
-            
-            
+            // a turn sync was dropped for whatever reason. The last wall is not reliable.
+            // make it disappear immediately.
             if (currentWall)
             {
                 currentWall->real_CopyIntoGrid(grid);
@@ -6541,7 +6907,7 @@ void gCycle::SyncEnemy ( const eCoord& )
         eDebugLine::SetColor( 1,0,0 );
         eDebugLine::Draw( crossPos, 0, crossPos, 8 );
 
-        
+        // drop old wall
         if(currentWall){
             lastWall=currentWall;
             currentWall->CopyIntoGrid( grid );
@@ -6549,7 +6915,7 @@ void gCycle::SyncEnemy ( const eCoord& )
             currentWall=NULL;
         }
 
-        
+        // create new wall at sync location
         distance = lastSyncMessage_.distance;
         correctDistanceSmooth=0;
 
@@ -6560,24 +6926,24 @@ void gCycle::SyncEnemy ( const eCoord& )
 
         turned = true;
 
-        
+        // save last driving direction
         lastDirDrive = dirDrive;
 
-        
+        // move to cross position
         MoveSafely( crossPos, lastTime, crossTime );
         lastKnownTime = crossTime;
     }
 
-    
+    // side bending
     skewDot+=4*turnDirection;
 
-    
-    
+    // calculate timestep
+    // REAL ts = lastSyncMessage_.time - lastTime;
 
-    
+    // backup current time
     REAL oldTime = lastTime;
 
-    
+    // update position, speed, distance and direction
     MoveSafely( lastSyncMessage_.pos, lastKnownTime, lastSyncMessage_.time );
     verletSpeed_  = lastSyncMessage_.speed;
     lastTimestep_ = 0;
@@ -6587,59 +6953,59 @@ void gCycle::SyncEnemy ( const eCoord& )
     rubber = lastSyncMessage_.rubber;
     brakingReservoir = lastSyncMessage_.brakingReservoir;
 
-    
+    // update time to values from sync
     lastTime = lastSyncMessage_.time;
     if ( oldTime < 0 )
         oldTime = lastTime;
     clientside_action();
 
-    
+    // bend last driving direction if it is antiparallel to the current one
     if ( lastDirDrive * dirDrive < EPS && eCoord::F( lastDirDrive, dirDrive ) < 0 )
     {
         lastDirDrive = dirDrive.Turn(0,1);
     }
 
-    
+    // correct laggometer to actual facts
     if (Owner() != sn_myNetID )
     {
-        
+        // calculate lag from sync delay
         REAL lag = se_GameTime() - lastSyncMessage_.time;
         if ( lag < 0 )
             lag = 0;
 
-        
+        // try not to let the lag jump
         REAL maxLag = laggometer * 1.2;
         REAL minLag = laggometer * .8;
 
-        
+        // store it
         laggometer = lag;
 
-        
-        
-        
+        // clamp smooth laggometer to it (or set it if a turn was made)
+        //if ( laggometerSmooth > lag )
+        //    laggometerSmooth = lag;
 
-        
-        
-        
+        // For the client and without prediction:
+        // do not simulate if a turn was made, just accept sync as it is
+        // (so turns don't look awkward)
         if (
             sn_GetNetState()==nCLIENT && turned )
         {
             laggometerSmooth = lag;
 
-            
+            // but at least update the current wall
             if ( currentWall )
                 currentWall->Update(lastTime,pos);
 
-            
+            // and reset the animation time
             lastTimeAnim=lastTime;
 
             return;
         }
         else
         {
-            
-            
-            
+            // sanity check: the lag should not jump up suddenly
+            // (and if it does, we'll catch up at the next turn)
+            // REAL maxLag = 1.2 * laggometerSmooth;
             if ( laggometer > maxLag )
                 laggometer = maxLag;
             if ( laggometer < minLag )
@@ -6647,7 +7013,7 @@ void gCycle::SyncEnemy ( const eCoord& )
         }
     }
 
-    
+    // simulate to extrapolate, but don't touch the smooth laggometer
     {
         REAL laggometerSmoothBackup = this->laggometerSmooth;
         TimestepThis(oldTime, this);
@@ -6655,13 +7021,108 @@ void gCycle::SyncEnemy ( const eCoord& )
     }
 }
 
+/*
+void gCycle::old_ReadSync(nMessage &m){
+  REAL oldTime=lastTime;
+  eCoord oldpos=pos;
+  //+correctPosSmooth;
+  //correctPosSmooth=0;
+  eCoord olddir=dir;
+  eNetGameObject::ReadSync(m);
 
+  REAL t=(dirDrive*dir);
+  if (fabs(t)>.2){
+#ifdef DEBUG
+    if (owner==sn_myNetID)
+      con << "Warning! Turned cycle!\n";
+#endif
+    turning.Reset();
+  }
+
+  // side bending
+  skewDot+=4*t;
+
+
+  dirDrive=dir;
+  dir=olddir;
+
+  m >> speed;
+  short new_alive;
+  m >> new_alive;
+  if (alive && new_alive!=1){
+    new gExplosion(pos,oldTime,r,g,b);
+    deathTime=oldTime;
+    eEdge::SeethroughHasChanged();
+  }
+  alive=new_alive;
+
+  m >> distance;
+
+  // go to old time frame
+
+  eCoord realpos=pos;
+  REAL realtime=lastTime;
+  REAL realdist=distance;
+
+  if (currentWall)
+    lastWall=currentWall;
+
+  m.Read(currentWallID);
+
+  unsigned short Turns;
+  if (!m.End())
+    m.Read(Turns);
+  else
+    Turns=turns;
+
+  if (!m.End())
+    m.Read(braking);
+  else
+    braking=false;
+
+  TimestepThis(oldTime,this);
+
+  if (!currentWall || fabs(t)>.3 || currentWall->inGrid){
+    //REAL d=eCoord::F(pos-realpos,olddir);
+    //eCoord crosspos=realpos+olddir*d;
+    //d=eCoord::F(oldpos-crosspos,dir);
+    //crosspos=crosspos+dir*d;
+
+    eCoord crosspos=realpos;
+
+    if (currentWall){
+      currentWall->Update(realtime,crosspos);
+      //currentWall->Update(realtime,realpos);
+      currentWall->CopyIntoGrid();
+    }
+    //con << "NEW\n";
+    currentWall=new gNetPlayerWall
+      (this,crosspos,dirDrive,realtime,realdist);
+  }
+
+
+  // smooth correction
+  if ((oldpos-pos).NormSquared()<4 && fabs(t)<.5){
+    correctPosSmooth=pos-oldpos;
+    pos=oldpos;
+  }
+  
+
+
+#ifdef DEBUG
+  //int old_t=turns;
+  //if(sn_Update(turns,Turns))
+  //con << "Updated turns form " << old_t << " to " << turns << "\n";
+#endif
+  sn_Update(turns,Turns);
+}
+*/
 
 void gCycle::ReceiveControl(REAL time,uActionPlayer *act,REAL x){
-    
+    //forceTime=true;
     TimestepThis(time,this);
     Act(act,x);
-    
+    //forceTime=false;
 }
 
 void gCycle::PrintName(tString &s) const
@@ -6676,8 +7137,8 @@ void gCycle::PrintName(tString &s) const
 
 bool gCycle::ActionOnQuit()
 {
-    
-    
+    //  currentWall = NULL;
+    //  lastWall = NULL;
     if ( sn_GetNetState() == nSERVER )
     {
         TakeOwnership();
@@ -6695,7 +7156,30 @@ nDescriptor &gCycle::CreatorDescriptor() const{
     return cycle_init;
 }
 
+/*
+void gCycle::AddDestination(gDestination *dest){
+    //  con << "got new dest " << dest->position << "," << dest->direction
+    // << "," << dest->distance << "\n";
 
+    dest->InsertIntoList(&destinationList);
+
+    // if the new destination was inserted at the end of the list
+    //if (!currentDestination && !dest->next &&
+    //if ((dest->distance >= distance || (!currentDestination && !dest->next)) &&
+
+    if (dest->next && dest->next->hasBeenUsed){
+        delete dest;
+        return;
+    }
+
+    // go back one destination if the new destination appears to be older than the current one
+    if ((!currentDestination || currentDestination == dest->next ) &&
+            sn_GetNetState()!=nSTANDALONE && Owner()!=::sn_myNetID){
+        currentDestination=dest;
+        // con << "setting new cd\n";
+	}
+}
+*/
 
 void gCycle::RightBeforeDeath( int numTries )
 {
@@ -6704,7 +7188,7 @@ void gCycle::RightBeforeDeath( int numTries )
         player->RightBeforeDeath( numTries );
     }
 
-    
+    // delay syncs for old clients; they would tunnel locally
     if ( sg_avoidBadOldClientSync && !sg_NoLocalTunnelOnSync.Supported( Owner() ) )
     {
         nextSync=tSysTimeFloat()+sg_syncIntervalEnemy;
@@ -6714,55 +7198,70 @@ void gCycle::RightBeforeDeath( int numTries )
     correctPosSmooth = correctPosSmooth * .5;
 }
 
-
-
-
-
-
-
-
-
-
-
+// *******************************************************************************************
+// *
+// *	DoIsDestinationUsed
+// *
+// *******************************************************************************************
+//!
+//!		@param	dest	the destination to test
+//!		@return			true if the destination is still in active use
+//!
+// *******************************************************************************************
 
 bool gCycle::DoIsDestinationUsed( const gDestination * dest ) const
 {
     return ( extrapolator_ && extrapolator_->IsDestinationUsed( dest ) ) || gCycleMovement::DoIsDestinationUsed( dest );
 }
 
+// *******************************************************************************************
+// *
+// *   DoGetDistanceSinceLastTurn
+// *
+// *******************************************************************************************
+//!
+//!        @return     the distance driven since the last turn
+//!
+// *******************************************************************************************
 
+/*
+REAL gCycle::DoGetDistanceSinceLastTurn( void ) const
+{
+    if ( currentWall )
+    {
+        return ( currentWall->Pos(1) - currentWall->Pos(0) );
+    }
 
+    return 0;
+}
+*/
 
+// *******************************************************************************************
+// *
+// *   DoGetDistanceSinceLastTurn
+// *
+// *******************************************************************************************
+//!
+//!        @return     the distance driven since the last turn
+//!
+// *******************************************************************************************
 
+/*
+REAL gCycleExtrapolator::DoGetDistanceSinceLastTurn( void ) const
+{
+    return eCoord::F( pos - lastTurn_, dirDrive );
+}
+*/
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// *******************************************************************************************
+// *
+// *	Vulnerable
+// *
+// *******************************************************************************************
+//!
+//!		@return		true if the cycle is vulnerable
+//!
+// *******************************************************************************************
 
 bool gCycle::Vulnerable() const
 {

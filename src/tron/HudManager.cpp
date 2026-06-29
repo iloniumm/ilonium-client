@@ -6,7 +6,9 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "thirdparty/imgui/imgui_internal.h"
 #include "HudManager.h"
+#include "MediaWidget.h"
 #include "ePlayer.h"
+#include "eTimer.h"
 #include "gCycle.h"
 #include "gWinZone.h"
 #include "eGrid.h"
@@ -17,9 +19,14 @@
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
+#include <map>
 #include "tools/tConfiguration.h"
 #include "tron/DemoRecorder.h"
 #include "tron/DemoPlayer.h"
+#include "rConsole.h"
+#include "engine/eRectangle.h"
+#include "engine/eAdvWall.h"
+#include "tron/gWall.h"
 
 // Expose standard client configuration variables
 extern bool sg_modClientNameEnabled;
@@ -28,6 +35,7 @@ extern bool sg_modPingEnabled;
 extern bool sg_modTimeEnabled;
 extern bool sg_modKeybindsEnabled;
 extern bool isHudEditing;
+extern bool sg_modMinimapEnabled;
 
 // Configuration positions
 extern REAL sg_modClientNamePosX;
@@ -103,6 +111,22 @@ extern bool sg_modClassicRubberBatteryEnabled;
 REAL sg_modClassicRubberBatteryPosX = 200.0f;
 REAL sg_modClassicRubberBatteryPosY = 520.0f;
 
+// [MOD] New Gen Chat & Minimap Widget Variables
+bool sg_modChatWidgetEnabled = true;
+REAL sg_modChatWidgetPosX = 20.0f;
+REAL sg_modChatWidgetPosY = 400.0f;
+REAL sg_modChatWidth = 400.0f;
+REAL sg_modChatHeight = 220.0f;
+REAL sg_modChatFontSize = 14.0f;
+REAL sg_modChatTimeout = 8.0f;
+bool sg_modChatShowTime = true;
+
+REAL sg_modMinimapPosX = 1000.0f;
+REAL sg_modMinimapPosY = 500.0f;
+int sg_modMinimapShape = 0; // 0: Circle, 1: Square
+bool sg_modMinimapAutoZoom = true;
+bool sg_modMinimapDeadEffect = true;
+
 // --- MULTI-WIDGET CUSTOMIZATION VARIABLES ---
 #define DEFINE_WIDGET_VARS(varPrefix) \
     REAL varPrefix##_Scale = 1.0f; \
@@ -152,6 +176,15 @@ DEFINE_WIDGET_VARS(sg_hudAlive)
 DEFINE_WIDGET_VARS(sg_hudNetHealth)
 DEFINE_WIDGET_VARS(sg_hudRubberBattery)
 DEFINE_WIDGET_VARS(sg_hudClassicRubberBattery)
+DEFINE_WIDGET_VARS(sg_hudChat)
+DEFINE_WIDGET_VARS(sg_hudMinimap)
+DEFINE_WIDGET_VARS(sg_hudFortressAlerts)
+DEFINE_WIDGET_VARS(sg_hudCutoffPredictor)
+DEFINE_WIDGET_VARS(sg_hudProximityWarning)
+DEFINE_WIDGET_VARS(sg_hudTeammateDeath)
+DEFINE_WIDGET_VARS(sg_hudWallTimer)
+DEFINE_WIDGET_VARS(sg_hudKeystroke1)
+DEFINE_WIDGET_VARS(sg_hudKeystroke2)
 
 // --- CONFIG PERSISTENCE ---
 #define REGISTER_WIDGET_CONFIGS(nameStr, varPrefix) \
@@ -236,6 +269,22 @@ static tConfItem<REAL> sg_modRubberBatteryPosYConf("MOD_RUBBER_BATTERY_POS_Y", s
 static tConfItem<REAL> sg_modClassicRubberBatteryPosXConf("MOD_CLASSIC_RUBBER_BATTERY_POS_X", sg_modClassicRubberBatteryPosX);
 static tConfItem<REAL> sg_modClassicRubberBatteryPosYConf("MOD_CLASSIC_RUBBER_BATTERY_POS_Y", sg_modClassicRubberBatteryPosY);
 
+// [MOD] New Gen Chat & Minimap Configuration
+static tConfItem<bool> sg_modChatWidgetEnabledConf("MOD_CHAT_WIDGET_ENABLED", sg_modChatWidgetEnabled);
+static tConfItem<REAL> sg_modChatWidgetPosXConf("MOD_CHAT_POS_X", sg_modChatWidgetPosX);
+static tConfItem<REAL> sg_modChatWidgetPosYConf("MOD_CHAT_POS_Y", sg_modChatWidgetPosY);
+static tConfItem<REAL> sg_modChatWidthConf("MOD_CHAT_WIDTH", sg_modChatWidth);
+static tConfItem<REAL> sg_modChatHeightConf("MOD_CHAT_HEIGHT", sg_modChatHeight);
+static tConfItem<REAL> sg_modChatFontSizeConf("MOD_CHAT_FONTSIZE", sg_modChatFontSize);
+static tConfItem<REAL> sg_modChatTimeoutConf("MOD_CHAT_TIMEOUT", sg_modChatTimeout);
+static tConfItem<bool> sg_modChatShowTimeConf("MOD_CHAT_SHOWTIME", sg_modChatShowTime);
+
+static tConfItem<REAL> sg_modMinimapPosXConf("MOD_MINIMAP_POS_X", sg_modMinimapPosX);
+static tConfItem<REAL> sg_modMinimapPosYConf("MOD_MINIMAP_POS_Y", sg_modMinimapPosY);
+static tConfItem<int> sg_modMinimapShapeConf("MOD_MINIMAP_SHAPE", sg_modMinimapShape);
+static tConfItem<bool> sg_modMinimapAutoZoomConf("MOD_MINIMAP_AUTOZOOM", sg_modMinimapAutoZoom);
+static tConfItem<bool> sg_modMinimapDeadEffectConf("MOD_MINIMAP_DEADEFFECT", sg_modMinimapDeadEffect);
+
 REGISTER_WIDGET_CONFIGS("CLIENTNAME", sg_hudClientName)
 REGISTER_WIDGET_CONFIGS("FPS", sg_hudFps)
 REGISTER_WIDGET_CONFIGS("PING", sg_hudPing)
@@ -252,6 +301,105 @@ REGISTER_WIDGET_CONFIGS("ALIVE", sg_hudAlive)
 REGISTER_WIDGET_CONFIGS("NETHEALTH", sg_hudNetHealth)
 REGISTER_WIDGET_CONFIGS("RUBBERBATTERY", sg_hudRubberBattery)
 REGISTER_WIDGET_CONFIGS("CLASSICRUBBERBATTERY", sg_hudClassicRubberBattery)
+REGISTER_WIDGET_CONFIGS("CHAT", sg_hudChat)
+REGISTER_WIDGET_CONFIGS("MINIMAP", sg_hudMinimap)
+REGISTER_WIDGET_CONFIGS("FORTRESSALERTS", sg_hudFortressAlerts)
+REGISTER_WIDGET_CONFIGS("CUTOFFPREDICTOR", sg_hudCutoffPredictor)
+REGISTER_WIDGET_CONFIGS("PROXIMITYWARNING", sg_hudProximityWarning)
+REGISTER_WIDGET_CONFIGS("TEAMMATEDEATH", sg_hudTeammateDeath)
+REGISTER_WIDGET_CONFIGS("WALLTIMER", sg_hudWallTimer)
+REGISTER_WIDGET_CONFIGS("KEYSTROKE1", sg_hudKeystroke1)
+REGISTER_WIDGET_CONFIGS("KEYSTROKE2", sg_hudKeystroke2)
+
+REAL sg_modFortressAlertsPosX = 20.0f;
+REAL sg_modFortressAlertsPosY = 140.0f;
+REAL sg_modCutoffPredictorPosX = 20.0f;
+REAL sg_modCutoffPredictorPosY = 210.0f;
+REAL sg_modProximityWarningPosX = 20.0f;
+REAL sg_modProximityWarningPosY = 280.0f;
+REAL sg_modTeammateDeathPosX = 20.0f;
+REAL sg_modTeammateDeathPosY = 350.0f;
+
+static tConfItem<REAL> sg_modFortressAlertsPosXConf("MOD_FORTRESS_ALERTS_POS_X", sg_modFortressAlertsPosX);
+static tConfItem<REAL> sg_modFortressAlertsPosYConf("MOD_FORTRESS_ALERTS_POS_Y", sg_modFortressAlertsPosY);
+static tConfItem<REAL> sg_modCutoffPredictorPosXConf("MOD_CUTOFF_PREDICTOR_POS_X", sg_modCutoffPredictorPosX);
+static tConfItem<REAL> sg_modCutoffPredictorPosYConf("MOD_CUTOFF_PREDICTOR_POS_Y", sg_modCutoffPredictorPosY);
+static tConfItem<REAL> sg_modProximityWarningPosXConf("MOD_PROXIMITY_WARNING_POS_X", sg_modProximityWarningPosX);
+static tConfItem<REAL> sg_modProximityWarningPosYConf("MOD_PROXIMITY_WARNING_POS_Y", sg_modProximityWarningPosY);
+static tConfItem<REAL> sg_modTeammateDeathPosXConf("MOD_TEAMMATE_DEATH_POS_X", sg_modTeammateDeathPosX);
+static tConfItem<REAL> sg_modTeammateDeathPosYConf("MOD_TEAMMATE_DEATH_POS_Y", sg_modTeammateDeathPosY);
+
+bool sg_modWallTimerEnabled = true;
+REAL sg_modWallTimerPosX = 800.0f;
+REAL sg_modWallTimerPosY = 200.0f;
+
+bool sg_modKeystroke1_Enabled = false;
+REAL sg_modKeystroke1_PosX = 500.0f;
+REAL sg_modKeystroke1_PosY = 600.0f;
+int sg_modKeystroke1_Preset = 3;
+int sg_modKeystroke1_Mask0 = 536870912;
+int sg_modKeystroke1_Mask1 = 7168;
+int sg_modKeystroke1_Mask2 = 32;
+
+bool sg_modKeystroke1_RgbWave = true;
+REAL sg_modKeystroke1_RgbSpeed = 1.5f;
+REAL sg_modKeystroke1_GlowIntensity = 0.8f;
+
+bool sg_modKeystroke1_SeparateKeys = false;
+REAL sg_modKeystroke1_Spacing = 6.0f;
+REAL sg_modKeystroke1_Radius = 6.0f;
+bool sg_modKeystroke1_ShowCps = true;
+
+bool sg_modKeystroke2_Enabled = false;
+REAL sg_modKeystroke2_PosX = 550.0f;
+REAL sg_modKeystroke2_PosY = 600.0f;
+int sg_modKeystroke2_Preset = 3;
+int sg_modKeystroke2_Mask0 = 0;
+int sg_modKeystroke2_Mask1 = 0;
+int sg_modKeystroke2_Mask2 = 25165824;
+
+bool sg_modKeystroke2_RgbWave = true;
+REAL sg_modKeystroke2_RgbSpeed = 1.5f;
+REAL sg_modKeystroke2_GlowIntensity = 0.8f;
+
+bool sg_modKeystroke2_SeparateKeys = false;
+REAL sg_modKeystroke2_Spacing = 6.0f;
+REAL sg_modKeystroke2_Radius = 6.0f;
+bool sg_modKeystroke2_ShowCps = true;
+
+static tConfItem<bool> sg_modKeystroke1_EnabledConf("MOD_KEYSTROKE1_ENABLED", sg_modKeystroke1_Enabled);
+static tConfItem<REAL> sg_modKeystroke1_PosXConf("MOD_KEYSTROKE1_POS_X", sg_modKeystroke1_PosX);
+static tConfItem<REAL> sg_modKeystroke1_PosYConf("MOD_KEYSTROKE1_POS_Y", sg_modKeystroke1_PosY);
+static tConfItem<int> sg_modKeystroke1_PresetConf("MOD_KEYSTROKE1_PRESET", sg_modKeystroke1_Preset);
+static tConfItem<int> sg_modKeystroke1_Mask0Conf("MOD_KEYSTROKE1_MASK0", sg_modKeystroke1_Mask0);
+static tConfItem<int> sg_modKeystroke1_Mask1Conf("MOD_KEYSTROKE1_MASK1", sg_modKeystroke1_Mask1);
+static tConfItem<int> sg_modKeystroke1_Mask2Conf("MOD_KEYSTROKE1_MASK2", sg_modKeystroke1_Mask2);
+
+static tConfItem<bool> sg_modKeystroke1_RgbWaveConf("MOD_KEYSTROKE1_RGBWAVE", sg_modKeystroke1_RgbWave);
+static tConfItem<REAL> sg_modKeystroke1_RgbSpeedConf("MOD_KEYSTROKE1_RGBSPEED", sg_modKeystroke1_RgbSpeed);
+static tConfItem<REAL> sg_modKeystroke1_GlowIntensityConf("MOD_KEYSTROKE1_GLOWINTENSITY", sg_modKeystroke1_GlowIntensity);
+
+static tConfItem<bool> sg_modKeystroke1_SeparateKeysConf("MOD_KEYSTROKE1_SEPARATEKEYS", sg_modKeystroke1_SeparateKeys);
+static tConfItem<REAL> sg_modKeystroke1_SpacingConf("MOD_KEYSTROKE1_SPACING", sg_modKeystroke1_Spacing);
+static tConfItem<REAL> sg_modKeystroke1_RadiusConf("MOD_KEYSTROKE1_RADIUS", sg_modKeystroke1_Radius);
+static tConfItem<bool> sg_modKeystroke1_ShowCpsConf("MOD_KEYSTROKE1_SHOWCPS", sg_modKeystroke1_ShowCps);
+
+static tConfItem<bool> sg_modKeystroke2_EnabledConf("MOD_KEYSTROKE2_ENABLED", sg_modKeystroke2_Enabled);
+static tConfItem<REAL> sg_modKeystroke2_PosXConf("MOD_KEYSTROKE2_POS_X", sg_modKeystroke2_PosX);
+static tConfItem<REAL> sg_modKeystroke2_PosYConf("MOD_KEYSTROKE2_POS_Y", sg_modKeystroke2_PosY);
+static tConfItem<int> sg_modKeystroke2_PresetConf("MOD_KEYSTROKE2_PRESET", sg_modKeystroke2_Preset);
+static tConfItem<int> sg_modKeystroke2_Mask0Conf("MOD_KEYSTROKE2_MASK0", sg_modKeystroke2_Mask0);
+static tConfItem<int> sg_modKeystroke2_Mask1Conf("MOD_KEYSTROKE2_MASK1", sg_modKeystroke2_Mask1);
+static tConfItem<int> sg_modKeystroke2_Mask2Conf("MOD_KEYSTROKE2_MASK2", sg_modKeystroke2_Mask2);
+
+static tConfItem<bool> sg_modKeystroke2_RgbWaveConf("MOD_KEYSTROKE2_RGBWAVE", sg_modKeystroke2_RgbWave);
+static tConfItem<REAL> sg_modKeystroke2_RgbSpeedConf("MOD_KEYSTROKE2_RGBSPEED", sg_modKeystroke2_RgbSpeed);
+static tConfItem<REAL> sg_modKeystroke2_GlowIntensityConf("MOD_KEYSTROKE2_GLOWINTENSITY", sg_modKeystroke2_GlowIntensity);
+
+static tConfItem<bool> sg_modKeystroke2_SeparateKeysConf("MOD_KEYSTROKE2_SEPARATEKEYS", sg_modKeystroke2_SeparateKeys);
+static tConfItem<REAL> sg_modKeystroke2_SpacingConf("MOD_KEYSTROKE2_SPACING", sg_modKeystroke2_Spacing);
+static tConfItem<REAL> sg_modKeystroke2_RadiusConf("MOD_KEYSTROKE2_RADIUS", sg_modKeystroke2_Radius);
+static tConfItem<bool> sg_modKeystroke2_ShowCpsConf("MOD_KEYSTROKE2_SHOWCPS", sg_modKeystroke2_ShowCps);
 
 // Extern modules from ModMenu
 extern bool g_NoclipMode;
@@ -440,6 +588,24 @@ ImVec2 HudWidget::GetPosition() const {
         pos = ImVec2(sg_modRubberBatteryPosX, sg_modRubberBatteryPosY);
     } else if (m_Name == "ClassicRubberBattery") {
         pos = ImVec2(sg_modClassicRubberBatteryPosX, sg_modClassicRubberBatteryPosY);
+    } else if (m_Name == "Chat") {
+        pos = ImVec2(sg_modChatWidgetPosX, sg_modChatWidgetPosY);
+    } else if (m_Name == "Minimap") {
+        pos = ImVec2(sg_modMinimapPosX, sg_modMinimapPosY);
+    } else if (m_Name == "FortressAlerts") {
+        pos = ImVec2(sg_modFortressAlertsPosX, sg_modFortressAlertsPosY);
+    } else if (m_Name == "CutoffPredictor") {
+        pos = ImVec2(sg_modCutoffPredictorPosX, sg_modCutoffPredictorPosY);
+    } else if (m_Name == "ProximityWarning") {
+        pos = ImVec2(sg_modProximityWarningPosX, sg_modProximityWarningPosY);
+    } else if (m_Name == "TeammateDeath") {
+        pos = ImVec2(sg_modTeammateDeathPosX, sg_modTeammateDeathPosY);
+    } else if (m_Name == "WallTimer") {
+        pos = ImVec2(sg_modWallTimerPosX, sg_modWallTimerPosY);
+    } else if (m_Name == "Keystroke 1") {
+        pos = ImVec2(sg_modKeystroke1_PosX, sg_modKeystroke1_PosY);
+    } else if (m_Name == "Keystroke 2") {
+        pos = ImVec2(sg_modKeystroke2_PosX, sg_modKeystroke2_PosY);
     }
 
     // Clamp to screen boundaries safely
@@ -506,6 +672,33 @@ void HudWidget::SetPosition(const ImVec2& rawPos) {
     } else if (m_Name == "ClassicRubberBattery") {
         sg_modClassicRubberBatteryPosX = pos.x;
         sg_modClassicRubberBatteryPosY = pos.y;
+    } else if (m_Name == "Chat") {
+        sg_modChatWidgetPosX = pos.x;
+        sg_modChatWidgetPosY = pos.y;
+    } else if (m_Name == "Minimap") {
+        sg_modMinimapPosX = pos.x;
+        sg_modMinimapPosY = pos.y;
+    } else if (m_Name == "FortressAlerts") {
+        sg_modFortressAlertsPosX = pos.x;
+        sg_modFortressAlertsPosY = pos.y;
+    } else if (m_Name == "CutoffPredictor") {
+        sg_modCutoffPredictorPosX = pos.x;
+        sg_modCutoffPredictorPosY = pos.y;
+    } else if (m_Name == "ProximityWarning") {
+        sg_modProximityWarningPosX = pos.x;
+        sg_modProximityWarningPosY = pos.y;
+    } else if (m_Name == "TeammateDeath") {
+        sg_modTeammateDeathPosX = pos.x;
+        sg_modTeammateDeathPosY = pos.y;
+    } else if (m_Name == "WallTimer") {
+        sg_modWallTimerPosX = pos.x;
+        sg_modWallTimerPosY = pos.y;
+    } else if (m_Name == "Keystroke 1") {
+        sg_modKeystroke1_PosX = pos.x;
+        sg_modKeystroke1_PosY = pos.y;
+    } else if (m_Name == "Keystroke 2") {
+        sg_modKeystroke2_PosX = pos.x;
+        sg_modKeystroke2_PosY = pos.y;
     }
 }
 
@@ -542,6 +735,28 @@ bool HudWidget::IsVisible() const {
         return sg_modRubberBatteryEnabled;
     } else if (m_Name == "ClassicRubberBattery") {
         return sg_modClassicRubberBatteryEnabled;
+    } else if (m_Name == "Chat") {
+        return sg_modChatWidgetEnabled;
+    } else if (m_Name == "Minimap") {
+        return sg_modMinimapEnabled;
+    } else if (m_Name == "FortressAlerts") {
+        extern bool sg_modFortressAlerts;
+        return sg_modFortressAlerts;
+    } else if (m_Name == "CutoffPredictor") {
+        extern bool sg_modCutoffAimbot;
+        return sg_modCutoffAimbot;
+    } else if (m_Name == "ProximityWarning") {
+        extern bool sg_modProximityWarning;
+        return sg_modProximityWarning;
+    } else if (m_Name == "TeammateDeath") {
+        extern bool sg_modTeammateDeathWarning;
+        return sg_modTeammateDeathWarning;
+    } else if (m_Name == "WallTimer") {
+        return sg_modWallTimerEnabled;
+    } else if (m_Name == "Keystroke 1") {
+        return sg_modKeystroke1_Enabled;
+    } else if (m_Name == "Keystroke 2") {
+        return sg_modKeystroke2_Enabled;
     }
     return m_IsVisible;
 }
@@ -579,6 +794,28 @@ void HudWidget::SetVisible(bool visible) {
         sg_modRubberBatteryEnabled = visible;
     } else if (m_Name == "ClassicRubberBattery") {
         sg_modClassicRubberBatteryEnabled = visible;
+    } else if (m_Name == "Chat") {
+        sg_modChatWidgetEnabled = visible;
+    } else if (m_Name == "Minimap") {
+        sg_modMinimapEnabled = visible;
+    } else if (m_Name == "FortressAlerts") {
+        extern bool sg_modFortressAlerts;
+        sg_modFortressAlerts = visible;
+    } else if (m_Name == "CutoffPredictor") {
+        extern bool sg_modCutoffAimbot;
+        sg_modCutoffAimbot = visible;
+    } else if (m_Name == "ProximityWarning") {
+        extern bool sg_modProximityWarning;
+        sg_modProximityWarning = visible;
+    } else if (m_Name == "TeammateDeath") {
+        extern bool sg_modTeammateDeathWarning;
+        sg_modTeammateDeathWarning = visible;
+    } else if (m_Name == "WallTimer") {
+        sg_modWallTimerEnabled = visible;
+    } else if (m_Name == "Keystroke 1") {
+        sg_modKeystroke1_Enabled = visible;
+    } else if (m_Name == "Keystroke 2") {
+        sg_modKeystroke2_Enabled = visible;
     }
     m_IsVisible = visible;
 }
@@ -1045,6 +1282,16 @@ void HudManager::Init() {
     s_Widgets.push_back(new NetworkHealthWidget());
     s_Widgets.push_back(new RubberBatteryWidget());
     s_Widgets.push_back(new ClassicRubberBatteryWidget());
+    s_Widgets.push_back(new MediaWidget());          // OS media / Spotify overlay
+    s_Widgets.push_back(new ChatWidget());
+    s_Widgets.push_back(new MinimapWidget());
+    s_Widgets.push_back(new FortressAlertsWidget());
+    s_Widgets.push_back(new CutoffPredictorWidget());
+    s_Widgets.push_back(new ProximityWarningWidget());
+    s_Widgets.push_back(new TeammateDeathWarningWidget());
+    s_Widgets.push_back(new WallTimerWidget());
+    s_Widgets.push_back(new KeystrokeVisualizerWidget(1));
+    s_Widgets.push_back(new KeystrokeVisualizerWidget(2));
     s_Initialized = true;
 }
 
@@ -1058,6 +1305,14 @@ void HudManager::Shutdown() {
 
 void HudManager::Update(float dt) {
     if (!s_Initialized) return;
+
+    static bool checkedEnv = false;
+    if (!checkedEnv) {
+        checkedEnv = true;
+        if (getenv("RETRO_TEST_HUD_EDIT")) {
+            isHudEditing = true;
+        }
+    }
 
     for (auto* widget : s_Widgets) {
         widget->Update(dt);
@@ -1430,6 +1685,9 @@ void HudManager::Render() {
                         }
                     }
                 }
+
+                // Draw custom widget specific settings if any
+                selectedWidget->DrawCustomSettings(isDirty);
             } else {
                 ImGui::Text("No active widget visible or selected.");
             }
@@ -2995,6 +3253,2079 @@ tString Utf8ToCp1251(const char *utf8) {
         }
     }
     return result;
+}
+
+// =====================================================================
+// ChatWidget Implementation
+// =====================================================================
+
+struct CachedMessage {
+    std::string text;
+    float timestamp;
+    float alpha;
+    float currentAlpha;
+    float slideY;
+};
+static std::vector<CachedMessage> g_chatMessages;
+static int lastCheckedLineCount = 0;
+
+static bool IsTypingActive() {
+    extern int sn_myNetID;
+    for (int i = 0; i < se_PlayerNetIDs.Len(); i++) {
+        ePlayerNetID* p = se_PlayerNetIDs(i);
+        if (p && p->Owner() == sn_myNetID && p->IsChatting()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+ChatWidget::ChatWidget()
+    : HudWidget("Chat", ImVec2(20.0f, 400.0f), ImVec2(400.0f, 220.0f), WIDGET_CONFIG_PASS(sg_hudChat)) {
+}
+
+void ChatWidget::Update(float dt) {
+    HudWidget::Update(dt);
+    for (auto& msg : g_chatMessages) {
+        msg.currentAlpha = ImLerp(msg.currentAlpha, 1.0f, dt * 8.0f);
+        msg.slideY = ImLerp(msg.slideY, 0.0f, dt * 8.0f);
+    }
+}
+
+static void RenderColoredText(const char* text, ImU32 defaultColor, float alpha, float wrapWidth, bool endWithNewLine = true) {
+    struct Token {
+        bool isColor;
+        std::string text;
+        ImU32 color;
+    };
+    std::vector<Token> tokens;
+    
+    ImU32 currentColor = defaultColor;
+    const char* p = text;
+    const char* start = p;
+    
+    auto toUpperChar = [](char c) {
+        return (c >= 'a' && c <= 'z') ? (c - 'a' + 'A') : c;
+    };
+    
+    while (*p) {
+        if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+            // Check for 0xRESETT (case-insensitive, 8 chars)
+            bool isResetT = true;
+            const char* resetTStr = "RESETT";
+            for (int i = 0; i < 6; i++) {
+                if (p[2 + i] == '\0' || toUpperChar(p[2 + i]) != resetTStr[i]) {
+                    isResetT = false;
+                    break;
+                }
+            }
+            if (isResetT) {
+                if (p > start) {
+                    Token t;
+                    t.isColor = false;
+                    t.text = std::string(start, p - start);
+                    tokens.push_back(t);
+                }
+                Token t;
+                t.isColor = true;
+                t.color = defaultColor;
+                tokens.push_back(t);
+                p += 8;
+                start = p;
+                continue;
+            }
+            
+            // Check for 0xRESET (case-insensitive, 7 chars)
+            bool isReset = true;
+            const char* resetStr = "RESET";
+            for (int i = 0; i < 5; i++) {
+                if (p[2 + i] == '\0' || toUpperChar(p[2 + i]) != resetStr[i]) {
+                    isReset = false;
+                    break;
+                }
+            }
+            if (isReset) {
+                if (p > start) {
+                    Token t;
+                    t.isColor = false;
+                    t.text = std::string(start, p - start);
+                    tokens.push_back(t);
+                }
+                Token t;
+                t.isColor = true;
+                t.color = defaultColor;
+                tokens.push_back(t);
+                p += 7;
+                start = p;
+                continue;
+            }
+
+            // Check for 0xRRGGBB
+            bool isHex = true;
+            for (int i = 2; i < 8; i++) {
+                char c = p[i];
+                if (c == '\0' || !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                    isHex = false;
+                    break;
+                }
+            }
+            if (isHex) {
+                if (p > start) {
+                    Token t;
+                    t.isColor = false;
+                    t.text = std::string(start, p - start);
+                    tokens.push_back(t);
+                }
+                
+                unsigned int r, g, b;
+                char hexStr[7];
+                memcpy(hexStr, p + 2, 6);
+                hexStr[6] = '\0';
+                sscanf(hexStr, "%02x%02x%02x", &r, &g, &b);
+                
+                Token t;
+                t.isColor = true;
+                t.color = IM_COL32(r, g, b, 255);
+                tokens.push_back(t);
+                
+                p += 8;
+                start = p;
+                continue;
+            }
+        }
+        p++;
+    }
+    if (p > start) {
+        Token t;
+        t.isColor = false;
+        t.text = std::string(start, p - start);
+        tokens.push_back(t);
+    }
+    
+    float startX = ImGui::GetCursorPosX();
+    currentColor = defaultColor;
+    
+    auto isSpaceChar = [](char c) {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+    };
+    
+    for (const auto& token : tokens) {
+        if (token.isColor) {
+            currentColor = token.color;
+        } else {
+            const std::string& textStr = token.text;
+            size_t idx = 0;
+            while (idx < textStr.size()) {
+                size_t endIdx = idx;
+                if (isSpaceChar(textStr[idx])) {
+                    while (endIdx < textStr.size() && isSpaceChar(textStr[endIdx])) {
+                        endIdx++;
+                    }
+                } else {
+                    while (endIdx < textStr.size() && !isSpaceChar(textStr[endIdx])) {
+                        endIdx++;
+                    }
+                }
+                
+                std::string word = textStr.substr(idx, endIdx - idx);
+                idx = endIdx;
+                
+                float wordWidth = ImGui::CalcTextSize(word.c_str()).x;
+                float cursorX = ImGui::GetCursorPosX();
+                float availWidth = wrapWidth - (cursorX - startX);
+                
+                if (cursorX > startX && wordWidth > availWidth) {
+                    ImGui::NewLine();
+                    if (word.size() > 0 && isSpaceChar(word[0])) {
+                        continue;
+                    }
+                }
+                
+                ImVec4 colVec = ImGui::ColorConvertU32ToFloat4(currentColor);
+                colVec.w *= alpha;
+                
+                ImGui::PushStyleColor(ImGuiCol_Text, colVec);
+                ImGui::TextUnformatted(word.c_str());
+                ImGui::PopStyleColor();
+                ImGui::SameLine(0.0f, 0.0f);
+            }
+        }
+    }
+    if (endWithNewLine) {
+        ImGui::NewLine();
+    }
+}
+
+void ChatWidget::Draw() {
+    if (m_Alpha <= 0.0f) return;
+
+    ImVec2 pos = GetPosition();
+    float scale = GetScale();
+    
+    extern REAL sg_modChatWidth;
+    extern REAL sg_modChatHeight;
+    extern REAL sg_modChatFontSize;
+    extern REAL sg_modChatTimeout;
+    extern bool sg_modChatShowTime;
+
+    m_Size = ImVec2(sg_modChatWidth * scale, sg_modChatHeight * scale);
+    ImVec2 size = m_Size;
+    ImVec2 drawPos = pos + m_SlideOffset;
+
+    bool typing = IsTypingActive();
+    bool editing = isHudEditing;
+
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    
+    float bgOpacity = GetBgOpacitySetting();
+    if (typing || editing) {
+        bgOpacity = std::max(bgOpacity, 0.6f);
+    }
+
+    if (bgOpacity > 0.001f) {
+        ImU32 bgCol = GetBgCol();
+        ImVec4 bgColVec = ImGui::ColorConvertU32ToFloat4(bgCol);
+        bgColVec.w *= bgOpacity;
+        dl->AddRectFilled(drawPos, drawPos + size, ImGui::ColorConvertFloat4ToU32(bgColVec), 8.0f * scale);
+        
+        ImU32 borderCol = GetBorderCol();
+        ImVec4 borderColVec = ImGui::ColorConvertU32ToFloat4(borderCol);
+        borderColVec.w *= (typing || editing) ? 1.0f : m_Alpha;
+        dl->AddRect(drawPos, drawPos + size, ImGui::ColorConvertFloat4ToU32(borderColVec), 8.0f * scale, 0, 1.0f);
+    }
+
+    // Capture console messages in real time
+    int currentLineCount = sr_con.GetLineCount();
+    if (currentLineCount > lastCheckedLineCount) {
+        if (currentLineCount < lastCheckedLineCount) {
+            lastCheckedLineCount = 0;
+        }
+        for (int i = lastCheckedLineCount; i < currentLineCount; i++) {
+            tString const& rawLine = sr_con.GetLine(i);
+            std::string lineStr = static_cast<const char*>(rawLine);
+            
+            CachedMessage msg;
+            msg.text = lineStr;
+            msg.timestamp = (float)ImGui::GetTime();
+            msg.alpha = 1.0f;
+            msg.currentAlpha = 0.0f;
+            msg.slideY = 15.0f;
+            g_chatMessages.push_back(msg);
+        }
+        lastCheckedLineCount = currentLineCount;
+    }
+
+    if (g_chatMessages.size() > 1000) {
+        g_chatMessages.erase(g_chatMessages.begin(), g_chatMessages.end() - 1000);
+    }
+
+    // Set up window flags
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | 
+                             ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar;
+    
+    if (!typing) {
+        flags |= ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoFocusOnAppearing;
+    } else {
+        flags &= ~ImGuiWindowFlags_NoScrollbar;
+    }
+
+    ImGui::SetNextWindowPos(drawPos + ImVec2(6.0f * scale, 6.0f * scale));
+    ImGui::SetNextWindowSize(size - ImVec2(12.0f * scale, 12.0f * scale));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+    char winName[64];
+    snprintf(winName, sizeof(winName), "##ChatWindow_%p", this);
+
+    if (ImGui::Begin(winName, nullptr, flags)) {
+        std::vector<CachedMessage> visibleMsgs;
+        float curTime = (float)ImGui::GetTime();
+        
+        for (const auto& msg : g_chatMessages) {
+            float elapsed = curTime - msg.timestamp;
+            float msgAlpha = 1.0f;
+            if (!typing && !editing) {
+                if (elapsed > sg_modChatTimeout) {
+                    msgAlpha = 1.0f - (elapsed - sg_modChatTimeout) / 1.0f;
+                    if (msgAlpha < 0.0f) msgAlpha = 0.0f;
+                }
+            }
+            if (msgAlpha > 0.01f || typing || editing) {
+                CachedMessage displayMsg = msg;
+                displayMsg.alpha = msgAlpha;
+                visibleMsgs.push_back(displayMsg);
+            }
+        }
+
+        if (visibleMsgs.size() > 1000) {
+            visibleMsgs.erase(visibleMsgs.begin(), visibleMsgs.end() - 1000);
+        }
+
+        if (editing && visibleMsgs.empty()) {
+            CachedMessage p1 = { "System: Welcome to retrocycles mod menu!", curTime, 1.0f, 1.0f, 0.0f };
+            CachedMessage p2 = { "Player1: Good luck!", curTime, 1.0f, 1.0f, 0.0f };
+            CachedMessage p3 = { "Player2: Have fun!", curTime, 1.0f, 1.0f, 0.0f };
+            visibleMsgs.push_back(p1);
+            visibleMsgs.push_back(p2);
+            visibleMsgs.push_back(p3);
+        }
+
+        float originalFontSize = ImGui::GetFontSize();
+        float targetFontSize = sg_modChatFontSize * scale;
+        ImGui::SetWindowFontScale(targetFontSize / originalFontSize);
+
+        for (const auto& msg : visibleMsgs) {
+            std::string converted = ConvertNonUtf8ToUtf8(msg.text);
+            
+            float finalAlpha = msg.alpha * msg.currentAlpha * m_Alpha;
+            if (finalAlpha <= 0.001f) continue;
+            
+            // Push vertical slide
+            if (msg.slideY > 0.1f) {
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + msg.slideY);
+            }
+            
+            ImU32 textCol = GetTextCol();
+            
+            if (sg_modChatShowTime) {
+                time_t rawtime;
+                struct tm * timeinfo;
+                char timeBuf[12];
+                time(&rawtime);
+                timeinfo = localtime(&rawtime);
+                strftime(timeBuf, sizeof(timeBuf), "[%H:%M:%S] ", timeinfo);
+                
+                ImVec4 timeCol(0.5f, 0.5f, 0.5f, finalAlpha);
+                ImGui::TextColored(timeCol, "%s", timeBuf);
+                ImGui::SameLine(0.0f, 0.0f);
+            }
+            
+            ImU32 msgColor = textCol;
+            bool isSystem = (converted.rfind("* ", 0) == 0);
+            bool isDeath = (converted.find("crashed into") != std::string::npos ||
+                            converted.find("has been exterminated") != std::string::npos ||
+                            converted.find("died") != std::string::npos ||
+                            converted.find("killed") != std::string::npos ||
+                            converted.find("suicide") != std::string::npos);
+            
+            if (isSystem) {
+                msgColor = IM_COL32(255, 200, 50, 255); // Gold/Yellow
+            } else if (isDeath) {
+                msgColor = IM_COL32(255, 90, 90, 255);   // Red/Orange
+            }
+            
+            size_t colonPos = converted.find(": ");
+            if (!isSystem && !isDeath && colonPos != std::string::npos && colonPos > 0) {
+                std::string nickname = converted.substr(0, colonPos);
+                std::string messageBody = converted.substr(colonPos);
+                
+                RenderColoredText(nickname.c_str(), IM_COL32(0, 210, 255, 255), finalAlpha, ImGui::GetContentRegionAvail().x, false);
+                RenderColoredText(messageBody.c_str(), textCol, finalAlpha, ImGui::GetContentRegionAvail().x, true);
+            } else {
+                RenderColoredText(converted.c_str(), msgColor, finalAlpha, ImGui::GetContentRegionAvail().x, true);
+            }
+        }
+
+        // Handle manual scrolling via PgUp / PgDn keys
+        float scrollStep = 150.0f * scale;
+        if (ImGui::IsKeyPressed(ImGuiKey_PageUp, true)) {
+            ImGui::SetScrollY(ImGui::GetScrollY() - scrollStep);
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_PageDown, true)) {
+            ImGui::SetScrollY(ImGui::GetScrollY() + scrollStep);
+        }
+
+        static int prevMsgCount = 0;
+        int curMsgCount = g_chatMessages.size();
+        if (curMsgCount > prevMsgCount || typing) {
+            ImGui::SetScrollHereY(1.0f);
+            prevMsgCount = curMsgCount;
+        }
+        
+        ImGui::SetWindowFontScale(1.0f);
+    }
+    ImGui::End();
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar();
+}
+
+void ChatWidget::DrawCustomSettings(bool& isDirty) {
+    ImGui::TextColored(ImVec4(0.0f, 0.75f, 1.0f, 1.0f), "Chat Settings");
+    
+    extern REAL sg_modChatWidth;
+    extern REAL sg_modChatHeight;
+    extern REAL sg_modChatFontSize;
+    extern REAL sg_modChatTimeout;
+    extern bool sg_modChatShowTime;
+
+    float widthVal = (float)sg_modChatWidth;
+    if (ImGui::SliderFloat("Width", &widthVal, 200.0f, 800.0f, "%.0f px")) {
+        sg_modChatWidth = (REAL)widthVal;
+        isDirty = true;
+    }
+    
+    float heightVal = (float)sg_modChatHeight;
+    if (ImGui::SliderFloat("Height", &heightVal, 100.0f, 600.0f, "%.0f px")) {
+        sg_modChatHeight = (REAL)heightVal;
+        isDirty = true;
+    }
+    
+    float fontVal = (float)sg_modChatFontSize;
+    if (ImGui::SliderFloat("Font Size", &fontVal, 8.0f, 32.0f, "%.0f px")) {
+        sg_modChatFontSize = (REAL)fontVal;
+        isDirty = true;
+    }
+    
+    float timeoutVal = (float)sg_modChatTimeout;
+    if (ImGui::SliderFloat("Message Timeout", &timeoutVal, 1.0f, 30.0f, "%.1fs")) {
+        sg_modChatTimeout = (REAL)timeoutVal;
+        isDirty = true;
+    }
+    
+    bool showTime = sg_modChatShowTime;
+    if (ImGui::Checkbox("Show Timestamps", &showTime)) {
+        sg_modChatShowTime = showTime;
+        isDirty = true;
+    }
+}
+
+
+// =====================================================================
+// MinimapWidget Implementation
+// =====================================================================
+
+struct DeathEffect {
+    eCoord position;
+    float timeOfDeath;
+    ImU32 color;
+};
+static std::map<unsigned short, DeathEffect> g_deathEffects;
+static std::map<unsigned short, bool> g_prevAliveStates;
+
+static bool ClipLineToCircle(ImVec2& p0, ImVec2& p1, float R) {
+    ImVec2 d = ImVec2(p1.x - p0.x, p1.y - p0.y);
+    float A = d.x * d.x + d.y * d.y;
+    if (A < 0.0001f) {
+        return (p0.x * p0.x + p0.y * p0.y <= R * R);
+    }
+    float B = 2.0f * (p0.x * d.x + p0.y * d.y);
+    float C = p0.x * p0.x + p0.y * p0.y - R * R;
+    float disc = B * B - 4.0f * A * C;
+    if (disc < 0) return false;
+    float t0 = (-B - sqrtf(disc)) / (2.0f * A);
+    float t1 = (-B + sqrtf(disc)) / (2.0f * A);
+    if (t0 > 1.0f || t1 < 0.0f) return false;
+    float t_start = std::max(0.0f, t0);
+    float t_end = std::min(1.0f, t1);
+    if (t_start > t_end) return false;
+    ImVec2 np0 = ImVec2(p0.x + d.x * t_start, p0.y + d.y * t_start);
+    ImVec2 np1 = ImVec2(p0.x + d.x * t_end, p0.y + d.y * t_end);
+    p0 = np0;
+    p1 = np1;
+    return true;
+}
+
+MinimapWidget::MinimapWidget()
+    : HudWidget("Minimap", ImVec2(1000.0f, 500.0f), ImVec2(200.0f, 200.0f), WIDGET_CONFIG_PASS(sg_hudMinimap)), m_CurrentAngle(0.0f) {
+}
+
+void MinimapWidget::Update(float dt) {
+    HudWidget::Update(dt);
+}
+
+void MinimapWidget::Draw() {
+    if (m_Alpha <= 0.0f) return;
+
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    ImVec2 pos = GetPosition();
+    float scale = GetScale();
+    
+    extern REAL sg_modMinimapZoom;
+    extern bool sg_modMinimapRotate;
+    extern int sg_modMinimapShape;
+    extern bool sg_modMinimapAutoZoom;
+    extern bool sg_modMinimapDeadEffect;
+
+    m_Size = ImVec2(200.0f * scale, 200.0f * scale);
+    ImVec2 size = m_Size;
+    ImVec2 drawPos = pos + m_SlideOffset;
+    ImVec2 mapCenter = drawPos + size * 0.5f;
+    float R_map = size.x * 0.5f;
+
+    const eRectangle &bounds = eWallRim::GetBounds();
+    eCoord arenaCenter;
+    arenaCenter.x = (bounds.GetLow().x + bounds.GetHigh().x) * 0.5f;
+    arenaCenter.y = (bounds.GetLow().y + bounds.GetHigh().y) * 0.5f;
+    float arena_w = bounds.GetHigh().x - bounds.GetLow().x;
+    float arena_h = bounds.GetHigh().y - bounds.GetLow().y;
+    float maxArenaRadius = std::max(arena_w, arena_h) * 0.5f;
+    if (maxArenaRadius < 10.0f) maxArenaRadius = 10.0f;
+
+    gCycle* localPlayerCycle = nullptr;
+    extern int sn_myNetID;
+    for (int i = 0; i < se_PlayerNetIDs.Len(); i++) {
+        ePlayerNetID* p = se_PlayerNetIDs(i);
+        if (p && p->Owner() == sn_myNetID && p->Object()) {
+            localPlayerCycle = dynamic_cast<gCycle*>(p->Object());
+            break;
+        }
+    }
+
+    if (sg_modMinimapDeadEffect) {
+        for (int i = 0; i < se_PlayerNetIDs.Len(); i++) {
+            ePlayerNetID *p = se_PlayerNetIDs(i);
+            if (p) {
+                unsigned short pid = p->pID;
+                bool isAlive = p->Object() && p->Object()->Alive();
+                bool wasAlive = g_prevAliveStates[pid];
+                if (wasAlive && !isAlive) {
+                    DeathEffect effect;
+                    effect.position = p->Object() ? p->Object()->Position() : eCoord(0.0f, 0.0f);
+                    effect.timeOfDeath = (float)ImGui::GetTime();
+                    
+                    gRealColor col;
+                    col.r = 1.0f; col.g = 0.1f; col.b = 0.1f;
+                    gCycle* cycle = dynamic_cast<gCycle*>(p->Object());
+                    if (cycle) {
+                        col = cycle->color_;
+                    }
+                    effect.color = ImGui::ColorConvertFloat4ToU32(ImVec4(col.r, col.g, col.b, 1.0f));
+                    g_deathEffects[pid] = effect;
+                }
+                g_prevAliveStates[pid] = isAlive;
+            }
+        }
+    }
+
+    float minZoneRadius = 999999.0f;
+    eCoord zoneCenter(0.0f, 0.0f);
+    bool foundSumoZone = false;
+    
+    if (localPlayerCycle && localPlayerCycle->Grid()) {
+        const tList<eGameObject>& gameObjects = localPlayerCycle->Grid()->GameObjects();
+        for (int j = gameObjects.Len() - 1; j >= 0; j--) {
+            gZone *zone = dynamic_cast<gZone*>(gameObjects(j));
+            if (zone && zone->GetRadius() > 0.0f) {
+                float zrad = zone->GetRadius();
+                if (zrad < minZoneRadius) {
+                    minZoneRadius = zrad;
+                    zoneCenter = zone->GetPosition();
+                    foundSumoZone = true;
+                }
+            }
+        }
+    }
+
+    eCoord focusPoint = arenaCenter;
+    if (sg_modMinimapAutoZoom && foundSumoZone) {
+        focusPoint = zoneCenter;
+    } else if (localPlayerCycle) {
+        focusPoint = localPlayerCycle->Position();
+    }
+
+    float innerZoom = (float)sg_modMinimapZoom;
+    if (innerZoom < 1.0f) innerZoom = 1.0f;
+
+    float scaleFactor = 1.0f;
+    if (sg_modMinimapAutoZoom && foundSumoZone) {
+        scaleFactor = (R_map * 0.95f) / minZoneRadius;
+        float baseScaleFactor = (R_map * 0.95f) / maxArenaRadius;
+        if (scaleFactor < baseScaleFactor) {
+            scaleFactor = baseScaleFactor;
+        }
+    } else {
+        scaleFactor = ((R_map * 0.95f) / maxArenaRadius) * innerZoom;
+    }
+
+    extern REAL sg_modMinimapRotateSpeed;
+    float rotCos = 1.0f, rotSin = 0.0f;
+    if (sg_modMinimapRotate && localPlayerCycle) {
+        eCoord dir = localPlayerCycle->Direction();
+        float len = sqrtf(dir.x*dir.x + dir.y*dir.y);
+        if (len > 0.001f) {
+            float targetAngle = atan2f(-dir.x, dir.y);
+            float diff = targetAngle - m_CurrentAngle;
+            while (diff < -3.14159265f) diff += 2.0f * 3.14159265f;
+            while (diff > 3.14159265f) diff -= 2.0f * 3.14159265f;
+            
+            float dt = ImGui::GetIO().DeltaTime;
+            float speed = (float)sg_modMinimapRotateSpeed;
+            if (speed >= 30.0f) {
+                m_CurrentAngle = targetAngle;
+            } else {
+                m_CurrentAngle += diff * dt * speed;
+            }
+            rotCos = cosf(m_CurrentAngle);
+            rotSin = sinf(m_CurrentAngle);
+        }
+    } else {
+        m_CurrentAngle = 0.0f;
+    }
+
+    auto WorldToScreen = [&](const eCoord& w) -> ImVec2 {
+        float dx = w.x - focusPoint.x;
+        float dy = w.y - focusPoint.y;
+        float rx = dx * rotCos - dy * rotSin;
+        float ry = dx * rotSin + dy * rotCos;
+        float sx = mapCenter.x + rx * scaleFactor;
+        float sy = mapCenter.y - ry * scaleFactor;
+        return ImVec2(sx, sy);
+    };
+
+    if (sg_modMinimapShape == 0) {
+        dl->AddCircleFilled(mapCenter, R_map, GetBgCol());
+    } else {
+        dl->AddRectFilled(drawPos, drawPos + size, GetBgCol(), 8.0f * scale);
+    }
+
+    dl->PushClipRect(drawPos, drawPos + size, true);
+
+    // Draw Sci-Fi radar sweep & grid inside the clip rect
+    if (sg_modMinimapShape == 0) {
+        // Grid lines (3 concentric circles at 25%, 50%, 75% radius)
+        dl->AddCircle(mapCenter, R_map * 0.25f, GetColorWithAlpha(IM_COL32(255, 255, 255, 18)), 32, 1.0f * scale);
+        dl->AddCircle(mapCenter, R_map * 0.50f, GetColorWithAlpha(IM_COL32(255, 255, 255, 18)), 32, 1.0f * scale);
+        dl->AddCircle(mapCenter, R_map * 0.75f, GetColorWithAlpha(IM_COL32(255, 255, 255, 18)), 32, 1.0f * scale);
+        
+        // Grid crosshairs
+        dl->AddLine(mapCenter - ImVec2(R_map, 0.0f), mapCenter + ImVec2(R_map, 0.0f), GetColorWithAlpha(IM_COL32(255, 255, 255, 12)), 1.0f * scale);
+        dl->AddLine(mapCenter - ImVec2(0.0f, R_map), mapCenter + ImVec2(0.0f, R_map), GetColorWithAlpha(IM_COL32(255, 255, 255, 12)), 1.0f * scale);
+        
+        // Radar Sweep rotation animation (1.8 rad/s)
+        float sweepTime = (float)ImGui::GetTime();
+        float sweepAngle = sweepTime * 1.8f;
+        ImVec2 sweepPt = mapCenter + ImVec2(cosf(sweepAngle), sinf(sweepAngle)) * R_map;
+        dl->AddLine(mapCenter, sweepPt, GetColorWithAlpha(IM_COL32(0, 190, 255, 100)), 1.5f * scale);
+        
+        // Draw trailing fade sectors
+        int sectors = 12;
+        for (int s = 0; s < sectors; s++) {
+            float tailAngle = sweepAngle - (s + 1) * 0.06f;
+            float alphaFactor = (1.0f - (float)s / sectors) * 0.12f;
+            ImVec2 tailPt1 = mapCenter + ImVec2(cosf(tailAngle), sinf(tailAngle)) * R_map;
+            ImVec2 tailPt2 = mapCenter + ImVec2(cosf(tailAngle - 0.06f), sinf(tailAngle - 0.06f)) * R_map;
+            
+            dl->AddTriangleFilled(mapCenter, tailPt1, tailPt2, GetColorWithAlpha(IM_COL32(0, 190, 255, (int)(alphaFactor * 255))));
+        }
+    } else {
+        // Square grid lines (horizontal/vertical helper grids)
+        float step = R_map * 0.5f;
+        for (float dx = -R_map + step; dx < R_map; dx += step) {
+            dl->AddLine(mapCenter + ImVec2(dx, -R_map), mapCenter + ImVec2(dx, R_map), GetColorWithAlpha(IM_COL32(255, 255, 255, 8)), 1.0f * scale);
+            dl->AddLine(mapCenter + ImVec2(-R_map, dx), mapCenter + ImVec2(R_map, dx), GetColorWithAlpha(IM_COL32(255, 255, 255, 8)), 1.0f * scale);
+        }
+    }
+
+    auto DrawClippedLine = [&](const ImVec2& p0_in, const ImVec2& p1_in, ImU32 col, float thickness) {
+        ImVec2 p0 = p0_in;
+        ImVec2 p1 = p1_in;
+        if (sg_modMinimapShape == 0) {
+            ImVec2 p0_rel = p0 - mapCenter;
+            ImVec2 p1_rel = p1 - mapCenter;
+            if (ClipLineToCircle(p0_rel, p1_rel, R_map)) {
+                dl->AddLine(p0_rel + mapCenter, p1_rel + mapCenter, col, thickness);
+            }
+        } else {
+            dl->AddLine(p0, p1, col, thickness);
+        }
+    };
+
+    for (int i = se_rimWalls.Len() - 1; i >= 0; --i) {
+        eWallRim *wall = se_rimWalls[i];
+        if (wall) {
+            ImVec2 p0 = WorldToScreen(wall->EndPoint(0));
+            ImVec2 p1 = WorldToScreen(wall->EndPoint(1));
+            DrawClippedLine(p0, p1, GetColorWithAlpha(IM_COL32(255, 255, 255, 180)), 2.0f * scale);
+        }
+    }
+
+    if (localPlayerCycle && localPlayerCycle->Grid()) {
+        const tList<eGameObject>& gameObjects = localPlayerCycle->Grid()->GameObjects();
+        for (int j = gameObjects.Len() - 1; j >= 0; j--) {
+            gZone *zone = dynamic_cast<gZone*>(gameObjects(j));
+            if (zone && zone->GetRadius() > 0.0f) {
+                eCoord zpos = zone->GetPosition();
+                float zrad = zone->GetRadius();
+                gRealColor zcol = zone->GetColor();
+                ImU32 borderCol = GetColorWithAlpha(IM_COL32((int)(zcol.r * 255), (int)(zcol.g * 255), (int)(zcol.b * 255), 200));
+                
+                int numSegments = 32;
+                ImVec2 prevPt;
+                for (int i = 0; i <= numSegments; i++) {
+                    float ang = i * 2.0f * M_PI / numSegments;
+                    eCoord wPt(zpos.x + cosf(ang) * zrad, zpos.y + sinf(ang) * zrad);
+                    ImVec2 sPt = WorldToScreen(wPt);
+                    if (i > 0) {
+                        DrawClippedLine(prevPt, sPt, borderCol, 1.5f * scale);
+                    }
+                    prevPt = sPt;
+                }
+            }
+        }
+    }
+
+    auto drawWall = [&](gNetPlayerWall *wall) {
+        if (!wall) return;
+        gCycle *cycle = wall->Cycle();
+        if (!cycle) return;
+
+        eCoord p0 = wall->EndPoint(0);
+        eCoord p1 = wall->EndPoint(1);
+
+        REAL wallBeg = wall->BegPos();
+        REAL wallEnd = wall->EndPos();
+
+        if (wallBeg > cycle->GetDistance()) return;
+
+        float margin = 50.0f;
+        if (p0.x < bounds.GetLow().x - margin || p0.x > bounds.GetHigh().x + margin ||
+            p0.y < bounds.GetLow().y - margin || p0.y > bounds.GetHigh().y + margin ||
+            p1.x < bounds.GetLow().x - margin || p1.x > bounds.GetHigh().x + margin ||
+            p1.y < bounds.GetLow().y - margin || p1.y > bounds.GetHigh().y + margin) {
+            return;
+        }
+
+        REAL maxLen = cycle->MaxWallsLength();
+        if (maxLen > 0) {
+            REAL visibleLen = cycle->ThisWallsLength();
+            if (visibleLen <= 0.0f) return;
+            REAL minVisibleDist = cycle->GetDistance() - visibleLen;
+            if (wallEnd < minVisibleDist) return;
+
+            if (wallBeg < minVisibleDist && wallEnd > wallBeg) {
+                REAL t = (minVisibleDist - wallBeg) / (wallEnd - wallBeg);
+                if (t > 0.0f && t < 1.0f) {
+                    p0.x = p0.x + (p1.x - p0.x) * t;
+                    p0.y = p0.y + (p1.y - p0.y) * t;
+                }
+            }
+        }
+
+        float alpha = cycle->Alive() ? 0.8f : 0.3f;
+        ImU32 trailCol = GetColorWithAlpha(IM_COL32((int)(cycle->color_.r * 255), (int)(cycle->color_.g * 255), (int)(cycle->color_.b * 255), (int)(alpha * 255)));
+
+        DrawClippedLine(WorldToScreen(p0), WorldToScreen(p1), trailCol, 2.0f * scale);
+    };
+
+    for (int i = sg_netPlayerWalls.Len() - 1; i >= 0; --i) {
+        drawWall(sg_netPlayerWalls[i]);
+    }
+    for (int i = sg_netPlayerWallsGridded.Len() - 1; i >= 0; --i) {
+        drawWall(sg_netPlayerWallsGridded[i]);
+    }
+
+    for (int i = se_PlayerNetIDs.Len() - 1; i >= 0; --i) {
+        ePlayerNetID *p = se_PlayerNetIDs(i);
+        if (p && p->Object() && p->Object()->Alive()) {
+            gCycle *cycle = dynamic_cast<gCycle*>(p->Object());
+            if (cycle) {
+                ImVec2 sPos = WorldToScreen(cycle->Position());
+                
+                if (sg_modMinimapShape == 0) {
+                    float dist = sqrtf((sPos.x - mapCenter.x)*(sPos.x - mapCenter.x) + (sPos.y - mapCenter.y)*(sPos.y - mapCenter.y));
+                    if (dist > R_map - 2.0f) {
+                        continue;
+                    }
+                }
+                
+                ImU32 pCol = GetColorWithAlpha(IM_COL32((int)(cycle->color_.r * 255), (int)(cycle->color_.g * 255), (int)(cycle->color_.b * 255), 255));
+                
+                if (cycle == localPlayerCycle) {
+                    eCoord dir = cycle->Direction();
+                    float dirLen = sqrtf(dir.x*dir.x + dir.y*dir.y);
+                    ImVec2 heading(0.0f, -1.0f);
+                    if (!sg_modMinimapRotate && dirLen > 0.001f) {
+                        heading = ImVec2(dir.x / dirLen, -dir.y / dirLen);
+                    }
+                    
+                    float arrowSize = 6.0f * scale;
+                    ImVec2 left(-heading.y, heading.x);
+                    
+                    ImVec2 pA = sPos + heading * arrowSize;
+                    ImVec2 pB = sPos - heading * arrowSize * 0.6f + left * arrowSize * 0.5f;
+                    ImVec2 pC = sPos - heading * arrowSize * 0.6f - left * arrowSize * 0.5f;
+                    
+                    dl->AddTriangleFilled(pA, pB, pC, IM_COL32(255, 255, 255, 255));
+                    dl->AddTriangle(pA, pB, pC, IM_COL32(0, 0, 0, 200), 1.0f);
+                } else {
+                    dl->AddCircleFilled(sPos, 4.0f * scale, pCol);
+                    dl->AddCircle(sPos, 4.0f * scale, IM_COL32(0, 0, 0, 220), 1.0f * scale);
+                }
+            }
+        }
+    }
+
+    if (sg_modMinimapDeadEffect) {
+        float curTime = (float)ImGui::GetTime();
+        for (auto it = g_deathEffects.begin(); it != g_deathEffects.end(); ) {
+            float elapsed = curTime - it->second.timeOfDeath;
+            if (elapsed > 2.0f) {
+                it = g_deathEffects.erase(it);
+            } else {
+                float progress = elapsed / 2.0f;
+                float alpha = 1.0f - progress;
+                float pulseRadius = (5.0f + progress * 25.0f) * scale;
+                
+                ImVec2 sPos = WorldToScreen(it->second.position);
+                
+                bool shouldDraw = true;
+                if (sg_modMinimapShape == 0) {
+                    float dist = sqrtf((sPos.x - mapCenter.x)*(sPos.x - mapCenter.x) + (sPos.y - mapCenter.y)*(sPos.y - mapCenter.y));
+                    if (dist > R_map) {
+                        shouldDraw = false;
+                    }
+                }
+                
+                if (shouldDraw) {
+                    ImVec4 colorVec = ImGui::ColorConvertU32ToFloat4(it->second.color);
+                    colorVec.w *= alpha * m_Alpha;
+                    ImU32 col = ImGui::ColorConvertFloat4ToU32(colorVec);
+                    
+                    dl->AddCircle(sPos, pulseRadius, col, 24, 2.0f * scale);
+                    
+                    float crossSize = 6.0f * scale;
+                    dl->AddLine(sPos - ImVec2(crossSize, crossSize), sPos + ImVec2(crossSize, crossSize), col, 2.0f);
+                    dl->AddLine(sPos - ImVec2(-crossSize, crossSize), sPos + ImVec2(-crossSize, crossSize), col, 2.0f);
+                    
+                    // Draw the blinking & fading player dot at the death position
+                    bool drawDot = true;
+                    if (elapsed < 1.2f) {
+                        drawDot = ((int)(elapsed * 12.0f) % 2 == 0);
+                    }
+                    if (drawDot) {
+                        dl->AddCircleFilled(sPos, 4.0f * scale, col);
+                        dl->AddCircle(sPos, 4.0f * scale, IM_COL32(0, 0, 0, (int)(alpha * m_Alpha * 220)), 1.0f * scale);
+                    }
+                }
+                ++it;
+            }
+        }
+    }
+
+    dl->PopClipRect();
+
+    if (sg_modMinimapShape == 0) {
+        dl->AddCircle(mapCenter, R_map, GetBorderCol(), 2.0f * scale);
+    } else {
+        dl->AddRect(drawPos, drawPos + size, GetBorderCol(), 8.0f * scale, 0, 2.0f * scale);
+    }
+}
+
+void MinimapWidget::DrawCustomSettings(bool& isDirty) {
+    ImGui::TextColored(ImVec4(0.0f, 0.75f, 1.0f, 1.0f), "Minimap Settings");
+    
+    extern REAL sg_modMinimapZoom;
+    extern bool sg_modMinimapRotate;
+    extern int sg_modMinimapShape;
+    extern bool sg_modMinimapAutoZoom;
+    extern bool sg_modMinimapDeadEffect;
+
+    float zoomVal = (float)sg_modMinimapZoom;
+    if (ImGui::SliderFloat("Zoom Level", &zoomVal, 1.0f, 10.0f, "%.1fx")) {
+        sg_modMinimapZoom = (REAL)zoomVal;
+        isDirty = true;
+    }
+    
+    bool rotate = sg_modMinimapRotate;
+    if (ImGui::Checkbox("Rotate Map", &rotate)) {
+        sg_modMinimapRotate = rotate;
+        isDirty = true;
+    }
+    
+    const char* shapes[] = { "Circle", "Square" };
+    int shape = sg_modMinimapShape;
+    if (ImGui::Combo("Map Shape", &shape, shapes, 2)) {
+        sg_modMinimapShape = shape;
+        isDirty = true;
+    }
+    
+    bool autoZoom = sg_modMinimapAutoZoom;
+    if (ImGui::Checkbox("Sumo Auto-Zoom", &autoZoom)) {
+        sg_modMinimapAutoZoom = autoZoom;
+        isDirty = true;
+    }
+    
+    bool deadEffect = sg_modMinimapDeadEffect;
+    if (ImGui::Checkbox("Death Pulse Effect", &deadEffect)) {
+        sg_modMinimapDeadEffect = deadEffect;
+        isDirty = true;
+    }
+}
+
+// ---------------------------------------------------------------------
+// FortressAlertsWidget Implementation
+// ---------------------------------------------------------------------
+FortressAlertsWidget::FortressAlertsWidget()
+    : HudWidget("FortressAlerts", ImVec2(20.0f, 140.0f), ImVec2(220.0f, 60.0f), WIDGET_CONFIG_PASS(sg_hudFortressAlerts)) {
+}
+
+void FortressAlertsWidget::Draw() {
+    if (m_Alpha <= 0.0f) return;
+
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    ImVec2 pos = GetPosition();
+    ImVec2 drawPos = pos + m_SlideOffset;
+    float scale = GetScale();
+
+    bool ourZoneAttacked = false;
+    bool enemyZoneCapturing = false;
+    float maxDefenseConquest = 0.0f;
+    float maxOffenseConquest = 0.0f;
+
+    ePlayerNetID* me = nullptr;
+    ePlayer* lp = ePlayer::PlayerConfig(0);
+    if (lp) me = lp->netPlayer;
+
+    if (me && me->CurrentTeam() && me->Object() && me->Object()->Grid()) {
+        eTeam* myTeam = me->CurrentTeam();
+        eGrid* grid = me->Object()->Grid();
+        const tList<eGameObject>& gameObjects = grid->GameObjects();
+
+        float myR = myTeam->R() / 15.0f;
+        float myG = myTeam->G() / 15.0f;
+        float myB = myTeam->B() / 15.0f;
+
+        for (int j = gameObjects.Len() - 1; j >= 0; j--) {
+            gZone *zone = dynamic_cast<gZone*>(gameObjects(j));
+            if (!zone) continue;
+
+            REAL rotSpeed = zone->GetRotationSpeed();
+            REAL baseRot = 0.3f;
+            if (rotSpeed <= baseRot + 0.05f) continue;
+
+            REAL maxSpeed = 10.0f * (2.0f * M_PI) / 11.0f;
+            REAL val = (rotSpeed - baseRot) / maxSpeed;
+            if (val < 0.0f) val = 0.0f;
+            REAL conquest = sqrtf(val);
+            if (conquest > 1.0f) conquest = 1.0f;
+
+            gRealColor const &zc = zone->GetColor();
+            float dr = zc.r - myR, dg = zc.g - myG, db = zc.b - myB;
+            float colorDist = dr*dr + dg*dg + db*db;
+
+            if (colorDist < 0.3f) {
+                ourZoneAttacked = true;
+                if (conquest > maxDefenseConquest) maxDefenseConquest = conquest;
+            } else {
+                enemyZoneCapturing = true;
+                if (conquest > maxOffenseConquest) maxOffenseConquest = conquest;
+            }
+        }
+    }
+
+    if (isHudEditing && !ourZoneAttacked && !enemyZoneCapturing) {
+        ourZoneAttacked = true;
+        maxDefenseConquest = 0.65f;
+    }
+
+    if (!ourZoneAttacked && !enemyZoneCapturing) return;
+
+    float w = 280.0f * scale;
+    float h = 60.0f * scale;
+    m_Size = ImVec2(w, h);
+
+    dl->AddRectFilled(drawPos, drawPos + m_Size, GetBgCol(), 8.0f * scale);
+    dl->AddRect(drawPos, drawPos + m_Size, GetBorderCol(), 8.0f * scale, 0, 1.0f);
+
+    float padding = 12.0f * scale;
+    float textY = drawPos.y + 10.0f * scale;
+    float barY = drawPos.y + 36.0f * scale;
+    float barH = 8.0f * scale;
+    float barW = w - padding * 2.0f;
+
+    float pulse = 0.5f + 0.5f * sinf((float)ImGui::GetTime() * 8.0f);
+
+    if (ourZoneAttacked) {
+        ImU32 textCol = GetColorWithAlpha(IM_COL32(255, 60, 60, 255));
+        
+        char pctBuf[32];
+        snprintf(pctBuf, sizeof(pctBuf), "%d%%", (int)(maxDefenseConquest * 100.0f));
+
+        bool pushedHeader = false;
+        if (g_FontHeader) {
+            ImGui::PushFont(g_FontHeader);
+            pushedHeader = true;
+        }
+        float pctW = CalcTextSize(pctBuf).x;
+        dl->PushClipRect(ImVec2(drawPos.x + padding, textY), ImVec2(drawPos.x + w - padding - pctW - 8.0f * scale, textY + 24.0f * scale), true);
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, ImVec2(drawPos.x + padding, textY), textCol, "DEFENDING ZONE");
+        dl->PopClipRect();
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, ImVec2(drawPos.x + w - padding - pctW, textY), GetTextCol(), pctBuf);
+        if (pushedHeader) {
+            ImGui::PopFont();
+        }
+
+        dl->AddRectFilled(ImVec2(drawPos.x + padding, barY), ImVec2(drawPos.x + padding + barW, barY + barH), IM_COL32(50, 10, 10, 150), 4.0f * scale);
+        ImU32 fillCol = GetColorWithAlpha(IM_COL32(255, 50, 50, (int)(180 + pulse * 75)));
+        dl->AddRectFilled(ImVec2(drawPos.x + padding, barY), ImVec2(drawPos.x + padding + barW * maxDefenseConquest, barY + barH), fillCol, 4.0f * scale);
+    } else if (enemyZoneCapturing) {
+        ImU32 textCol = GetColorWithAlpha(IM_COL32(50, 220, 100, 255));
+        
+        char pctBuf[32];
+        snprintf(pctBuf, sizeof(pctBuf), "%d%%", (int)(maxOffenseConquest * 100.0f));
+
+        bool pushedHeader = false;
+        if (g_FontHeader) {
+            ImGui::PushFont(g_FontHeader);
+            pushedHeader = true;
+        }
+        float pctW = CalcTextSize(pctBuf).x;
+        dl->PushClipRect(ImVec2(drawPos.x + padding, textY), ImVec2(drawPos.x + w - padding - pctW - 8.0f * scale, textY + 24.0f * scale), true);
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, ImVec2(drawPos.x + padding, textY), textCol, "CONQUERING ZONE");
+        dl->PopClipRect();
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, ImVec2(drawPos.x + w - padding - pctW, textY), GetTextCol(), pctBuf);
+        if (pushedHeader) {
+            ImGui::PopFont();
+        }
+
+        dl->AddRectFilled(ImVec2(drawPos.x + padding, barY), ImVec2(drawPos.x + padding + barW, barY + barH), IM_COL32(10, 50, 20, 150), 4.0f * scale);
+        ImU32 fillCol = GetColorWithAlpha(IM_COL32(50, 255, 100, (int)(180 + pulse * 75)));
+        dl->AddRectFilled(ImVec2(drawPos.x + padding, barY), ImVec2(drawPos.x + padding + barW * maxOffenseConquest, barY + barH), fillCol, 4.0f * scale);
+    }
+}
+
+// ---------------------------------------------------------------------
+// CutoffPredictorWidget Implementation
+// ---------------------------------------------------------------------
+CutoffPredictorWidget::CutoffPredictorWidget()
+    : HudWidget("CutoffPredictor", ImVec2(20.0f, 210.0f), ImVec2(240.0f, 65.0f), WIDGET_CONFIG_PASS(sg_hudCutoffPredictor)) {
+}
+
+void CutoffPredictorWidget::Draw() {
+    if (m_Alpha <= 0.0f) return;
+
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    ImVec2 pos = GetPosition();
+    ImVec2 drawPos = pos + m_SlideOffset;
+    float scale = GetScale();
+
+    float w = 240.0f * scale;
+    float h = 65.0f * scale;
+    m_Size = ImVec2(w, h);
+
+    dl->AddRectFilled(drawPos, drawPos + m_Size, GetBgCol(), 8.0f * scale);
+    dl->AddRect(drawPos, drawPos + m_Size, GetBorderCol(), 8.0f * scale, 0, 1.0f);
+
+    gCycle* target = nullptr;
+    ePlayerNetID* targetPlayer = nullptr;
+    bool canCut = false;
+    bool isRight = false;
+    float marginVal = 0.0f;
+    std::string enemyName = "None";
+
+    ePlayerNetID* me = nullptr;
+    ePlayer* lp = ePlayer::PlayerConfig(0);
+    if (lp) me = lp->netPlayer;
+
+    if (me && me->Object() && me->Object()->Alive()) {
+        gCycle* hCycle = dynamic_cast<gCycle*>(me->Object());
+        if (hCycle) {
+            float mySpeed = hCycle->Speed();
+            if (mySpeed > 0.1f) {
+                eCoord myPos = hCycle->Position();
+                eCoord myDir = hCycle->Direction();
+                eCoord myRight(myDir.y, -myDir.x);
+
+                float bestScore = 99999.0f;
+                for (int i = 0; i < se_PlayerNetIDs.Len(); ++i) {
+                    ePlayerNetID *p = se_PlayerNetIDs(i);
+                    if (!p || p == me || !p->Object() || !p->Object()->Alive())
+                        continue;
+                    if (p->CurrentTeam() == me->CurrentTeam())
+                        continue;
+                    gCycle *enemy = dynamic_cast<gCycle*>(p->Object());
+                    if (!enemy) continue;
+
+                    float dot = myDir * enemy->Direction();
+                    if (dot > 0.7f) {
+                        eCoord delta = enemy->Position() - myPos;
+                        float ahead = delta * myDir;
+                        float sideDot = delta * myRight;
+                        float sideDist = fabs(sideDot);
+
+                        if (ahead < 5.0f && ahead > -25.0f && sideDist > 0.5f && sideDist < 15.0f) {
+                            float score = sideDist * sideDist + ahead * ahead;
+                            if (score < bestScore) {
+                                bestScore = score;
+                                target = enemy;
+                                targetPlayer = p;
+                            }
+                        }
+                    }
+                }
+
+                if (target && targetPlayer) {
+                    enemyName = ConvertNonUtf8ToUtf8((const char*)targetPlayer->GetName());
+                    eCoord delta = target->Position() - myPos;
+                    float ahead = delta * myDir;
+                    float sideDot = delta * myRight;
+                    float sideDist = fabs(sideDot);
+
+                    float t_cross = sideDist / mySpeed;
+                    float t_enemy = (ahead < 0.0f) ? ((-ahead) / (target->Speed() + 0.001f)) : -1.0f;
+                    float margin = hCycle->Lag() + target->Lag() + 0.06f;
+
+                    isRight = (sideDot > 0.0f);
+                    marginVal = t_enemy - (t_cross + margin);
+                    if (ahead < 0.0f && t_enemy > t_cross + margin) {
+                        canCut = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if (isHudEditing && !target) {
+        enemyName = "Opponent";
+        canCut = true;
+        isRight = true;
+        marginVal = 0.45f;
+    }
+
+    float padding = 12.0f * scale;
+    float textY = drawPos.y + 10.0f * scale;
+    float detailY = drawPos.y + 36.0f * scale;
+
+    if (enemyName == "None") {
+        if (g_FontHeader) ImGui::PushFont(g_FontHeader);
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, ImVec2(drawPos.x + padding, textY + 10.0f * scale),
+                    IM_COL32(120, 120, 130, 180), "RADAR: NO TARGET");
+        if (g_FontHeader) ImGui::PopFont();
+        return;
+    }
+
+    std::string titleStr = "TARGET: " + enemyName;
+    dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, ImVec2(drawPos.x + padding, textY), GetTextCol(), titleStr.c_str());
+
+    char cutText[64];
+    ImU32 indicatorCol;
+    if (canCut) {
+        snprintf(cutText, sizeof(cutText), isRight ? "CUT RIGHT >>>" : "<<< CUT LEFT");
+        indicatorCol = GetColorWithAlpha(IM_COL32(50, 255, 100, 255));
+    } else {
+        snprintf(cutText, sizeof(cutText), isRight ? "HOLD RIGHT >>>" : "<<< HOLD LEFT");
+        indicatorCol = GetColorWithAlpha(IM_COL32(255, 60, 60, 255));
+    }
+
+    if (g_FontHeader) ImGui::PushFont(g_FontHeader);
+    dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, ImVec2(drawPos.x + padding, detailY), indicatorCol, cutText);
+    if (g_FontHeader) ImGui::PopFont();
+
+    char margBuf[32];
+    if (marginVal > -10.0f && marginVal < 10.0f) {
+        snprintf(margBuf, sizeof(margBuf), "+%.2fs", marginVal);
+    } else {
+        snprintf(margBuf, sizeof(margBuf), "N/A");
+    }
+    float margW = CalcTextSize(margBuf).x;
+    dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.9f * scale, ImVec2(drawPos.x + w - padding - margW, detailY + 2.0f * scale),
+                canCut ? IM_COL32(50, 255, 100, 220) : IM_COL32(180, 180, 190, 180), margBuf);
+}
+
+// ---------------------------------------------------------------------
+// ProximityWarningWidget Implementation
+// ---------------------------------------------------------------------
+ProximityWarningWidget::ProximityWarningWidget()
+    : HudWidget("ProximityWarning", ImVec2(20.0f, 280.0f), ImVec2(220.0f, 60.0f), WIDGET_CONFIG_PASS(sg_hudProximityWarning)) {
+}
+
+void ProximityWarningWidget::Draw() {
+    if (m_Alpha <= 0.0f) return;
+
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    ImVec2 pos = GetPosition();
+    ImVec2 drawPos = pos + m_SlideOffset;
+    float scale = GetScale();
+
+    float nearestDistSqr = 99999.0f;
+    std::string enemyName = "";
+    ePlayerNetID* threatPlayer = nullptr;
+
+    ePlayerNetID* me = nullptr;
+    ePlayer* lp = ePlayer::PlayerConfig(0);
+    if (lp) me = lp->netPlayer;
+
+    if (me && me->Object() && me->Object()->Alive()) {
+        gCycle* hCycle = dynamic_cast<gCycle*>(me->Object());
+        if (hCycle) {
+            eCoord myPos = hCycle->Position();
+            for (int i = 0; i < se_PlayerNetIDs.Len(); ++i) {
+                ePlayerNetID *p = se_PlayerNetIDs(i);
+                if (p && p != me && p->Object() && p->Object()->Alive()) {
+                    gCycle *enemy = dynamic_cast<gCycle*>(p->Object());
+                    if (enemy) {
+                        eCoord diff = enemy->Position() - myPos;
+                        float distSqr = diff.NormSquared();
+                        if (distSqr < 400.0f) {
+                            float dot = enemy->Direction() * diff;
+                            if (dot < 0.0f) {
+                                if (distSqr < nearestDistSqr) {
+                                    nearestDistSqr = distSqr;
+                                    threatPlayer = p;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (threatPlayer) {
+                enemyName = ConvertNonUtf8ToUtf8((const char*)threatPlayer->GetName());
+            }
+        }
+    }
+
+    if (isHudEditing && enemyName.empty()) {
+        enemyName = "RivalPlayer";
+        nearestDistSqr = 100.0f;
+    }
+
+    if (enemyName.empty()) return;
+
+    float distance = sqrtf(nearestDistSqr);
+    float intensity = 1.0f - (nearestDistSqr / 400.0f);
+    if (intensity > 1.0f) intensity = 1.0f;
+    if (intensity < 0.0f) intensity = 0.0f;
+
+    float w = 220.0f * scale;
+    float h = 60.0f * scale;
+    m_Size = ImVec2(w, h);
+
+    dl->AddRectFilled(drawPos, drawPos + m_Size, GetBgCol(), 8.0f * scale);
+    dl->AddRect(drawPos, drawPos + m_Size, GetBorderCol(), 8.0f * scale, 0, 1.0f);
+
+    float padding = 12.0f * scale;
+    float textY = drawPos.y + 10.0f * scale;
+    float barY = drawPos.y + 36.0f * scale;
+    float barH = 8.0f * scale;
+    float barW = w - padding * 2.0f;
+
+    float pulse = 0.5f + 0.5f * sinf((float)ImGui::GetTime() * 10.0f);
+    ImU32 warnCol = GetColorWithAlpha(IM_COL32(255, 30, 30, (int)(180 + pulse * 75)));
+
+    if (g_FontHeader) ImGui::PushFont(g_FontHeader);
+    dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, ImVec2(drawPos.x + padding, textY), warnCol, "PROXIMITY WARNING");
+    if (g_FontHeader) ImGui::PopFont();
+
+    char distBuf[32];
+    snprintf(distBuf, sizeof(distBuf), "%.1fm", distance);
+    float distW = CalcTextSize(distBuf).x;
+    dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, ImVec2(drawPos.x + w - padding - distW, textY + 2.0f * scale), GetTextCol(), distBuf);
+
+    dl->AddRectFilled(ImVec2(drawPos.x + padding, barY), ImVec2(drawPos.x + padding + barW, barY + barH), IM_COL32(50, 10, 10, 150), 4.0f * scale);
+    dl->AddRectFilled(ImVec2(drawPos.x + padding, barY), ImVec2(drawPos.x + padding + barW * intensity, barY + barH), warnCol, 4.0f * scale);
+
+    if (intensity > 0.1f) {
+        ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+        float borderThickness = 12.0f * scale * intensity;
+        ImU32 borderGlowCol = IM_COL32(255, 0, 0, (int)(intensity * 40.0f + pulse * 20.0f));
+        dl->AddRect(ImVec2(0, 0), displaySize, borderGlowCol, 0.0f, 0, borderThickness);
+    }
+}
+
+// ---------------------------------------------------------------------
+// TeammateDeathWarningWidget Implementation
+// ---------------------------------------------------------------------
+TeammateDeathWarningWidget::TeammateDeathWarningWidget()
+    : HudWidget("TeammateDeath", ImVec2(20.0f, 350.0f), ImVec2(240.0f, 60.0f), WIDGET_CONFIG_PASS(sg_hudTeammateDeath)) {
+}
+
+extern REAL sg_teammateDeathFlashTime;
+extern tString sg_deadTeammateName;
+
+void TeammateDeathWarningWidget::Draw() {
+    if (m_Alpha <= 0.0f) return;
+
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    ImVec2 pos = GetPosition();
+    ImVec2 drawPos = pos + m_SlideOffset;
+    float scale = GetScale();
+
+    REAL gameTime = se_GameTime();
+    REAL elapsed = gameTime - sg_teammateDeathFlashTime;
+    bool active = (elapsed >= 0.0f && elapsed < 3.0f);
+    std::string deadName = "";
+
+    if (active) {
+        deadName = ConvertNonUtf8ToUtf8((const char*)sg_deadTeammateName);
+    }
+
+    if (isHudEditing && !active) {
+        active = true;
+        deadName = "TeammateName";
+    }
+
+    if (!active || deadName.empty()) return;
+
+    float alertAlpha = 1.0f;
+    if (elapsed > 2.0f) {
+        alertAlpha = 1.0f - (elapsed - 2.0f);
+    }
+    if (isHudEditing) alertAlpha = 1.0f;
+
+    float w = 240.0f * scale;
+    float h = 60.0f * scale;
+    m_Size = ImVec2(w, h);
+
+    ImU32 bgCol = GetColorWithAlpha(GetBgCol(), alertAlpha);
+    ImU32 borderCol = GetColorWithAlpha(GetBorderCol(), alertAlpha);
+    ImU32 textCol = GetColorWithAlpha(GetTextCol(), alertAlpha);
+
+    dl->AddRectFilled(drawPos, drawPos + m_Size, bgCol, 8.0f * scale);
+    dl->AddRect(drawPos, drawPos + m_Size, borderCol, 8.0f * scale, 0, 1.0f);
+
+    float padding = 12.0f * scale;
+    float textY = drawPos.y + 10.0f * scale;
+    float nameY = drawPos.y + 34.0f * scale;
+
+    ImU32 headerCol = GetColorWithAlpha(IM_COL32(255, 60, 60, 255), alertAlpha);
+    if (g_FontHeader) ImGui::PushFont(g_FontHeader);
+    dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, ImVec2(drawPos.x + padding, textY), headerCol, "TEAMMATE ELIMINATED");
+    if (g_FontHeader) ImGui::PopFont();
+
+    dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, ImVec2(drawPos.x + padding, nameY), textCol, deadName.c_str());
+}
+
+// ---------------------------------------------------------------------
+// WallTimerWidget Implementation
+// ---------------------------------------------------------------------
+WallTimerWidget::WallTimerWidget()
+    : HudWidget("WallTimer", ImVec2(800.0f, 200.0f), ImVec2(180.0f, 40.0f), WIDGET_CONFIG_PASS(sg_hudWallTimer)) {
+}
+
+extern bool sg_corpseTimerOverride;
+extern float sg_corpseTimerDuration;
+
+void WallTimerWidget::Draw() {
+    if (m_Alpha <= 0.0f) return;
+
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    ImVec2 pos = GetPosition();
+    ImVec2 drawPos = pos + m_SlideOffset;
+    float scale = GetScale();
+
+    struct WallTimerEntry {
+        std::string name;
+        float timeLeft;
+        ImU32 color;
+    };
+    std::vector<WallTimerEntry> activeTimers;
+
+    REAL totalDelay = gCycle::WallsStayUpDelay();
+    if (totalDelay < 0.0f || sg_corpseTimerOverride) {
+        totalDelay = sg_corpseTimerDuration;
+    }
+
+    if (totalDelay >= 0.0f) {
+        REAL gameTime = se_GameTime();
+        for (int i = 0; i < se_PlayerNetIDs.Len(); i++) {
+            ePlayerNetID *p = se_PlayerNetIDs(i);
+            if (p) {
+                gCycle *cycle = dynamic_cast<gCycle*>(p->Object());
+                if (cycle && !cycle->Alive() && cycle->DeathTime() > 0.0f) {
+                    REAL timeSinceDeath = gameTime - cycle->DeathTime();
+                    REAL timeLeft = totalDelay - timeSinceDeath;
+                    if (timeLeft > 0.0f) {
+                        WallTimerEntry entry;
+                        entry.name = ConvertNonUtf8ToUtf8(static_cast<const char*>(p->GetName()));
+                        entry.timeLeft = timeLeft;
+                        float r, g, b;
+                        p->Color(r, g, b);
+                        entry.color = IM_COL32((int)(r * 255), (int)(g * 255), (int)(b * 255), 255);
+                        activeTimers.push_back(entry);
+                    }
+                }
+            }
+        }
+    }
+
+    if (activeTimers.empty() && isHudEditing) {
+        WallTimerEntry dummy;
+        dummy.name = "Player_Name";
+        dummy.timeLeft = 5.4f;
+        dummy.color = IM_COL32(0, 190, 255, 255);
+        activeTimers.push_back(dummy);
+    }
+
+    if (activeTimers.empty()) {
+        return;
+    }
+
+    // Sort active timers by time left ascending (closest to dissolve first)
+    std::sort(activeTimers.begin(), activeTimers.end(), [](const WallTimerEntry& a, const WallTimerEntry& b) {
+        return a.timeLeft < b.timeLeft;
+    });
+
+    float width = 250.0f * scale;
+    float rowHeight = 24.0f * scale;
+    float padding = 8.0f * scale;
+    m_Size.x = width;
+    m_Size.y = activeTimers.size() * rowHeight + padding * 2.0f;
+
+    dl->AddRectFilled(drawPos, drawPos + m_Size, GetBgCol(), 8.0f * scale);
+    dl->AddRect(drawPos, drawPos + m_Size, GetBorderCol(), 8.0f * scale, 0, 1.5f * scale);
+
+    if (g_FontHeader) ImGui::PushFont(g_FontHeader);
+    for (size_t i = 0; i < activeTimers.size(); i++) {
+        const auto& entry = activeTimers[i];
+        ImVec2 rowPos = drawPos + ImVec2(padding, padding + i * rowHeight);
+
+        // Timer bar
+        float barWidth = 50.0f * scale;
+        float barHeight = 5.0f * scale;
+        ImVec2 barPos = drawPos + ImVec2(width - barWidth - padding, padding + i * rowHeight + (rowHeight - barHeight) * 0.5f);
+        
+        dl->AddRectFilled(barPos, barPos + ImVec2(barWidth, barHeight), IM_COL32(40, 40, 45, 255), 2.0f * scale);
+        
+        float pct = entry.timeLeft / totalDelay;
+        if (pct < 0.0f) pct = 0.0f;
+        if (pct > 1.0f) pct = 1.0f;
+        
+        ImU32 barCol = GetAccentCol();
+        if (entry.timeLeft <= 1.5f) {
+            float blink = sinf((float)ImGui::GetTime() * 15.0f);
+            if (blink > 0.0f) {
+                barCol = IM_COL32(255, 50, 50, 255);
+            }
+        }
+        
+        dl->AddRectFilled(barPos, barPos + ImVec2(barWidth * pct, barHeight), barCol, 2.0f * scale);
+
+        // Timer text
+        char timeText[16];
+        snprintf(timeText, sizeof(timeText), "%.1fs", entry.timeLeft);
+        ImVec2 txtSize = CalcTextSize(timeText);
+        ImVec2 txtPos = ImVec2(barPos.x - txtSize.x - 6.0f * scale, rowPos.y);
+
+        // Player Name (Clipped to prevent overlapping with timer/bar)
+        dl->PushClipRect(rowPos - ImVec2(2.0f * scale, 2.0f * scale), ImVec2(txtPos.x - 6.0f * scale, rowPos.y + rowHeight), true);
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, rowPos, entry.color, entry.name.c_str());
+        dl->PopClipRect();
+
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, txtPos, GetTextCol(), timeText);
+    }
+    if (g_FontHeader) ImGui::PopFont();
+}
+
+// ---------------------------------------------------------------------
+// KeystrokeVisualizerWidget Implementation
+// ---------------------------------------------------------------------
+static ImU32 LerpCol(ImU32 c1, ImU32 c2, float t) {
+    int r1 = (c1 >> 0) & 0xFF;
+    int g1 = (c1 >> 8) & 0xFF;
+    int b1 = (c1 >> 16) & 0xFF;
+    int a1 = (c1 >> 24) & 0xFF;
+    
+    int r2 = (c2 >> 0) & 0xFF;
+    int g2 = (c2 >> 8) & 0xFF;
+    int b2 = (c2 >> 16) & 0xFF;
+    int a2 = (c2 >> 24) & 0xFF;
+    
+    return IM_COL32(
+        r1 + (int)((r2 - r1) * t),
+        g1 + (int)((g2 - g1) * t),
+        b1 + (int)((b2 - b1) * t),
+        a1 + (int)((a2 - a1) * t)
+    );
+}
+
+
+
+KeystrokeVisualizerWidget::KeystrokeVisualizerWidget(int id)
+    : HudWidget(id == 1 ? "Keystroke 1" : "Keystroke 2",
+                id == 1 ? ImVec2(500.0f, 600.0f) : ImVec2(550.0f, 600.0f),
+                ImVec2(160.0f, 120.0f),
+                id == 1 ? WIDGET_CONFIG_PASS(sg_hudKeystroke1) : WIDGET_CONFIG_PASS(sg_hudKeystroke2)),
+      m_WidgetId(id) {
+}
+
+void KeystrokeVisualizerWidget::Update(float dt) {
+    HudWidget::Update(dt);
+
+    std::vector<ImGuiKey> keysToTrack = {
+        ImGuiKey_Escape, ImGuiKey_F1, ImGuiKey_F2, ImGuiKey_F3, ImGuiKey_F4, ImGuiKey_F5, ImGuiKey_F6, ImGuiKey_F7, ImGuiKey_F8, ImGuiKey_F9, ImGuiKey_F10, ImGuiKey_F11, ImGuiKey_F12,
+        ImGuiKey_GraveAccent, ImGuiKey_1, ImGuiKey_2, ImGuiKey_3, ImGuiKey_4, ImGuiKey_5, ImGuiKey_6, ImGuiKey_7, ImGuiKey_8, ImGuiKey_9, ImGuiKey_0, ImGuiKey_Minus, ImGuiKey_Equal, ImGuiKey_Backspace,
+        ImGuiKey_Tab, ImGuiKey_Q, ImGuiKey_W, ImGuiKey_E, ImGuiKey_R, ImGuiKey_T, ImGuiKey_Y, ImGuiKey_U, ImGuiKey_I, ImGuiKey_O, ImGuiKey_P, ImGuiKey_LeftBracket, ImGuiKey_RightBracket, ImGuiKey_Backslash,
+        ImGuiKey_CapsLock, ImGuiKey_A, ImGuiKey_S, ImGuiKey_D, ImGuiKey_F, ImGuiKey_G, ImGuiKey_H, ImGuiKey_J, ImGuiKey_K, ImGuiKey_L, ImGuiKey_Semicolon, ImGuiKey_Apostrophe, ImGuiKey_Enter,
+        ImGuiKey_LeftShift, ImGuiKey_Z, ImGuiKey_X, ImGuiKey_C, ImGuiKey_V, ImGuiKey_B, ImGuiKey_N, ImGuiKey_M, ImGuiKey_Comma, ImGuiKey_Period, ImGuiKey_Slash, ImGuiKey_RightShift,
+        ImGuiKey_LeftCtrl, ImGuiKey_LeftSuper, ImGuiKey_LeftAlt, ImGuiKey_Space, ImGuiKey_RightAlt, ImGuiKey_RightSuper, ImGuiKey_Menu, ImGuiKey_RightCtrl,
+        ImGuiKey_PrintScreen, ImGuiKey_ScrollLock, ImGuiKey_Pause, ImGuiKey_Insert, ImGuiKey_Home, ImGuiKey_PageUp, ImGuiKey_Delete, ImGuiKey_End, ImGuiKey_PageDown,
+        ImGuiKey_UpArrow, ImGuiKey_LeftArrow, ImGuiKey_DownArrow, ImGuiKey_RightArrow,
+        ImGuiKey_MouseLeft, ImGuiKey_MouseRight, ImGuiKey_MouseMiddle
+    };
+
+    for (ImGuiKey key : keysToTrack) {
+        bool isDown = false;
+        if (key == ImGuiKey_MouseLeft) {
+            isDown = ImGui::IsMouseDown(0);
+        } else if (key == ImGuiKey_MouseRight) {
+            isDown = ImGui::IsMouseDown(1);
+        } else if (key == ImGuiKey_MouseMiddle) {
+            isDown = ImGui::IsMouseDown(2);
+        } else {
+            isDown = ImGui::IsKeyDown(key);
+        }
+
+        float& progress = m_KeyPressStates[key];
+        if (isDown) {
+            progress += dt * 15.0f;
+            if (progress > 1.0f) progress = 1.0f;
+        } else {
+            progress -= dt * 8.0f;
+            if (progress < 0.0f) progress = 0.0f;
+        }
+    }
+
+    // CPS Tracker
+    double currentTime = ImGui::GetTime();
+    if (ImGui::IsMouseClicked(0)) {
+        m_LmbClicks.push_back(currentTime);
+    }
+    if (ImGui::IsMouseClicked(1)) {
+        m_RmbClicks.push_back(currentTime);
+    }
+
+    // Clean up old clicks
+    std::vector<double> freshLmb;
+    for (double t : m_LmbClicks) {
+        if (currentTime - t <= 1.0) freshLmb.push_back(t);
+    }
+    m_LmbClicks = freshLmb;
+
+    std::vector<double> freshRmb;
+    for (double t : m_RmbClicks) {
+        if (currentTime - t <= 1.0) freshRmb.push_back(t);
+    }
+    m_RmbClicks = freshRmb;
+}
+
+void KeystrokeVisualizerWidget::Draw() {
+    if (m_Alpha <= 0.0f) return;
+
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    ImVec2 pos = GetPosition();
+    ImVec2 drawPos = pos + m_SlideOffset;
+    float scale = GetScale();
+
+    struct KeyDef {
+        std::string label;
+        ImGuiKey key;
+        float x, y;
+        float w;
+    };
+
+    std::vector<KeyDef> keys;
+    int preset = (m_WidgetId == 1) ? sg_modKeystroke1_Preset : sg_modKeystroke2_Preset;
+    int mask0 = (m_WidgetId == 1) ? sg_modKeystroke1_Mask0 : sg_modKeystroke2_Mask0;
+    int mask1 = (m_WidgetId == 1) ? sg_modKeystroke1_Mask1 : sg_modKeystroke2_Mask1;
+    int mask2 = (m_WidgetId == 1) ? sg_modKeystroke1_Mask2 : sg_modKeystroke2_Mask2;
+    bool rgbWave = (m_WidgetId == 1) ? sg_modKeystroke1_RgbWave : sg_modKeystroke2_RgbWave;
+    float rgbSpeed = (m_WidgetId == 1) ? sg_modKeystroke1_RgbSpeed : sg_modKeystroke2_RgbSpeed;
+    float glowIntensityVal = (m_WidgetId == 1) ? sg_modKeystroke1_GlowIntensity : sg_modKeystroke2_GlowIntensity;
+    bool separateKeys = (m_WidgetId == 1) ? sg_modKeystroke1_SeparateKeys : sg_modKeystroke2_SeparateKeys;
+    float spacing = (m_WidgetId == 1) ? sg_modKeystroke1_Spacing : sg_modKeystroke2_Spacing;
+    float radius = (m_WidgetId == 1) ? sg_modKeystroke1_Radius : sg_modKeystroke2_Radius;
+    bool showCps = (m_WidgetId == 1) ? sg_modKeystroke1_ShowCps : sg_modKeystroke2_ShowCps;
+
+    struct LayoutKey {
+        int index;
+        std::string label;
+        ImGuiKey key;
+        float gridX, gridY;
+        float width;
+    };
+
+    std::vector<LayoutKey> masterLayout = {
+        // Row 0: Esc, F1-F12, Print, Scroll, Pause
+        {0, "Esc", ImGuiKey_Escape, 0.0f, 0.0f, 1.0f},
+        {1, "F1", ImGuiKey_F1, 2.0f, 0.0f, 1.0f},
+        {2, "F2", ImGuiKey_F2, 3.0f, 0.0f, 1.0f},
+        {3, "F3", ImGuiKey_F3, 4.0f, 0.0f, 1.0f},
+        {4, "F4", ImGuiKey_F4, 5.0f, 0.0f, 1.0f},
+        {5, "F5", ImGuiKey_F5, 6.5f, 0.0f, 1.0f},
+        {6, "F6", ImGuiKey_F6, 7.5f, 0.0f, 1.0f},
+        {7, "F7", ImGuiKey_F7, 8.5f, 0.0f, 1.0f},
+        {8, "F8", ImGuiKey_F8, 9.5f, 0.0f, 1.0f},
+        {9, "F9", ImGuiKey_F9, 11.0f, 0.0f, 1.0f},
+        {10, "F10", ImGuiKey_F10, 12.0f, 0.0f, 1.0f},
+        {11, "F11", ImGuiKey_F11, 13.0f, 0.0f, 1.0f},
+        {12, "F12", ImGuiKey_F12, 14.0f, 0.0f, 1.0f},
+        {74, "Prt", ImGuiKey_PrintScreen, 15.5f, 0.0f, 1.0f},
+        {75, "Scr", ImGuiKey_ScrollLock, 16.5f, 0.0f, 1.0f},
+        {76, "Pau", ImGuiKey_Pause, 17.5f, 0.0f, 1.0f},
+
+        // Row 1: Tilde, 1-0, -, =, Backspace, Insert, Home, PgUp
+        {13, "`", ImGuiKey_GraveAccent, 0.0f, 1.0f, 1.0f},
+        {14, "1", ImGuiKey_1, 1.0f, 1.0f, 1.0f},
+        {15, "2", ImGuiKey_2, 2.0f, 1.0f, 1.0f},
+        {16, "3", ImGuiKey_3, 3.0f, 1.0f, 1.0f},
+        {17, "4", ImGuiKey_4, 4.0f, 1.0f, 1.0f},
+        {18, "5", ImGuiKey_5, 5.0f, 1.0f, 1.0f},
+        {19, "6", ImGuiKey_6, 6.0f, 1.0f, 1.0f},
+        {20, "7", ImGuiKey_7, 7.0f, 1.0f, 1.0f},
+        {21, "8", ImGuiKey_8, 8.0f, 1.0f, 1.0f},
+        {22, "9", ImGuiKey_9, 9.0f, 1.0f, 1.0f},
+        {23, "0", ImGuiKey_0, 10.0f, 1.0f, 1.0f},
+        {24, "-", ImGuiKey_Minus, 11.0f, 1.0f, 1.0f},
+        {25, "=", ImGuiKey_Equal, 12.0f, 1.0f, 1.0f},
+        {26, "Bsp", ImGuiKey_Backspace, 13.0f, 1.0f, 2.0f},
+        {77, "Ins", ImGuiKey_Insert, 15.5f, 1.0f, 1.0f},
+        {78, "Hm", ImGuiKey_Home, 16.5f, 1.0f, 1.0f},
+        {79, "Pup", ImGuiKey_PageUp, 17.5f, 1.0f, 1.0f},
+
+        // Row 2: Tab, Q-P, [, ], \, Delete, End, PgDn
+        {27, "Tab", ImGuiKey_Tab, 0.0f, 2.0f, 1.5f},
+        {28, "Q", ImGuiKey_Q, 1.5f, 2.0f, 1.0f},
+        {29, "W", ImGuiKey_W, 2.5f, 2.0f, 1.0f},
+        {30, "E", ImGuiKey_E, 3.5f, 2.0f, 1.0f},
+        {31, "R", ImGuiKey_R, 4.5f, 2.0f, 1.0f},
+        {32, "T", ImGuiKey_T, 5.5f, 2.0f, 1.0f},
+        {33, "Y", ImGuiKey_Y, 6.5f, 2.0f, 1.0f},
+        {34, "U", ImGuiKey_U, 7.5f, 2.0f, 1.0f},
+        {35, "I", ImGuiKey_I, 8.5f, 2.0f, 1.0f},
+        {36, "O", ImGuiKey_O, 9.5f, 2.0f, 1.0f},
+        {37, "P", ImGuiKey_P, 10.5f, 2.0f, 1.0f},
+        {38, "[", ImGuiKey_LeftBracket, 11.5f, 2.0f, 1.0f},
+        {39, "]", ImGuiKey_RightBracket, 12.5f, 2.0f, 1.0f},
+        {40, "\\", ImGuiKey_Backslash, 13.5f, 2.0f, 1.5f},
+        {80, "Del", ImGuiKey_Delete, 15.5f, 2.0f, 1.0f},
+        {81, "End", ImGuiKey_End, 16.5f, 2.0f, 1.0f},
+        {82, "Pdn", ImGuiKey_PageDown, 17.5f, 2.0f, 1.0f},
+
+        // Row 3: Caps, A-L, ;, ', Enter
+        {41, "Caps", ImGuiKey_CapsLock, 0.0f, 3.0f, 1.75f},
+        {42, "A", ImGuiKey_A, 1.75f, 3.0f, 1.0f},
+        {43, "S", ImGuiKey_S, 2.75f, 3.0f, 1.0f},
+        {44, "D", ImGuiKey_D, 3.75f, 3.0f, 1.0f},
+        {45, "F", ImGuiKey_F, 4.75f, 3.0f, 1.0f},
+        {46, "G", ImGuiKey_G, 5.75f, 3.0f, 1.0f},
+        {47, "H", ImGuiKey_H, 6.75f, 3.0f, 1.0f},
+        {48, "J", ImGuiKey_J, 7.75f, 3.0f, 1.0f},
+        {49, "K", ImGuiKey_K, 8.75f, 3.0f, 1.0f},
+        {50, "L", ImGuiKey_L, 9.75f, 3.0f, 1.0f},
+        {51, ";", ImGuiKey_Semicolon, 10.75f, 3.0f, 1.0f},
+        {52, "'", ImGuiKey_Apostrophe, 11.75f, 3.0f, 1.0f},
+        {53, "Ent", ImGuiKey_Enter, 12.75f, 3.0f, 2.25f},
+
+        // Row 4: Shift L, Z-/, Shift R, Up
+        {54, "ShfL", ImGuiKey_LeftShift, 0.0f, 4.0f, 2.25f},
+        {55, "Z", ImGuiKey_Z, 2.25f, 4.0f, 1.0f},
+        {56, "X", ImGuiKey_X, 3.25f, 4.0f, 1.0f},
+        {57, "C", ImGuiKey_C, 4.25f, 4.0f, 1.0f},
+        {58, "V", ImGuiKey_V, 5.25f, 4.0f, 1.0f},
+        {59, "B", ImGuiKey_B, 6.25f, 4.0f, 1.0f},
+        {60, "N", ImGuiKey_N, 7.25f, 4.0f, 1.0f},
+        {61, "M", ImGuiKey_M, 8.25f, 4.0f, 1.0f},
+        {62, ",", ImGuiKey_Comma, 9.25f, 4.0f, 1.0f},
+        {63, ".", ImGuiKey_Period, 10.25f, 4.0f, 1.0f},
+        {64, "/", ImGuiKey_Slash, 11.25f, 4.0f, 1.0f},
+        {65, "ShfR", ImGuiKey_RightShift, 12.25f, 4.0f, 2.75f},
+        {83, "^", ImGuiKey_UpArrow, 16.5f, 4.0f, 1.0f},
+
+        // Row 5: Ctrl L, Win L, Alt L, Space, Alt R, Win R, Menu, Ctrl R, Left, Down, Right
+        {66, "CtlL", ImGuiKey_LeftCtrl, 0.0f, 5.0f, 1.25f},
+        {67, "WinL", ImGuiKey_LeftSuper, 1.25f, 5.0f, 1.25f},
+        {68, "AltL", ImGuiKey_LeftAlt, 2.5f, 5.0f, 1.25f},
+        {69, "Space", ImGuiKey_Space, 3.75f, 5.0f, 6.25f},
+        {70, "AltR", ImGuiKey_RightAlt, 10.0f, 5.0f, 1.25f},
+        {71, "WinR", ImGuiKey_RightSuper, 11.25f, 5.0f, 1.25f},
+        {72, "Men", ImGuiKey_Menu, 12.5f, 5.0f, 1.25f},
+        {73, "CtlR", ImGuiKey_RightCtrl, 13.75f, 5.0f, 1.25f},
+        {84, "<", ImGuiKey_LeftArrow, 15.5f, 5.0f, 1.0f},
+        {85, "v", ImGuiKey_DownArrow, 16.5f, 5.0f, 1.0f},
+        {86, ">", ImGuiKey_RightArrow, 17.5f, 5.0f, 1.0f},
+
+        // Row 6: LMB, MMB, RMB
+        {87, "LMB", ImGuiKey_MouseLeft, 3.75f, 6.0f, 2.0f},
+        {89, "MMB", ImGuiKey_MouseMiddle, 5.75f, 6.0f, 2.25f},
+        {88, "RMB", ImGuiKey_MouseRight, 8.0f, 6.0f, 2.0f}
+    };
+
+    for (const auto& lk : masterLayout) {
+        bool isEnabled = false;
+        if (preset == 0) { // WASD
+            isEnabled = (lk.key == ImGuiKey_W || lk.key == ImGuiKey_A || lk.key == ImGuiKey_S || lk.key == ImGuiKey_D);
+        } else if (preset == 1) { // WASD + Space
+            isEnabled = (lk.key == ImGuiKey_W || lk.key == ImGuiKey_A || lk.key == ImGuiKey_S || lk.key == ImGuiKey_D || lk.key == ImGuiKey_Space);
+        } else if (preset == 2) { // WASD + Space + Shift
+            isEnabled = (lk.key == ImGuiKey_W || lk.key == ImGuiKey_A || lk.key == ImGuiKey_S || lk.key == ImGuiKey_D || lk.key == ImGuiKey_Space || lk.key == ImGuiKey_LeftShift);
+        } else if (preset == 3) { // WASD + Mouse
+            isEnabled = (lk.key == ImGuiKey_W || lk.key == ImGuiKey_A || lk.key == ImGuiKey_S || lk.key == ImGuiKey_D || lk.key == ImGuiKey_Space || lk.key == ImGuiKey_LeftShift || lk.key == ImGuiKey_MouseLeft || lk.key == ImGuiKey_MouseRight);
+        } else if (preset == 4) { // Arrows
+            isEnabled = (lk.key == ImGuiKey_UpArrow || lk.key == ImGuiKey_LeftArrow || lk.key == ImGuiKey_DownArrow || lk.key == ImGuiKey_RightArrow);
+        } else if (preset == 5) { // Arrows + Space
+            isEnabled = (lk.key == ImGuiKey_UpArrow || lk.key == ImGuiKey_LeftArrow || lk.key == ImGuiKey_DownArrow || lk.key == ImGuiKey_RightArrow || lk.key == ImGuiKey_Space);
+        } else { // Custom
+            if (lk.index < 32) {
+                isEnabled = (mask0 & (1 << lk.index)) != 0;
+            } else if (lk.index < 64) {
+                isEnabled = (mask1 & (1 << (lk.index - 32))) != 0;
+            } else {
+                isEnabled = (mask2 & (1 << (lk.index - 64))) != 0;
+            }
+        }
+
+        if (isEnabled) {
+            keys.push_back({lk.label, lk.key, lk.gridX, lk.gridY, lk.width});
+        }
+    }
+
+    // Shift active rows to prevent vertical gaps
+    std::set<float> activeYRows;
+    for (const auto& k : keys) {
+        activeYRows.insert(k.y);
+    }
+    std::map<float, float> yMapping;
+    float compactY = 0.0f;
+    for (float originalY : activeYRows) {
+        yMapping[originalY] = compactY;
+        compactY += 1.1f;
+    }
+    for (auto& k : keys) {
+        k.y = yMapping[k.y];
+    }
+
+    // Shift active columns if the leftmost key starts after X=0
+    if (!keys.empty()) {
+        float minX = 999.0f;
+        for (const auto& k : keys) {
+            if (k.x < minX) minX = k.x;
+        }
+        if (minX > 0.0f) {
+            for (auto& k : keys) {
+                k.x -= minX;
+            }
+        }
+    }
+
+    if (keys.empty()) {
+        if (isHudEditing) {
+            keys = {
+                {"W", ImGuiKey_W, 1.0f, 0.0f, 1.0f},
+                {"A", ImGuiKey_A, 0.0f, 1.0f, 1.0f},
+                {"S", ImGuiKey_S, 1.0f, 1.0f, 1.0f},
+                {"D", ImGuiKey_D, 2.0f, 1.0f, 1.0f}
+            };
+        } else {
+            return;
+        }
+    }
+
+    float maxGridX = 0.0f;
+    float maxGridY = 0.0f;
+    for (const auto& key : keys) {
+        if (key.x + key.w > maxGridX) maxGridX = key.x + key.w;
+        if (key.y + 1.0f > maxGridY) maxGridY = key.y + 1.0f;
+    }
+
+    float keySize = 40.0f * scale;
+    float actualSpacing = spacing * scale;
+    float padding = 10.0f * scale;
+    float shadowMax = 5.0f * scale;
+    float actualRadius = radius * scale;
+
+    m_Size.x = maxGridX * keySize + std::max(0.0f, maxGridX - 1.0f) * actualSpacing + padding * 2.0f;
+    m_Size.y = maxGridY * keySize + std::max(0.0f, maxGridY - 1.0f) * actualSpacing + padding * 2.0f + shadowMax;
+
+    // Draw keyboard base plate if separate keys is disabled
+    if (!separateKeys) {
+        dl->AddRectFilled(drawPos, drawPos + m_Size, GetBgCol(), 12.0f * scale);
+        dl->AddRect(drawPos, drawPos + m_Size, GetBorderCol(), 12.0f * scale, 0, 1.5f * scale);
+    } else if (isHudEditing) {
+        // Draw dotted boundary when editing so they can position and resize the floating keys
+        dl->AddRect(drawPos, drawPos + m_Size, IM_COL32(0, 190, 255, 120), 12.0f * scale, 0, 1.0f * scale);
+    }
+
+    if (g_FontHeader) ImGui::PushFont(g_FontHeader);
+    for (const auto& key : keys) {
+        float progress = m_KeyPressStates[key.key];
+
+        float kx = drawPos.x + padding + key.x * (keySize + actualSpacing);
+        float ky = drawPos.y + padding + key.y * (keySize + actualSpacing);
+        float kw = key.w * keySize + std::max(0.0f, key.w - 1.0f) * actualSpacing;
+        float kh = keySize;
+
+        ImVec2 keyCenter(kx + kw * 0.5f, ky + kh * 0.5f);
+
+        // Determine glow / underglow color
+        ImU32 glowColor;
+        if (rgbWave) {
+            ImVec4 rgb = GetRgbColor(rgbSpeed, key.x * 0.2f + key.y * 0.1f);
+            glowColor = IM_COL32((int)(rgb.x * 255), (int)(rgb.y * 255), (int)(rgb.z * 255), 255);
+        } else {
+            if (key.label == "Space") {
+                glowColor = IM_COL32(200, 50, 255, 255); // Purple
+            } else if (key.label == "ShfL" || key.label == "ShfR" || key.label == "CtlL" || key.label == "CtlR" || key.label == "AltL" || key.label == "AltR" || key.label == "Tab" || key.label == "Caps" || key.label == "Esc" || key.label == "Ent") {
+                glowColor = IM_COL32(255, 60, 140, 255); // Neon Pink
+            } else if (key.label == "LMB" || key.label == "RMB" || key.label == "MMB") {
+                glowColor = IM_COL32(0, 255, 200, 255); // Turquoise
+            } else {
+                glowColor = GetAccentCol();
+            }
+        }
+
+        // Draw Switch Underglow (Glow bloom under keycap)
+        float glowIntensity = glowIntensityVal * (0.2f + 0.8f * progress);
+        if (glowIntensity > 0.01f) {
+            int glowAlpha = (int)(glowIntensity * 100);
+            ImU32 bloomColor = (glowColor & 0x00FFFFFF) | ((glowAlpha & 0xFF) << 24);
+            
+            dl->AddCircleFilled(keyCenter, (14.0f + 16.0f * progress) * scale, bloomColor);
+            dl->AddCircleFilled(keyCenter, (8.0f + 8.0f * progress) * scale, (glowColor & 0x00FFFFFF) | (((int)(glowIntensity * 180) & 0xFF) << 24));
+        }
+
+        // 3D Keycap Physical Body Rendering
+        // Shadow/Switch housing base
+        ImVec2 shadowMin(kx, ky + shadowMax);
+        ImVec2 shadowMaxPos(kx + kw, ky + kh + shadowMax);
+        dl->AddRectFilled(shadowMin, shadowMaxPos, IM_COL32(18, 18, 22, 255), actualRadius);
+
+        // Calculate travel offset
+        float currentOffset = shadowMax * (1.0f - progress);
+        ImVec2 capMin(kx, ky + currentOffset);
+        ImVec2 capMax(kx + kw, ky + kh + currentOffset);
+
+        // Draw keycap side extrusion (for 3D appearance)
+        ImVec2 sideMin(kx, ky + currentOffset + 2.0f * scale);
+        ImVec2 sideMax(kx + kw, ky + kh + shadowMax);
+        dl->AddRectFilled(sideMin, sideMax, IM_COL32(28, 28, 33, 255), actualRadius);
+
+        // Draw keycap top face
+        ImU32 capBgCol = LerpCol(GetBgCol(), (glowColor & 0x00FFFFFF) | 0x22000000, progress);
+        dl->AddRectFilled(capMin, capMax, capBgCol, actualRadius);
+
+        // Top face inner highlight border
+        ImU32 capBorderCol = LerpCol(GetBorderCol(), glowColor, progress);
+        dl->AddRect(capMin, capMax, capBorderCol, actualRadius, 0, 1.2f * scale);
+
+        // Illuminated keycap legends (letters/words/mouse clicks)
+        ImU32 textCol = LerpCol(GetTextCol(), glowColor, progress);
+        
+        if ((key.key == ImGuiKey_MouseLeft || key.key == ImGuiKey_MouseRight) && showCps) {
+            int cps = (key.key == ImGuiKey_MouseLeft) ? m_LmbClicks.size() : m_RmbClicks.size();
+            char labelBuf[64];
+            if (cps > 0) {
+                snprintf(labelBuf, sizeof(labelBuf), "%s\n%d CPS", key.label.c_str(), cps);
+            } else {
+                snprintf(labelBuf, sizeof(labelBuf), "%s", key.label.c_str());
+            }
+            ImVec2 labelSize = CalcTextSize(labelBuf);
+            ImVec2 labelPos = capMin + ImVec2((kw - labelSize.x) * 0.5f, (kh - labelSize.y) * 0.5f);
+            dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, labelPos, textCol, labelBuf);
+        } else {
+            ImVec2 labelSize = CalcTextSize(key.label.c_str());
+            ImVec2 labelPos = capMin + ImVec2((kw - labelSize.x) * 0.5f, (kh - labelSize.y) * 0.5f);
+            dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * scale, labelPos, textCol, key.label.c_str());
+        }
+    }
+    if (g_FontHeader) ImGui::PopFont();
+}
+
+void KeystrokeVisualizerWidget::DrawCustomSettings(bool& isDirty) {
+    ImGui::TextColored(ImVec4(0.0f, 0.75f, 1.0f, 1.0f), "Keystroke Visualizer %d Settings", m_WidgetId);
+
+    const char* presets[] = { "WASD", "WASD + Space", "WASD + Space + Shift", "WASD + Mouse", "Arrows", "Arrows + Space", "Custom" };
+    int preset = (m_WidgetId == 1) ? sg_modKeystroke1_Preset : sg_modKeystroke2_Preset;
+    if (ImGui::Combo("Layout Preset", &preset, presets, 7)) {
+        if (m_WidgetId == 1) sg_modKeystroke1_Preset = preset;
+        else sg_modKeystroke2_Preset = preset;
+        isDirty = true;
+    }
+
+    ImGui::Separator();
+    ImGui::Text("Aesthetic Customization:");
+    
+    bool separateKeys = (m_WidgetId == 1) ? sg_modKeystroke1_SeparateKeys : sg_modKeystroke2_SeparateKeys;
+    if (ImGui::Checkbox("Separate Keys Mode (No Base Plate)", &separateKeys)) {
+        if (m_WidgetId == 1) sg_modKeystroke1_SeparateKeys = separateKeys;
+        else sg_modKeystroke2_SeparateKeys = separateKeys;
+        isDirty = true;
+    }
+
+    float customSpacing = (m_WidgetId == 1) ? sg_modKeystroke1_Spacing : sg_modKeystroke2_Spacing;
+    if (ImGui::SliderFloat("Key Spacing", &customSpacing, 0.0f, 25.0f, "%.1f")) {
+        if (m_WidgetId == 1) sg_modKeystroke1_Spacing = customSpacing;
+        else sg_modKeystroke2_Spacing = customSpacing;
+        isDirty = true;
+    }
+
+    float customRadius = (m_WidgetId == 1) ? sg_modKeystroke1_Radius : sg_modKeystroke2_Radius;
+    if (ImGui::SliderFloat("Key Border Radius", &customRadius, 0.0f, 20.0f, "%.1f")) {
+        if (m_WidgetId == 1) sg_modKeystroke1_Radius = customRadius;
+        else sg_modKeystroke2_Radius = customRadius;
+        isDirty = true;
+    }
+
+    bool showCps = (m_WidgetId == 1) ? sg_modKeystroke1_ShowCps : sg_modKeystroke2_ShowCps;
+    if (ImGui::Checkbox("Show Mouse Clicks-Per-Second (CPS)", &showCps)) {
+        if (m_WidgetId == 1) sg_modKeystroke1_ShowCps = showCps;
+        else sg_modKeystroke2_ShowCps = showCps;
+        isDirty = true;
+    }
+
+    bool rgbWave = (m_WidgetId == 1) ? sg_modKeystroke1_RgbWave : sg_modKeystroke2_RgbWave;
+    if (ImGui::Checkbox("RGB Rainbow Wave", &rgbWave)) {
+        if (m_WidgetId == 1) sg_modKeystroke1_RgbWave = rgbWave;
+        else sg_modKeystroke2_RgbWave = rgbWave;
+        isDirty = true;
+    }
+    
+    if (rgbWave) {
+        float rgbSpeed = (m_WidgetId == 1) ? sg_modKeystroke1_RgbSpeed : sg_modKeystroke2_RgbSpeed;
+        if (ImGui::SliderFloat("RGB Wave Speed", &rgbSpeed, 0.2f, 5.0f, "%.1f")) {
+            if (m_WidgetId == 1) sg_modKeystroke1_RgbSpeed = rgbSpeed;
+            else sg_modKeystroke2_RgbSpeed = rgbSpeed;
+            isDirty = true;
+        }
+    }
+
+    float intensity = (m_WidgetId == 1) ? sg_modKeystroke1_GlowIntensity : sg_modKeystroke2_GlowIntensity;
+    if (ImGui::SliderFloat("Glow Intensity", &intensity, 0.0f, 1.5f, "%.1f")) {
+        if (m_WidgetId == 1) sg_modKeystroke1_GlowIntensity = intensity;
+        else sg_modKeystroke2_GlowIntensity = intensity;
+        isDirty = true;
+    }
+
+    if (preset == 6) {
+        ImGui::Separator();
+        ImGui::Text("Toggle Custom Keys (Keyboard Matrix):");
+        
+        int& mask0 = (m_WidgetId == 1) ? sg_modKeystroke1_Mask0 : sg_modKeystroke2_Mask0;
+        int& mask1 = (m_WidgetId == 1) ? sg_modKeystroke1_Mask1 : sg_modKeystroke2_Mask1;
+        int& mask2 = (m_WidgetId == 1) ? sg_modKeystroke1_Mask2 : sg_modKeystroke2_Mask2;
+
+        auto DrawKeyCheckbox = [&](const char* chk_label, int idx) {
+            bool val = false;
+            if (idx < 32) val = (mask0 & (1 << idx)) != 0;
+            else if (idx < 64) val = (mask1 & (1 << (idx - 32))) != 0;
+            else val = (mask2 & (1 << (idx - 64))) != 0;
+
+            if (ImGui::Checkbox(chk_label, &val)) {
+                if (idx < 32) {
+                    if (val) mask0 |= (1 << idx);
+                    else mask0 &= ~(1 << idx);
+                } else if (idx < 64) {
+                    if (val) mask1 |= (1 << (idx - 32));
+                    else mask1 &= ~(1 << (idx - 32));
+                } else {
+                    if (val) mask2 |= (1 << (idx - 64));
+                    else mask2 &= ~(1 << (idx - 64));
+                }
+                isDirty = true;
+            }
+        };
+
+        // Render Row 0
+        DrawKeyCheckbox("Esc", 0); ImGui::SameLine();
+        DrawKeyCheckbox("F1", 1); ImGui::SameLine();
+        DrawKeyCheckbox("F2", 2); ImGui::SameLine();
+        DrawKeyCheckbox("F3", 3); ImGui::SameLine();
+        DrawKeyCheckbox("F4", 4); ImGui::SameLine();
+        DrawKeyCheckbox("F5", 5); ImGui::SameLine();
+        DrawKeyCheckbox("F6", 6); ImGui::SameLine();
+        DrawKeyCheckbox("F7", 7); ImGui::SameLine();
+        DrawKeyCheckbox("F8", 8); ImGui::SameLine();
+        DrawKeyCheckbox("F9", 9); ImGui::SameLine();
+        DrawKeyCheckbox("F10", 10); ImGui::SameLine();
+        DrawKeyCheckbox("F11", 11); ImGui::SameLine();
+        DrawKeyCheckbox("F12", 12);
+
+        // Render Row 1
+        DrawKeyCheckbox("~", 13); ImGui::SameLine();
+        DrawKeyCheckbox("1", 14); ImGui::SameLine();
+        DrawKeyCheckbox("2", 15); ImGui::SameLine();
+        DrawKeyCheckbox("3", 16); ImGui::SameLine();
+        DrawKeyCheckbox("4", 17); ImGui::SameLine();
+        DrawKeyCheckbox("5", 18); ImGui::SameLine();
+        DrawKeyCheckbox("6", 19); ImGui::SameLine();
+        DrawKeyCheckbox("7", 20); ImGui::SameLine();
+        DrawKeyCheckbox("8", 21); ImGui::SameLine();
+        DrawKeyCheckbox("9", 22); ImGui::SameLine();
+        DrawKeyCheckbox("0", 23); ImGui::SameLine();
+        DrawKeyCheckbox("-", 24); ImGui::SameLine();
+        DrawKeyCheckbox("=", 25); ImGui::SameLine();
+        DrawKeyCheckbox("Bsp", 26);
+
+        // Render Row 2
+        DrawKeyCheckbox("Tab", 27); ImGui::SameLine();
+        DrawKeyCheckbox("Q", 28); ImGui::SameLine();
+        DrawKeyCheckbox("W", 29); ImGui::SameLine();
+        DrawKeyCheckbox("E", 30); ImGui::SameLine();
+        DrawKeyCheckbox("R", 31); ImGui::SameLine();
+        DrawKeyCheckbox("T", 32); ImGui::SameLine();
+        DrawKeyCheckbox("Y", 33); ImGui::SameLine();
+        DrawKeyCheckbox("U", 34); ImGui::SameLine();
+        DrawKeyCheckbox("I", 35); ImGui::SameLine();
+        DrawKeyCheckbox("O", 36); ImGui::SameLine();
+        DrawKeyCheckbox("P", 37); ImGui::SameLine();
+        DrawKeyCheckbox("[", 38); ImGui::SameLine();
+        DrawKeyCheckbox("]", 39); ImGui::SameLine();
+        DrawKeyCheckbox("\\", 40);
+
+        // Render Row 3
+        DrawKeyCheckbox("Caps", 41); ImGui::SameLine();
+        DrawKeyCheckbox("A", 42); ImGui::SameLine();
+        DrawKeyCheckbox("S", 43); ImGui::SameLine();
+        DrawKeyCheckbox("D", 44); ImGui::SameLine();
+        DrawKeyCheckbox("F", 45); ImGui::SameLine();
+        DrawKeyCheckbox("G", 46); ImGui::SameLine();
+        DrawKeyCheckbox("H", 47); ImGui::SameLine();
+        DrawKeyCheckbox("J", 48); ImGui::SameLine();
+        DrawKeyCheckbox("K", 49); ImGui::SameLine();
+        DrawKeyCheckbox("L", 50); ImGui::SameLine();
+        DrawKeyCheckbox(";", 51); ImGui::SameLine();
+        DrawKeyCheckbox("'", 52); ImGui::SameLine();
+        DrawKeyCheckbox("Enter", 53);
+
+        // Render Row 4
+        DrawKeyCheckbox("Shift L", 54); ImGui::SameLine();
+        DrawKeyCheckbox("Z", 55); ImGui::SameLine();
+        DrawKeyCheckbox("X", 56); ImGui::SameLine();
+        DrawKeyCheckbox("C", 57); ImGui::SameLine();
+        DrawKeyCheckbox("V", 58); ImGui::SameLine();
+        DrawKeyCheckbox("B", 59); ImGui::SameLine();
+        DrawKeyCheckbox("N", 60); ImGui::SameLine();
+        DrawKeyCheckbox("M", 61); ImGui::SameLine();
+        DrawKeyCheckbox(",", 62); ImGui::SameLine();
+        DrawKeyCheckbox(".", 63); ImGui::SameLine();
+        DrawKeyCheckbox("/", 64); ImGui::SameLine();
+        DrawKeyCheckbox("Shift R", 65);
+
+        // Render Row 5
+        DrawKeyCheckbox("Ctrl L", 66); ImGui::SameLine();
+        DrawKeyCheckbox("Win L", 67); ImGui::SameLine();
+        DrawKeyCheckbox("Alt L", 68); ImGui::SameLine();
+        DrawKeyCheckbox("Space", 69); ImGui::SameLine();
+        DrawKeyCheckbox("Alt R", 70); ImGui::SameLine();
+        DrawKeyCheckbox("Win R", 71); ImGui::SameLine();
+        DrawKeyCheckbox("Menu", 72); ImGui::SameLine();
+        DrawKeyCheckbox("Ctrl R", 73);
+
+        // System / Navigation Row
+        ImGui::Text("System/Navigation:");
+        DrawKeyCheckbox("PrtScr", 74); ImGui::SameLine();
+        DrawKeyCheckbox("Scroll", 75); ImGui::SameLine();
+        DrawKeyCheckbox("Pause", 76); ImGui::SameLine();
+        DrawKeyCheckbox("Ins", 77); ImGui::SameLine();
+        DrawKeyCheckbox("Home", 78); ImGui::SameLine();
+        DrawKeyCheckbox("PgUp", 79); ImGui::SameLine();
+        DrawKeyCheckbox("Del", 80); ImGui::SameLine();
+        DrawKeyCheckbox("End", 81); ImGui::SameLine();
+        DrawKeyCheckbox("PgDn", 82);
+
+        // Arrow Keys
+        ImGui::Text("Arrows:");
+        DrawKeyCheckbox("Up", 83); ImGui::SameLine();
+        DrawKeyCheckbox("Left", 84); ImGui::SameLine();
+        DrawKeyCheckbox("Down", 85); ImGui::SameLine();
+        DrawKeyCheckbox("Right", 86);
+
+        // Mouse Buttons
+        ImGui::Text("Mouse:");
+        DrawKeyCheckbox("LMB", 87); ImGui::SameLine();
+        DrawKeyCheckbox("RMB", 88); ImGui::SameLine();
+        DrawKeyCheckbox("MMB", 89);
+    }
 }
 
 #endif

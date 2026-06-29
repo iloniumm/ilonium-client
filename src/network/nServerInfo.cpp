@@ -63,9 +63,9 @@ static bool sn_IsMaster               = false;
 static nServerInfo*           sn_QuerySoon =NULL;
 static nTimeRolling           sn_QueryTimeout = 0;
 
-static REAL sn_queryDelay = 0.5f;	// time delay between queries of the same server
-static REAL sn_queryDelayGlobal = 0.025f;	// time delay between all queries
-static int sn_numQueries = 3;	// number of queries per try
+static REAL sn_queryDelay = 0.4f;	// time delay between queries of the same server (timeout for dead IPs)
+static REAL sn_queryDelayGlobal = 0.01f;	// time delay between all queries (global rate limiter)
+static int sn_numQueries = 2;	// number of queries per try
 static int sn_TNALostContact = 4;  // minimum TNA value to be considered contact loss
 
 static tSettingItem< REAL > sn_queryDelayConf( "BROWSER_QUERY_DELAY_SINGLE", sn_queryDelay );
@@ -2106,6 +2106,7 @@ bool nServerInfo::DoQueryAll(int simultaneous)         // continue querying the 
 
     globalTimeout = time + sn_queryDelayGlobal;
 
+    // Expire timed-out pending polls (dead IPs that never replied)
     for (int i=sn_Polling.Len()-1; i>=0; i--)
     {
         nServerInfo* poll = sn_Polling(i);
@@ -2113,7 +2114,8 @@ bool nServerInfo::DoQueryAll(int simultaneous)         // continue querying the 
             sn_Polling.Remove(poll, poll->pollID);
     }
 
-    if (sn_Requesting && sn_Polling.Len() < simultaneous)
+    // Fill the entire batch pool in one call (was previously only adding 1 per call)
+    while (sn_Requesting && sn_Polling.Len() < simultaneous)
     {
         nServerInfo* next = sn_Requesting->Next();
 
@@ -2121,13 +2123,6 @@ bool nServerInfo::DoQueryAll(int simultaneous)         // continue querying the 
         {
             sn_Requesting->QueryServer();
         }
-#ifdef DEBUG
-        else
-        {
-            int x;
-            x = 1;
-        }
-#endif
 
         sn_Requesting = next;
     }

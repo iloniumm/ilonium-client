@@ -473,7 +473,7 @@ static void sg_DelayedActivation()
     Activate( sg_active );
 }
 
-namespace ModMenu { extern bool g_MainMenuActive; }
+namespace ModMenu { extern bool g_MainMenuActive; extern bool g_InGameMenuOpen; }
 
 bool filter(void *userdata, SDL_Event *tEvent){
     // recursion avoidance
@@ -525,7 +525,7 @@ bool filter(void *userdata, SDL_Event *tEvent){
             imguiCaptureMouse = true;
         }
 
-        if (!imguiCaptureMouse && !ModMenu::g_MainMenuActive && su_mouseGrab) {
+        if (!imguiCaptureMouse && !ModMenu::g_MainMenuActive && !ModMenu::g_InGameMenuOpen && su_mouseGrab) {
             SDL_SetWindowRelativeMouseMode(sr_screen, true);
         } else {
             SDL_SetWindowRelativeMouseMode(sr_screen, false);

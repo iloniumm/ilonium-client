@@ -62,6 +62,9 @@ public:
 
     rConsole();
 
+    int GetLineCount() const { return currentIn; }
+    tString const& GetLine(int i) const { return const_cast<tArray<tString>&>(lines)[i]; }
+
     int Height();
     REAL Timeout();
 

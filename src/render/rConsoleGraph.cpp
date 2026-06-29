@@ -105,6 +105,12 @@ void rConsole::Render(){
         return;
     }
 
+    extern bool sg_modChatWidgetEnabled;
+    if (sg_modChatWidgetEnabled)
+    {
+        return;
+    }
+
     sr_alreadyDisplayed = true;
 
     if (!sr_glOut)

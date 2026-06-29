@@ -410,7 +410,7 @@ char *eh_getdir(const char *da, size_t *len) {
 #ifdef WIN32
     if (!strcmp(type, "HOME")) {
         free(type);
-        type = strdup("HOMEPATH");
+        type = strdup("USERPROFILE");
     }
 #endif
     if ((ret = getenv(type)))
@@ -1440,8 +1440,21 @@ static void FindDataPath()
         throw tRunningInBuildDirectory();
 #else
     // try to use path substitution
-    if ( TestDataPath( st_RelocatePath( tString(AA_DATADIR ) ) ) ) return;
-    // if ( TestDataPath( AddPrefix( DATASUFFIX ) ) ) return;
+    tString relocated = st_RelocatePath( tString( AA_DATADIR ) );
+    if ( TestDataPath( relocated ) ) return;
+
+    // try Retrocycles path replacement
+    {
+        tString retroPath( relocated );
+        int pos = retroPath.StrPos("armagetronad");
+        if (pos >= 0)
+        {
+            tString head = retroPath.SubStr(0, pos);
+            tString tail = retroPath.SubStr(pos + 12);
+            tString newPath = head + "Retrocycles" + tail;
+            if ( TestDataPath( newPath ) ) return;
+        }
+    }
 #endif
 
 #ifdef DEBUG_PATH
@@ -1459,7 +1472,21 @@ static void FindConfigurationPath()
 {
 #ifndef MACOSX_XCODE
 #ifndef WIN32
-    if ( TestConfigurationPath( st_RelocatePath( tString( AA_SYSCONFDIR ) ) ) ) return;
+    tString relocated = st_RelocatePath( tString( AA_SYSCONFDIR ) );
+    if ( TestConfigurationPath( relocated ) ) return;
+
+    // try Retrocycles path replacement
+    {
+        tString retroPath( relocated );
+        int pos = retroPath.StrPos("armagetronad");
+        if (pos >= 0)
+        {
+            tString head = retroPath.SubStr(0, pos);
+            tString tail = retroPath.SubStr(pos + 12);
+            tString newPath = head + "Retrocycles" + tail;
+            if ( TestConfigurationPath( newPath ) ) return;
+        }
+    }
 #endif
 
     // look for configuration where the data is
@@ -1493,6 +1520,22 @@ private:
         try
         {
             st_pathToExecutable.Set( parser.Executable() );
+
+            // Check for Retrocycles executable name to override user data dir
+            {
+                tString execPath( st_pathToExecutable.Get() );
+                char const * lastSlash = strrchr( (char const *)execPath, '/' );
+                char const * lastBackslash = strrchr( (char const *)execPath, '\\' );
+                char const * lastSep = lastSlash > lastBackslash ? lastSlash : lastBackslash;
+                tString execName( lastSep ? lastSep + 1 : (char const *)execPath );
+                if ( execName.StartsWith("Retrocycles") )
+                {
+                    tString userDir("~/.");
+                    userDir += execName;
+                    st_UserDataDir = expand_home(userDir);
+                }
+            }
+
             FindDataPath();
             FindConfigurationPath();
         }

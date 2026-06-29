@@ -3,7 +3,11 @@
 
 #include "tMath.h"
 
-
+#ifdef LINUX
+#include <SDL3/SDL.h>
+#include <GL/gl.h>
+#include <GL/glu.h>
+#endif
 
 // Struct representing a single physical particle
 struct VisualParticle {
@@ -14,6 +18,7 @@ struct VisualParticle {
     float maxLife;    // Total lifetime
     float size;       // Particle scale
     bool active;
+    int type; // 0: death burst/standard, 1: floor dust/ambient
 };
 
 // Struct tracking the Screen Shake status

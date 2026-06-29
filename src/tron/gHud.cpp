@@ -247,12 +247,28 @@ static void display_minimap_subby(ePlayerNetID* me)
         eCoord p0 = wall->EndPoint(0); // tail (oldest point)
         eCoord p1 = wall->EndPoint(1); // head (newest point)
 
+        REAL wallBeg = wall->BegPos();
+        REAL wallEnd = wall->EndPos();
+
+        // [MOD] Skip obsolete walls from previous round/life
+        if (wallBeg > cycle->GetDistance()) return;
+
+        // Skip walls with invalid coordinates outside arena bounds
+        const eRectangle &bounds = eWallRim::GetBounds();
+        float margin = 50.0f;
+        if (p0.x < bounds.GetLow().x - margin || p0.x > bounds.GetHigh().x + margin ||
+            p0.y < bounds.GetLow().y - margin || p0.y > bounds.GetHigh().y + margin ||
+            p1.x < bounds.GetLow().x - margin || p1.x > bounds.GetHigh().x + margin ||
+            p1.y < bounds.GetLow().y - margin || p1.y > bounds.GetHigh().y + margin) {
+            return;
+        }
+
         // Clip the tail if WALLS_LENGTH is active
         REAL maxLen = cycle->MaxWallsLength();
-        if (maxLen > 0 && cycle->ThisWallsLength() > 0) {
-            REAL minVisibleDist = cycle->GetDistance() - maxLen;
-            REAL wallBeg = wall->BegPos();
-            REAL wallEnd = wall->EndPos();
+        if (maxLen > 0) {
+            REAL visibleLen = cycle->ThisWallsLength();
+            if (visibleLen <= 0.0f) return;
+            REAL minVisibleDist = cycle->GetDistance() - visibleLen;
 
             // Skip entirely expired walls
             if (wallEnd < minVisibleDist) return;
@@ -956,9 +972,11 @@ static void display_fps_subby()
 }
 
 // ============ [MOD] Teammate Death Warning ============
-static std::map<int, bool> sg_wasAliveMap; // network ID -> was alive
-static REAL sg_teammateDeathFlashTime = -100.0f;
-static tString sg_deadTeammateName;
+static std::map<int, bool> sg_wasAliveMap; // network ID -> was alive last frame
+static std::map<int, REAL> sg_deathTimeMap; // network ID -> time when first detected dead
+static std::map<int, bool> sg_alertTriggeredMap; // network ID -> alert already triggered for this death
+REAL sg_teammateDeathFlashTime = -100.0f;
+tString sg_deadTeammateName;
 
 static void display_teammate_death_warning(ePlayerNetID* me)
 {
@@ -966,6 +984,13 @@ static void display_teammate_death_warning(ePlayerNetID* me)
         return;
 
     REAL gameTime = se_GameTime();
+
+    // Reset maps during countdown/between rounds to avoid stale data
+    if (gameTime < 0.5f) {
+        sg_wasAliveMap.clear();
+        sg_deathTimeMap.clear();
+        sg_alertTriggeredMap.clear();
+    }
 
     // Detect teammate death by tracking alive states via map (safe for any net ID)
     for (int i = 0; i < se_PlayerNetIDs.Len(); i++) {
@@ -975,60 +1000,38 @@ static void display_teammate_death_warning(ePlayerNetID* me)
         int id = p->ID();
         bool isAlive = p->Object() && p->Object()->Alive();
 
-        // Only trigger after round has started (gameTime > 1)
-        if (sg_wasAliveMap.count(id) && sg_wasAliveMap[id] && !isAlive &&
-            p->CurrentTeam() == me->CurrentTeam() && p != me && gameTime > 1.0f) {
-            sg_teammateDeathFlashTime = gameTime;
-            sg_deadTeammateName = p->GetName();
+        if (isAlive) {
+            sg_wasAliveMap[id] = true;
+            sg_deathTimeMap[id] = -1.0f;
+            sg_alertTriggeredMap[id] = false;
+        } else {
+            // Player is currently dead/inactive
+            if (!sg_wasAliveMap.count(id) || sg_wasAliveMap[id]) {
+                // Just transitioned from alive to dead/inactive
+                sg_wasAliveMap[id] = false;
+                sg_deathTimeMap[id] = gameTime;
+                sg_alertTriggeredMap[id] = false;
+            }
+
+            // Only trigger if they have been dead/inactive for at least 0.1 seconds,
+            // which filters out 1-2 frame prediction rollbacks during kills/collisions
+            if (!sg_alertTriggeredMap[id] && sg_deathTimeMap[id] > 0.0f) {
+                if (gameTime - sg_deathTimeMap[id] >= 0.1f) {
+                    if (p->CurrentTeam() == me->CurrentTeam() && p != me && gameTime > 1.0f) {
+                        sg_teammateDeathFlashTime = gameTime;
+                        sg_deadTeammateName = p->GetName();
+                    }
+                    sg_alertTriggeredMap[id] = true;
+                }
+            }
         }
-
-        sg_wasAliveMap[id] = isAlive;
-    }
-
-    // Render centered alert (3 second fade)
-    REAL elapsed = gameTime - sg_teammateDeathFlashTime;
-    if (elapsed >= 0 && elapsed < 3.0f) {
-        REAL alpha = 1.0f - (elapsed / 3.0f);
-        alpha *= alpha;
-
-        glDisable(GL_TEXTURE_2D);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-        float boxW = 0.7f, boxH = 0.09f;
-        float cx = 0.0f, cy = 0.3f;
-
-        glColor4f(0.15f, 0.0f, 0.0f, alpha * 0.65f);
-        BeginQuads();
-        Vertex(cx - boxW, cy - boxH); Vertex(cx + boxW, cy - boxH);
-        Vertex(cx + boxW, cy + boxH); Vertex(cx - boxW, cy + boxH);
-        RenderEnd();
-
-        glColor4f(1.0f, 0.1f, 0.1f, alpha * 0.9f);
-        float bT = 0.01f;
-        BeginQuads();
-        Vertex(cx-boxW, cy+boxH-bT); Vertex(cx+boxW, cy+boxH-bT);
-        Vertex(cx+boxW, cy+boxH);    Vertex(cx-boxW, cy+boxH);
-        Vertex(cx-boxW, cy-boxH);    Vertex(cx+boxW, cy-boxH);
-        Vertex(cx+boxW, cy-boxH+bT); Vertex(cx-boxW, cy-boxH+bT);
-        RenderEnd();
-
-        glEnable(GL_TEXTURE_2D);
-        float tSz = 0.06f;
-        float tW = tSz * rTextField::AspectWidthMultiplier();
-        tString text;
-        text << "0xff4444TEAMMATE LOST: 0xffffff" << sg_deadTeammateName;
-        float approxLen = 15.0f + sg_deadTeammateName.Len();
-        rTextField warning(-(approxLen * tW * 0.45f), cy + 0.025f, tW, tSz * 1.4f);
-        warning << text;
     }
 }
 
 // ============ [MOD] Fortress Zone Alerts ============
 static void display_fortress_alerts(ePlayerNetID* me)
 {
-    if (!sg_modFortressAlerts || !me || !me->CurrentTeam() || !me->Object())
-        return;
+    return;
 
     eTeam* myTeam = me->CurrentTeam();
     eGrid* grid = me->Object()->Grid();
@@ -1228,7 +1231,7 @@ static void display_hud_subby_all()
 
         // select the full viewport for the minimap (bypassing HUD aspect ratio)
         viewportConfiguration->Port( viewport )->Select();
-        if (player && player->netPlayer && sg_modMinimapEnabled) {
+        if (player && player->netPlayer && sg_modMinimapEnabled && false) {
             display_minimap_subby( player->netPlayer );
         }
 
@@ -1299,128 +1302,6 @@ static void display_hud_subby_all()
             }
         }
 
-
-        // [MOD] Proximity Warning
-        if (sg_modProximityWarning && player && player->netPlayer) {
-            gCycle *h = dynamic_cast<gCycle *>(player->netPlayer->Object());
-            if (h && h->Alive()) {
-                float nearestDist = 99999.0f;
-                for (int i = 0; i < se_PlayerNetIDs.Len(); ++i) {
-                    ePlayerNetID *p = se_PlayerNetIDs(i);
-                    if (p && p != player->netPlayer && p->Object() && p->Object()->Alive()) {
-                        gCycle *enemy = dynamic_cast<gCycle*>(p->Object());
-                        if (enemy) {
-                            eCoord diff = enemy->Position() - h->Position();
-                            float dist = diff.NormSquared();
-                            if (dist < 400.0f) {
-                                float dot = enemy->Direction() * diff;
-                                if (dot < 0.0f) {
-                                    if (dist < nearestDist) nearestDist = dist;
-                                }
-                            }
-                        }
-                    }
-                }
-                if (nearestDist < 400.0f) {
-                    float intensity = 1.0f - (nearestDist / 400.0f);
-                    if (intensity > 1.0f) intensity = 1.0f;
-                    if (intensity > 0.0f) {
-                        glDisable(GL_TEXTURE_2D);
-                        glEnable(GL_BLEND);
-                        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-                        glColor4f(1.0f, 0.0f, 0.0f, intensity * 0.45f);
-                        float thickness = 0.15f;
-                        BeginQuads();
-                        Vertex(-1.0f, -1.0f); Vertex(-1.0f + thickness, -1.0f);
-                        Vertex(-1.0f + thickness, 1.0f); Vertex(-1.0f, 1.0f);
-                        Vertex(1.0f - thickness, -1.0f); Vertex(1.0f, -1.0f);
-                        Vertex(1.0f, 1.0f); Vertex(1.0f - thickness, 1.0f);
-                        Vertex(-1.0f, 1.0f - thickness); Vertex(1.0f, 1.0f - thickness);
-                        Vertex(1.0f, 1.0f); Vertex(-1.0f, 1.0f);
-                        Vertex(-1.0f, -1.0f); Vertex(1.0f, -1.0f);
-                        Vertex(1.0f, -1.0f + thickness); Vertex(-1.0f, -1.0f + thickness);
-                        RenderEnd();
-                        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                        glEnable(GL_TEXTURE_2D);
-                    }
-                }
-            }
-        }
-
-        // [MOD] Cut-off Predictor (Dogfight Radar)
-        if (sg_modCutoffAimbot && player && player->netPlayer) {
-            gCycle *h = dynamic_cast<gCycle *>(player->netPlayer->Object());
-            if (h && h->Alive()) {
-                float mySpeed = h->Speed();
-                if (mySpeed > 0.1f) {
-                    eCoord myPos = h->Position();
-                    eCoord myDir = h->Direction();
-                    eCoord myRight(myDir.y, -myDir.x);
-
-                    gCycle *target = NULL;
-                    float bestScore = 99999.0f;
-
-                    for (int i = 0; i < se_PlayerNetIDs.Len(); ++i) {
-                        ePlayerNetID *p = se_PlayerNetIDs(i);
-                        if (!p || p == player->netPlayer || !p->Object() || !p->Object()->Alive())
-                            continue;
-                        // Skip teammates
-                        if (p->CurrentTeam() == player->netPlayer->CurrentTeam())
-                            continue;
-                        gCycle *enemy = dynamic_cast<gCycle*>(p->Object());
-                        if (!enemy) continue;
-
-                        float dot = myDir * enemy->Direction();
-                        if (dot > 0.7f) { // Roughly parallel
-                            eCoord delta = enemy->Position() - myPos;
-                            float ahead = delta * myDir;
-                            float sideDot = delta * myRight;
-                            float sideDist = fabs(sideDot);
-
-                            // Close combat range
-                            if (ahead < 5.0f && ahead > -25.0f && sideDist > 0.5f && sideDist < 15.0f) {
-                                float score = sideDist * sideDist + ahead * ahead;
-                                if (score < bestScore) {
-                                    bestScore = score;
-                                    target = enemy;
-                                }
-                            }
-                        }
-                    }
-
-                    if (target) {
-                        eCoord delta = target->Position() - myPos;
-                        float ahead = delta * myDir;
-                        float sideDot = delta * myRight;
-                        float sideDist = fabs(sideDot);
-
-                        // Time for us to cross the lateral gap
-                        float t_cross = sideDist / mySpeed;
-                        // Time for enemy to reach our crossing point (only if they're behind)
-                        float t_enemy = (ahead < 0.0f) ? ((-ahead) / (target->Speed() + 0.001f)) : -1.0f;
-                        // Ping compensation: combined lag + reaction buffer
-                        float margin = h->Lag() + target->Lag() + 0.06f;
-
-                        bool isRight = (sideDot > 0.0f);
-                        bool canCut = false;
-
-                        // Can cut if enemy is behind us and won't reach crossing before us + margin
-                        if (ahead < 0.0f && t_enemy > t_cross + margin) {
-                            canCut = true;
-                        }
-
-                        float centerY = 0.15f;
-                        if (isRight) {
-                            rTextField rightInd(0.15f, centerY, 0.04f, 0.08f);
-                            rightInd << (canCut ? "0x33ff33" : "0xff3333") << (canCut ? "CUT >>>" : "NO >>>");
-                        } else {
-                            rTextField leftInd(-0.35f, centerY, 0.04f, 0.08f);
-                            leftInd << (canCut ? "0x33ff33" : "0xff3333") << (canCut ? "<<< CUT" : "<<< NO");
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 

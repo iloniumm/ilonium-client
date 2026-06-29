@@ -7,6 +7,7 @@
 #ifndef DEDICATED
 #include <vector>
 #include <string>
+#include <map>
 #include "defs.h"
 #include "thirdparty/imgui/imgui.h"
 #include "tools/tString.h"
@@ -70,18 +71,19 @@ public:
 
     virtual void Draw() = 0;
     virtual void Update(float dt);
+    virtual void DrawCustomSettings(bool& isDirty) {}
 
     // Getters & Setters
     const std::string& GetName() const { return m_Name; }
     
-    ImVec2 GetPosition() const;
-    void SetPosition(const ImVec2& pos);
+    virtual ImVec2 GetPosition() const;
+    virtual void SetPosition(const ImVec2& pos);
     
     const ImVec2& GetSize() const { return m_Size; }
     void SetSize(const ImVec2& size) { m_Size = size; }
     
-    bool IsVisible() const;
-    void SetVisible(bool visible);
+    virtual bool IsVisible() const;
+    virtual void SetVisible(bool visible);
     
     float GetAlpha() const { return m_Alpha; }
 
@@ -218,6 +220,11 @@ extern bool sg_modClassicRubberBatteryEnabled;
 extern REAL sg_modClassicRubberBatteryPosX;
 extern REAL sg_modClassicRubberBatteryPosY;
 
+// Media Player Widget
+extern bool sg_modMediaWidgetEnabled;
+extern REAL sg_modMediaWidgetPosX;
+extern REAL sg_modMediaWidgetPosY;
+
 class ScoreboardWidget : public HudWidget {
 public:
     ScoreboardWidget();
@@ -260,6 +267,111 @@ public:
     void Draw() override;
 };
 
+class ChatWidget : public HudWidget {
+public:
+    ChatWidget();
+    void Update(float dt) override;
+    void Draw() override;
+    void DrawCustomSettings(bool& isDirty) override;
+};
+
+class MinimapWidget : public HudWidget {
+public:
+    MinimapWidget();
+    void Update(float dt) override;
+    void Draw() override;
+    void DrawCustomSettings(bool& isDirty) override;
+private:
+    float m_CurrentAngle;
+};
+
+// [MOD] Repositionable/Scalable Alert Widgets
+extern REAL sg_modFortressAlertsPosX;
+extern REAL sg_modFortressAlertsPosY;
+extern REAL sg_modCutoffPredictorPosX;
+extern REAL sg_modCutoffPredictorPosY;
+extern REAL sg_modProximityWarningPosX;
+extern REAL sg_modProximityWarningPosY;
+extern REAL sg_modTeammateDeathPosX;
+extern REAL sg_modTeammateDeathPosY;
+
+class FortressAlertsWidget : public HudWidget {
+public:
+    FortressAlertsWidget();
+    void Draw() override;
+};
+
+class CutoffPredictorWidget : public HudWidget {
+public:
+    CutoffPredictorWidget();
+    void Draw() override;
+};
+
+class ProximityWarningWidget : public HudWidget {
+public:
+    ProximityWarningWidget();
+    void Draw() override;
+};
+
+class TeammateDeathWarningWidget : public HudWidget {
+public:
+    TeammateDeathWarningWidget();
+    void Draw() override;
+};
+
+class WallTimerWidget : public HudWidget {
+public:
+    WallTimerWidget();
+    void Draw() override;
+};
+
+class KeystrokeVisualizerWidget : public HudWidget {
+public:
+    KeystrokeVisualizerWidget(int id);
+    void Update(float dt) override;
+    void Draw() override;
+    void DrawCustomSettings(bool& isDirty) override;
+private:
+    int m_WidgetId;
+    std::map<int, float> m_KeyPressStates; // Key code -> pressProgress (0.0f - 1.0f)
+    std::vector<double> m_LmbClicks;
+    std::vector<double> m_RmbClicks;
+};
+
+extern bool sg_modWallTimerEnabled;
+extern REAL sg_modWallTimerPosX;
+extern REAL sg_modWallTimerPosY;
+
+extern bool sg_modKeystroke1_Enabled;
+extern REAL sg_modKeystroke1_PosX;
+extern REAL sg_modKeystroke1_PosY;
+extern int sg_modKeystroke1_Preset;
+extern int sg_modKeystroke1_Mask0;
+extern int sg_modKeystroke1_Mask1;
+extern int sg_modKeystroke1_Mask2;
+extern bool sg_modKeystroke1_RgbWave;
+extern REAL sg_modKeystroke1_RgbSpeed;
+extern REAL sg_modKeystroke1_GlowIntensity;
+extern bool sg_modKeystroke1_SeparateKeys;
+extern REAL sg_modKeystroke1_Spacing;
+extern REAL sg_modKeystroke1_Radius;
+extern bool sg_modKeystroke1_ShowCps;
+
+extern bool sg_modKeystroke2_Enabled;
+extern REAL sg_modKeystroke2_PosX;
+extern REAL sg_modKeystroke2_PosY;
+extern int sg_modKeystroke2_Preset;
+extern int sg_modKeystroke2_Mask0;
+extern int sg_modKeystroke2_Mask1;
+extern int sg_modKeystroke2_Mask2;
+extern bool sg_modKeystroke2_RgbWave;
+extern REAL sg_modKeystroke2_RgbSpeed;
+extern REAL sg_modKeystroke2_GlowIntensity;
+extern bool sg_modKeystroke2_SeparateKeys;
+extern REAL sg_modKeystroke2_Spacing;
+extern REAL sg_modKeystroke2_Radius;
+extern bool sg_modKeystroke2_ShowCps;
+
 class HudManager {
 public:
     static void Init();
@@ -274,5 +386,8 @@ private:
     static std::vector<HudWidget*> s_Widgets;
     static bool s_Initialized;
 };
+
+// MediaWidget is declared in MediaWidget.h which includes this header.
+// Do NOT include MediaWidget.h here to avoid circular includes.
 
 #endif

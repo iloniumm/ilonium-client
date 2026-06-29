@@ -117,6 +117,7 @@ libtron_a_SOURCES=tron/gAIBase.cpp tron/gAIBase.h tron/gAICharacter.cpp tron/gAI
 	tron/DemoPlayer.cpp tron/DemoPlayer.h \
 	tron/VisualsManager.cpp tron/VisualsManager.h \
 	tron/HudManager.cpp tron/HudManager.h \
+	tron/MediaWidget.cpp tron/MediaWidget.h \
 	tron/TrailRenderer.cpp tron/TrailRenderer.h \
 	thirdparty/imgui/imgui.cpp thirdparty/imgui/imgui_draw.cpp\
 	thirdparty/imgui/imgui_tables.cpp thirdparty/imgui/imgui_widgets.cpp\

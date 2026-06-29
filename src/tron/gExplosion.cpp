@@ -336,6 +336,7 @@ static void init_exp(){
 static tInitExit ie_exp(&init_exp);
 
 bool sg_crashExplosion = true;
+bool sg_explosionSingleLineUp = false;
 
 #ifndef DEDICATED
 void gExplosion::Render(const eCamera *cam){
@@ -366,9 +367,14 @@ void gExplosion::Render(const eCamera *cam){
 
         glColor4f(explosion_r,explosion_g,explosion_b,fade);
         BeginLines();
-        for (int i=expvec.Len()-1;i>=0;i--){
-            glVertex3f(a1*expvec[i].x[0],a1*expvec[i].x[1],a1*expvec[i].x[2]);
-            glVertex3f( e*expvec[i].x[0], e*expvec[i].x[1], e*expvec[i].x[2]);
+        if (sg_explosionSingleLineUp) {
+            glVertex3f(0.0f, 0.0f, a1);
+            glVertex3f(0.0f, 0.0f, e);
+        } else {
+            for (int i=expvec.Len()-1;i>=0;i--){
+                glVertex3f(a1*expvec[i].x[0],a1*expvec[i].x[1],a1*expvec[i].x[2]);
+                glVertex3f( e*expvec[i].x[0], e*expvec[i].x[1], e*expvec[i].x[2]);
+            }
         }
         RenderEnd();
         glPopMatrix();

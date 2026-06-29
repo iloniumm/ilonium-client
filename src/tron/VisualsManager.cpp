@@ -1,6 +1,4 @@
 #include "VisualsManager.h"
-#include <SDL3/SDL.h>
-#include "../render/rGL.h"
 #include "gMenus.h"
 #include "gWall.h"
 #include "gCycle.h"
@@ -39,6 +37,7 @@ void VisualsManager::Init() {
     // Clear particle list
     for (int i = 0; i < MAX_PARTICLES; i++) {
         g_particles[i].active = false;
+        g_particles[i].type = 0;
     }
     g_activeCount = 0;
 
@@ -58,7 +57,7 @@ void VisualsManager::Shutdown() {
 }
 
 // Spawns a single particle (optimized O(1) circular buffer allocation)
-static void SpawnParticle(float px, float py, float pz, float vx, float vy, float vz, float r, float g, float b, float a, float life, float size) {
+static void SpawnParticle(float px, float py, float pz, float vx, float vy, float vz, float r, float g, float b, float a, float life, float size, int type = 0) {
     static int nextSlot = 0;
     VisualParticle& p = g_particles[nextSlot];
     bool wasActive = p.active;
@@ -68,6 +67,7 @@ static void SpawnParticle(float px, float py, float pz, float vx, float vy, floa
     p.life = life; p.maxLife = life;
     p.size = size;
     p.active = true;
+    p.type = type;
     if (!wasActive) {
         if (g_activeCount < MAX_PARTICLES) {
             g_activeParticles[g_activeCount++] = nextSlot;
@@ -173,6 +173,10 @@ void VisualsManager::Update(float dt) {
 
     // Ambient Grid Dust Particles
     extern bool sg_modAmbientParticlesEnabled;
+    extern int sg_modAmbientParticlesMode;
+    extern int sg_modAmbientParticlesMin;
+    extern int sg_modAmbientParticlesMax;
+
     if (sg_modAmbientParticlesEnabled) {
         // Find if there is any active gZone in the current grid
         gZone* activeZone = NULL;
@@ -188,40 +192,52 @@ void VisualsManager::Update(float dt) {
             }
         }
 
+        // Count active ambient particles (type == 1)
+        int ambientCount = 0;
+        for (int i = 0; i < g_activeCount; i++) {
+            int idx = g_activeParticles[i];
+            if (g_particles[idx].active && g_particles[idx].type == 1) {
+                ambientCount++;
+            }
+        }
+
+        // Determine how many we want to spawn
+        int toSpawn = 0;
+        if (ambientCount < sg_modAmbientParticlesMin) {
+            toSpawn = sg_modAmbientParticlesMin - ambientCount;
+        } else if (ambientCount < sg_modAmbientParticlesMax) {
+            toSpawn = 2; // Spawn 2 per frame to reach max smoothly
+        }
+
+        // Limit spawning per frame to avoid performance spikes
+        if (toSpawn > 20) toSpawn = 20;
+
         // Get map boundaries
         eRectangle bounds = eWallRim::GetBounds();
         eCoord low = bounds.GetLow();
         eCoord high = bounds.GetHigh();
         float mapWidth = high.x - low.x;
         float mapHeight = high.y - low.y;
-        eCoord center = (low + high) * 0.5f;
 
-        // Spawn 1-2 dust particles per frame rising from grid floor
-        for (int k = 0; k < 2; k++) {
+        for (int k = 0; k < toSpawn; k++) {
             float px = 0.0f;
             float py = 0.0f;
 
-            if (activeZone) {
-                // Spawn inside the active zone (middle of the zone)
-                float angle = (rand() % 360) * 3.14159f / 180.0f;
-                float r_dist = (rand() % 1000) / 1000.0f * activeZone->GetRadius();
-                px = activeZone->GetPosition().x + cos(angle) * r_dist;
-                py = activeZone->GetPosition().y + sin(angle) * r_dist;
-            } else {
-                // No zone: spawn either everywhere on the map, or in the middle of the map
-                int choice = rand() % 2;
-                if (choice == 0 && mapWidth > 1.0f && mapHeight > 1.0f) {
-                    // Everywhere on the map
+            if (sg_modAmbientParticlesMode == 1) { // Zone Only
+                if (activeZone) {
+                    float angle = (rand() % 360) * 3.14159f / 180.0f;
+                    float r_dist = (rand() % 1000) / 1000.0f * activeZone->GetRadius();
+                    px = activeZone->GetPosition().x + cos(angle) * r_dist;
+                    py = activeZone->GetPosition().y + sin(angle) * r_dist;
+                } else {
+                    // No active zone in zone only mode: don't spawn anything
+                    continue;
+                }
+            } else { // Uniform (Mode 0)
+                if (mapWidth > 1.0f && mapHeight > 1.0f) {
                     px = low.x + (rand() % 1000) / 1000.0f * mapWidth;
                     py = low.y + (rand() % 1000) / 1000.0f * mapHeight;
-                } else if (mapWidth > 1.0f && mapHeight > 1.0f) {
-                    // Middle of the map
-                    float angle = (rand() % 360) * 3.14159f / 180.0f;
-                    float r_dist = (rand() % 1000) / 1000.0f * (fminf(mapWidth, mapHeight) * 0.3f);
-                    px = center.x + cos(angle) * r_dist;
-                    py = center.y + sin(angle) * r_dist;
                 } else {
-                    // Fallback to center or origin if map bounds are not initialized yet
                     px = 0.0f;
                     py = 0.0f;
                 }
@@ -241,7 +257,7 @@ void VisualsManager::Update(float dt) {
             float life = 2.0f + (rand() % 200) / 100.0f; // 2-4 seconds life
             float size = 0.04f + (rand() % 4) / 100.0f;
 
-            SpawnParticle(px, py, pz, vx, vy, vz, r, g, b, 0.8f, life, size);
+            SpawnParticle(px, py, pz, vx, vy, vz, r, g, b, 0.8f, life, size, 1);
         }
     }
 }

@@ -16,15 +16,23 @@
 #include <cstdlib>
 #include <iomanip>
 
+#ifdef WIN32
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
 #include "tron/DemoRecorder.h"
 #include "tron/DemoPlayer.h"
+#include "tron/MediaWidget.h"
 
 #include "render/rSysdep.h"
 #include "tron/gMenus.h"
 
+extern REAL sg_modNameSizeScale;
+
 extern void (*st_PostLoadConfigCallback)();
 
-
+// Auto-register the visual overlay renderer at static initialization time
 struct ModMenuAutoRegister {
     ModMenuAutoRegister() {
         rSysDep::SetOverlayRenderer(&cVisualMenu::Render);
@@ -32,7 +40,7 @@ struct ModMenuAutoRegister {
 };
 static ModMenuAutoRegister g_ModMenuAutoRegister;
 
-
+// Retrocycles / Armagetron Headers
 #include "tDirectories.h"
 #include "rTexture.h"
 #include "ePlayer.h"
@@ -40,7 +48,7 @@ static ModMenuAutoRegister g_ModMenuAutoRegister;
 #include "nNetwork.h"
 #include "tools/tConfiguration.h"
 
-
+// Custom main menu additions
 #include "tron/gGame.h"
 #include "tron/gServerBrowser.h"
 #include "tron/gServerFavorites.h"
@@ -60,7 +68,17 @@ static ModMenuAutoRegister g_ModMenuAutoRegister;
 #include "engine/eTeam.h"
 #include "tron/gTeam.h"
 #include "engine/eVoter.h"
-
+static bool CaseInsensitiveSubstringSearch(const std::string& haystack, const std::string& needle) {
+    if (needle.empty()) return true;
+    auto it = std::search(
+        haystack.begin(), haystack.end(),
+        needle.begin(), needle.end(),
+        [](char ch1, char ch2) {
+            return std::tolower(static_cast<unsigned char>(ch1)) == std::tolower(static_cast<unsigned char>(ch2));
+        }
+    );
+    return it != haystack.end();
+}
 
 extern tString gl_vendor;
 extern tString gl_renderer;
@@ -79,7 +97,10 @@ extern void sg_Receive();
 
 #include "network/nNetObject.h"
 
-
+// Real HUD / engine variables (in global namespace)
+extern tString sg_lastServerName;
+extern tString sg_lastServerIP;
+extern unsigned int sg_lastServerPort;
 extern bool subby_ShowHUD;
 extern bool subby_ShowSpeedFastest;
 extern bool subby_ShowScore;
@@ -108,7 +129,7 @@ static void se_TestLegacyMenu(std::istream& s) {
 }
 static tConfItemFunc testLegacyMenuConf("TEST_LEGACY_MENU", &se_TestLegacyMenu);
 
-
+// Client HUD Layout variables
 extern REAL subby_SpeedGaugeSize;
 extern REAL subby_SpeedGaugeLocX;
 extern REAL subby_SpeedGaugeLocY;
@@ -131,13 +152,14 @@ extern REAL subby_PingSize;
 extern REAL subby_PingLocX;
 extern REAL subby_PingLocY;
 
-
+// Graphics & physics details
 extern int sr_floorDetail;
 extern bool sr_alphaBlend;
 extern bool sr_smoothShading;
 extern bool crash_sparks;
 extern bool white_sparks;
 extern bool sg_crashExplosion;
+extern bool sg_explosionSingleLineUp;
 extern bool sr_textOut;
 extern bool sr_FPSOut;
 extern bool sr_RecordingTimeOut;
@@ -162,7 +184,7 @@ extern REAL sg_perfectTurnCalibration;
 extern REAL sg_autoEscapeRubberMargin;
 extern bool sg_autoEscapePingComp;
 
-
+// Globals
 bool g_NoclipMode = false;
 bool g_CleanScreen = false;
 bool g_CameraLock = false;
@@ -181,7 +203,7 @@ bool g_ShowFastest = false;
 bool g_ShowTime = false;
 bool g_24hFormat = false;
 
-
+// Client variables
 float g_FOV = 90.0f;
 float g_SpeedGaugeSize = 1.0f;
 float g_SpeedGaugeX = 0.0f;
@@ -193,7 +215,7 @@ float g_RubberGaugeSize = 1.0f;
 float g_RubberGaugeX = 0.0f;
 float g_RubberGaugeY = 0.0f;
 
-
+// Graphics & Util variables
 bool g_Sparks = true;
 bool g_WhiteSparks = false;
 bool g_Explosions = true;
@@ -201,24 +223,31 @@ bool g_AlphaBlend = true;
 bool g_SmoothShading = true;
 float g_FloorDetail = 3.0f;
 
-
+// Theme custom globals
 bool g_RGBTopBar = true;
 bool g_RGBAccent = false;
 float g_RGBSpeed = 0.15f;
 bool g_ShowParticles = true;
-float g_ParticleType = 0.0f; 
+float g_ParticleType = 0.0f; // 0 = Dust, 1 = Rain, 2 = Stars
 bool g_GradientAccent = true;
 ImVec4 g_AccentColor = ImVec4(0.478f, 0.345f, 1.0f, 1.0f);
-ImVec4 g_AccentColor1 = ImVec4(0.478f, 0.345f, 1.0f, 1.0f); 
-ImVec4 g_AccentColor2 = ImVec4(0.0f, 0.75f, 1.0f, 1.0f);    
+ImVec4 g_AccentColor1 = ImVec4(0.478f, 0.345f, 1.0f, 1.0f); // Default purple
+ImVec4 g_AccentColor2 = ImVec4(0.0f, 0.75f, 1.0f, 1.0f);    // Default cyan
 ImVec4 g_MenuBgColor = ImVec4(0.07f, 0.07f, 0.08f, 1.0f);
 float g_MenuBgAlpha = 0.85f;
 bool g_InteractiveParticles = true;
 bool g_ConstellationWeb = true;
 bool g_ParallaxEffect = true;
 
+static std::vector<std::string> s_DashboardConfigs;
+static bool s_DashboardConfigsLoaded = false;
+static void LoadDashboardConfigs();
 
-int g_NoclipKeybind = 0;      
+
+// Global Keybind Variables
+bool g_ModMenuKeybindEnabled = true;
+int g_ModMenuKeybind = 277;    // 277 is the legacy keycode for SDLK_INSERT
+int g_NoclipKeybind = 0;      // 0 = NONE
 int g_CleanScreenKeybind = 0;
 int g_CameraLockKeybind = 0;
 int g_CustomHitboxKeybind = 0;
@@ -251,15 +280,20 @@ int g_ConstellationWebKeybind = 0;
 int g_ParallaxEffectKeybind = 0;
 int g_GradientAccentKeybind = 0;
 
-
+// Auto Packet Refresh configuration
 bool g_AutoPacketRefresh = true;
 int g_PacketRefreshKeybind = 0;
 
-
+// K/D Reset keybind
 int g_ResetKDKeybind = 0;
 extern bool sg_modKDResetFlag;
 
+// Media Player Keybinds
+int g_MediaPlayPauseKeybind = 0;
+int g_MediaNextKeybind = 0;
+int g_MediaPrevKeybind = 0;
 
+// Player Color Overrides
 extern bool sg_overrideLocalColor;
 extern REAL sg_localColorR;
 extern REAL sg_localColorG;
@@ -280,12 +314,12 @@ extern tString sg_lastServerIP;
 extern unsigned int sg_lastServerPort;
 extern void ReconnectToServer();
 
-
+// Network Anti-Lag packet arrival tracking
 extern double sn_LastPacketTime;
 
 
 
-
+// Spectator / Noclip configuration variables
 extern REAL sg_noclipSpeed;
 extern REAL sg_noclipSlowFactor;
 extern REAL sg_noclipMouseSens;
@@ -320,7 +354,7 @@ extern REAL sg_noclipSmoothFactor;
 extern bool sg_noclipHideConsole;
 extern bool sg_noclipHideNames;
 
-
+// Configurations for our custom variables
 static tConfItem<int> conf_noclipKeybind("MOD_NOCLIP_KEYBIND", g_NoclipKeybind);
 static tConfItem<int> conf_cleanScreenKeybind("MOD_CLEAN_SCREEN_KEYBIND", g_CleanScreenKeybind);
 static tConfItem<int> conf_cameraLockKeybind("MOD_CAMERA_LOCK_KEYBIND", g_CameraLockKeybind);
@@ -329,6 +363,9 @@ static tConfItem<int> conf_customFogKeybind("MOD_CUSTOM_FOG_KEYBIND", g_CustomFo
 static tConfItem<bool> conf_autoPacketRefresh("MOD_AUTO_PACKET_REFRESH", g_AutoPacketRefresh);
 static tConfItem<int> conf_packetRefreshKeybind("MOD_PACKET_REFRESH_KEYBIND", g_PacketRefreshKeybind);
 static tConfItem<int> conf_resetKDKeybind("MOD_RESET_KD_KEYBIND", g_ResetKDKeybind);
+static tConfItem<int> conf_mediaPlayPauseKeybind("MOD_MEDIA_PLAY_PAUSE_KEYBIND", g_MediaPlayPauseKeybind);
+static tConfItem<int> conf_mediaNextKeybind("MOD_MEDIA_NEXT_KEYBIND", g_MediaNextKeybind);
+static tConfItem<int> conf_mediaPrevKeybind("MOD_MEDIA_PREV_KEYBIND", g_MediaPrevKeybind);
 static tConfItem<int> conf_showHudKeybind("MOD_SHOW_HUD_KEYBIND", g_ShowHUDKeybind);
 static tConfItem<int> conf_rubberGaugeKeybind("MOD_RUBBER_GAUGE_KEYBIND", g_RubberGaugeKeybind);
 static tConfItem<int> conf_speedMeterKeybind("MOD_SPEED_METER_KEYBIND", g_SpeedMeterKeybind);
@@ -351,9 +388,11 @@ static tConfItem<int> conf_interactiveParticlesKeybind("MOD_INTERACTIVE_PARTICLE
 static tConfItem<int> conf_constellationWebKeybind("MOD_CONSTELLATION_WEB_KEYBIND", g_ConstellationWebKeybind);
 static tConfItem<int> conf_parallaxEffectKeybind("MOD_PARALLAX_EFFECT_KEYBIND", g_ParallaxEffectKeybind);
 static tConfItem<int> conf_gradientAccentKeybind("MOD_GRADIENT_ACCENT_KEYBIND", g_GradientAccentKeybind);
+static tConfItem<bool> conf_modMenuKeybindEnabled("MOD_MENU_KEYBIND_ENABLED", g_ModMenuKeybindEnabled);
+static tConfItem<int> conf_modMenuKeybind("MOD_MENU_KEYBIND", g_ModMenuKeybind);
 
 
-
+// Mod modes & variables
 static tConfItem<bool> conf_noclipMode("MOD_NOCLIP_MODE", g_NoclipMode);
 static tConfItem<bool> conf_cleanScreen("MOD_CLEAN_SCREEN", g_CleanScreen);
 static tConfItem<bool> conf_cameraLock("MOD_CAMERA_LOCK", g_CameraLock);
@@ -417,7 +456,7 @@ static tConfItem<float> conf_menuBgAlpha("MOD_MENU_BG_ALPHA", g_MenuBgAlpha);
 
 static int* g_BindingKeybindPtr = nullptr;
 
-
+// Static tracker variables for bidirectional sync
 static bool prev_ShowHUD = false;
 static bool prev_ShowFastest = false;
 static bool prev_ShowScores = false;
@@ -518,6 +557,7 @@ static int TranslateLegacyKeycodeToSDL3Keycode(int keysym) {
 }
 
 static void TranslateAllModKeybinds() {
+    g_ModMenuKeybind = TranslateLegacyKeycodeToSDL3Keycode(g_ModMenuKeybind);
     g_NoclipKeybind = TranslateLegacyKeycodeToSDL3Keycode(g_NoclipKeybind);
     g_CleanScreenKeybind = TranslateLegacyKeycodeToSDL3Keycode(g_CleanScreenKeybind);
     g_CameraLockKeybind = TranslateLegacyKeycodeToSDL3Keycode(g_CameraLockKeybind);
@@ -547,6 +587,9 @@ static void TranslateAllModKeybinds() {
     g_GradientAccentKeybind = TranslateLegacyKeycodeToSDL3Keycode(g_GradientAccentKeybind);
     g_PacketRefreshKeybind = TranslateLegacyKeycodeToSDL3Keycode(g_PacketRefreshKeybind);
     g_ResetKDKeybind = TranslateLegacyKeycodeToSDL3Keycode(g_ResetKDKeybind);
+    g_MediaPlayPauseKeybind = TranslateLegacyKeycodeToSDL3Keycode(g_MediaPlayPauseKeybind);
+    g_MediaNextKeybind = TranslateLegacyKeycodeToSDL3Keycode(g_MediaNextKeybind);
+    g_MediaPrevKeybind = TranslateLegacyKeycodeToSDL3Keycode(g_MediaPrevKeybind);
 
     sg_noclipKeyForward = TranslateLegacyKeycodeToSDL3Keycode(sg_noclipKeyForward);
     sg_noclipKeyBack = TranslateLegacyKeycodeToSDL3Keycode(sg_noclipKeyBack);
@@ -588,7 +631,7 @@ static std::string GetScancodeName(int scancode) {
 static void DrawCycleColorPreview(ePlayer* lp) {
     if (!lp) return;
     
-    
+    // 1. Calculate color overflow values for cycle body:
     int rc = lp->rgb[0] & 15;
     int gc = lp->rgb[1] & 15;
     int bc = lp->rgb[2] & 15;
@@ -597,7 +640,7 @@ static void DrawCycleColorPreview(ePlayer* lp) {
     float gc_f = (float)gc;
     float bc_f = (float)bc;
 
-    
+    // Brightness boosting for cycle
     while (rc_f + gc_f + bc_f < 3.0f) {
         rc_f += 0.5f;
         gc_f += 0.5f;
@@ -606,7 +649,7 @@ static void DrawCycleColorPreview(ePlayer* lp) {
 
     ImVec4 cycleColor(rc_f * 17.0f / 255.0f, gc_f * 17.0f / 255.0f, bc_f * 17.0f / 255.0f, 1.0f);
 
-    
+    // 2. Calculate clamped color values for the trail:
     float rt_f = (float)lp->rgb[0];
     float gt_f = (float)lp->rgb[1];
     float bt_f = (float)lp->rgb[2];
@@ -618,7 +661,7 @@ static void DrawCycleColorPreview(ePlayer* lp) {
     if (gt_f < 0.0f) gt_f = 0.0f;
     if (bt_f < 0.0f) bt_f = 0.0f;
 
-    
+    // Brightness boosting for trail
     while (rt_f + gt_f + bt_f < 6.0f) {
         rt_f += 0.5f;
         gt_f += 0.5f;
@@ -630,7 +673,7 @@ static void DrawCycleColorPreview(ePlayer* lp) {
     ImGui::TextColored(ImVec4(0.0f, 0.94f, 1.0f, 1.0f), "LIVE CYCLE & TRAIL PREVIEW");
     ImGui::Spacing();
     
-    
+    // Begin a child or canvas area
     ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
     float width = ImGui::GetContentRegionAvail().x;
     float height = 110.0f;
@@ -638,13 +681,13 @@ static void DrawCycleColorPreview(ePlayer* lp) {
     
     ImDrawList* dl = ImGui::GetWindowDrawList();
     
-    
+    // Draw background box with rich aesthetics
     ImU32 bgCol = ImGui::GetColorU32(ImVec4(0.06f, 0.06f, 0.08f, 1.0f));
     ImU32 borderCol = ImGui::GetColorU32(ImVec4(0.18f, 0.18f, 0.22f, 1.0f));
     dl->AddRectFilled(canvas_pos, ImVec2(canvas_pos.x + width, canvas_pos.y + height), bgCol, 8.0f);
     dl->AddRect(canvas_pos, ImVec2(canvas_pos.x + width, canvas_pos.y + height), borderCol, 8.0f);
     
-    
+    // Draw grid floor lines to make it feel like the Armagetron grid
     ImU32 gridCol = ImGui::GetColorU32(ImVec4(0.20f, 0.20f, 0.25f, 0.25f));
     float gridSpacing = 20.0f;
     for (float x = canvas_pos.x + gridSpacing; x < canvas_pos.x + width; x += gridSpacing) {
@@ -654,14 +697,14 @@ static void DrawCycleColorPreview(ePlayer* lp) {
         dl->AddLine(ImVec2(canvas_pos.x, y), ImVec2(canvas_pos.x + width, y), gridCol);
     }
     
-    
+    // Define positions
     ImVec2 cyclePos(canvas_pos.x + width - 65.0f, canvas_pos.y + height * 0.55f);
     ImVec2 trailLeftTop(canvas_pos.x + 15.0f, canvas_pos.y + height * 0.15f);
     ImVec2 trailLeftBottom(canvas_pos.x + 15.0f, canvas_pos.y + height * 0.85f);
     ImVec2 trailRightTop(cyclePos.x, cyclePos.y - 12.0f);
     ImVec2 trailRightBottom(cyclePos.x, cyclePos.y + 12.0f);
     
-    
+    // Draw trail wall polygon with gradient-like transparency
     ImVec2 trailPts[4] = {
         trailLeftTop,
         trailRightTop,
@@ -670,12 +713,12 @@ static void DrawCycleColorPreview(ePlayer* lp) {
     };
     dl->AddConvexPolyFilled(trailPts, 4, ImGui::GetColorU32(ImVec4(trailColor.x, trailColor.y, trailColor.z, 0.40f)));
     
-    
+    // Draw trail glowing core line (top of the wall)
     dl->AddLine(trailLeftTop, trailRightTop, ImGui::GetColorU32(ImVec4(trailColor.x, trailColor.y, trailColor.z, 0.95f)), 2.5f);
-    
+    // Bottom border of the wall
     dl->AddLine(trailLeftBottom, trailRightBottom, ImGui::GetColorU32(ImVec4(trailColor.x, trailColor.y, trailColor.z, 0.45f)), 1.5f);
     
-    
+    // Draw futuristic zig-zag grid patterns on the trail
     ImU32 zigCol = ImGui::GetColorU32(ImVec4(trailColor.x, trailColor.y, trailColor.z, 0.65f));
     int numZigs = 7;
     for (int i = 0; i < numZigs; ++i) {
@@ -691,21 +734,21 @@ static void DrawCycleColorPreview(ePlayer* lp) {
         dl->AddLine(p1, p2, zigCol, 1.5f);
     }
     
-    
+    // Draw Lightcycle:
     ImVec2 rearWheel = cyclePos;
     ImVec2 frontWheel(cyclePos.x + 38.0f, cyclePos.y + 2.0f);
     
-    
+    // Rear wheel
     dl->AddCircleFilled(rearWheel, 8.5f, ImGui::GetColorU32(ImVec4(0.12f, 0.12f, 0.15f, 1.0f)));
     dl->AddCircleFilled(rearWheel, 5.0f, ImGui::GetColorU32(cycleColor));
     dl->AddCircle(rearWheel, 8.5f, ImGui::GetColorU32(ImVec4(0.7f, 0.7f, 0.75f, 1.0f)), 16, 2.0f);
     
-    
+    // Front wheel
     dl->AddCircleFilled(frontWheel, 8.5f, ImGui::GetColorU32(ImVec4(0.12f, 0.12f, 0.15f, 1.0f)));
     dl->AddCircleFilled(frontWheel, 5.0f, ImGui::GetColorU32(cycleColor));
     dl->AddCircle(frontWheel, 8.5f, ImGui::GetColorU32(ImVec4(0.7f, 0.7f, 0.75f, 1.0f)), 16, 2.0f);
     
-    
+    // Cycle body chassis polygon
     ImVec2 bodyPts[6] = {
         ImVec2(cyclePos.x - 12.0f, cyclePos.y - 4.0f),
         ImVec2(cyclePos.x + 5.0f, cyclePos.y - 12.0f),
@@ -717,7 +760,7 @@ static void DrawCycleColorPreview(ePlayer* lp) {
     dl->AddConvexPolyFilled(bodyPts, 6, ImGui::GetColorU32(ImVec4(0.20f, 0.20f, 0.24f, 1.0f)));
     dl->AddPolyline(bodyPts, 6, ImGui::GetColorU32(ImVec4(0.45f, 0.45f, 0.50f, 1.0f)), true, 1.0f);
     
-    
+    // Colored main accent body panel
     ImVec2 accentPts[4] = {
         ImVec2(cyclePos.x + 3.0f, cyclePos.y - 4.0f),
         ImVec2(cyclePos.x + 16.0f, cyclePos.y - 8.0f),
@@ -727,7 +770,7 @@ static void DrawCycleColorPreview(ePlayer* lp) {
     dl->AddConvexPolyFilled(accentPts, 4, ImGui::GetColorU32(cycleColor));
     dl->AddPolyline(accentPts, 4, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.35f)), true, 1.0f);
     
-    
+    // Glass canopy
     ImVec2 canopyPts[4] = {
         ImVec2(cyclePos.x + 8.0f, cyclePos.y - 11.0f),
         ImVec2(cyclePos.x + 18.0f, cyclePos.y - 11.0f),
@@ -737,7 +780,7 @@ static void DrawCycleColorPreview(ePlayer* lp) {
     dl->AddConvexPolyFilled(canopyPts, 4, ImGui::GetColorU32(ImVec4(0.08f, 0.08f, 0.12f, 0.85f)));
     dl->AddPolyline(canopyPts, 4, ImGui::GetColorU32(ImVec4(0.35f, 0.35f, 0.40f, 1.0f)), true, 1.0f);
 
-    
+    // Text labels for colors
     char colorLabel[128];
     snprintf(colorLabel, sizeof(colorLabel), "Cycle: R:%d G:%d B:%d | Trail: R:%.2f G:%.2f B:%.2f",
              (int)(cycleColor.x * 255.0f), (int)(cycleColor.y * 255.0f), (int)(cycleColor.z * 255.0f), trailColor.x, trailColor.y, trailColor.z);
@@ -950,7 +993,13 @@ static std::vector<std::string> GetAvailableCameraConfigs() {
     auto localConfigs = ListCfgFiles(".");
     configs.insert(configs.end(), localConfigs.begin(), localConfigs.end());
     
-    std::string varPath = (const char*)tDirectories::Var().GetWritePath("");
+    tString varDir = tDirectories::Var().GetWritePath("x");
+    std::string varPath;
+    if (varDir.Len() > 2) {
+        varPath = (const char*)varDir.SubStr(0, varDir.Len() - 2);
+    } else {
+        varPath = ".";
+    }
     if (!varPath.empty()) {
         auto varConfigs = ListCfgFiles(varPath);
         for (const auto& vc : varConfigs) {
@@ -1288,6 +1337,17 @@ static void RenderArmagetronColoredText(const char* text) {
 
 static bool g_Initialized = false;
 static bool g_MenuOpen = false;
+static ImVec2 g_LastDisplaySize = ImVec2(0, 0);
+void CheckDisplaySizeRebuild() {
+    ImGuiIO& io = ImGui::GetIO();
+    if (g_LastDisplaySize.x != io.DisplaySize.x || g_LastDisplaySize.y != io.DisplaySize.y) {
+        if (g_LastDisplaySize.x != 0 && g_LastDisplaySize.y != 0) {
+            ImGui_ImplOpenGL2_DestroyDeviceObjects();
+            ImGui_ImplOpenGL2_CreateDeviceObjects();
+        }
+        g_LastDisplaySize = io.DisplaySize;
+    }
+}
 static float g_MenuAlpha = 0.0f;
 static int g_ActiveTab = 0;
 static int g_ModMenuTab = 0;
@@ -1295,7 +1355,7 @@ static bool g_CloseInGameMenuRequested = false;
 static uAction* s_BindingAction = nullptr;
 static GLuint g_AvatarTexture = 0;
 
-
+// Font pointers and main menu active flag
 ImFont* g_FontDefault = nullptr;
 ImFont* g_FontHeader = nullptr;
 bool ModMenu::g_MainMenuActive = true;
@@ -1327,7 +1387,7 @@ static bool g_OpenDirectConnectModal = false;
 static bool g_OpenServerDetailsModal = false;
 
 
-
+// Tab sliding animation states
 static float g_TabUnderlineX = 0.0f;
 static float g_TabUnderlineWidth = 0.0f;
 
@@ -1344,8 +1404,6 @@ static std::vector<MenuParticle> g_Particles;
 
 
 void ModMenu::InitStyle() {
-    volatile unsigned long long _salt = 0x496c6f6e61ULL;
-
     ImGuiStyle& style = ImGui::GetStyle();
     ImGui::StyleColorsDark();
     
@@ -1356,7 +1414,7 @@ void ModMenu::InitStyle() {
     style.PopupRounding = 8.0f;
     style.ScrollbarRounding = 8.0f;
     
-    
+    // Colors
     style.Colors[ImGuiCol_FrameBg] = ImVec4(0.08f, 0.08f, 0.10f, 0.8f);
     style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.12f, 0.12f, 0.15f, 0.8f);
     style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.16f, 0.16f, 0.20f, 0.8f);
@@ -1378,12 +1436,12 @@ void ModMenu::InitStyle() {
     
     style.Colors[ImGuiCol_NavHighlight] = ImVec4(0.0f, 0.94f, 1.0f, 0.8f);
     
-    
+    // Strict Figma Padding
     style.WindowPadding = ImVec2(25.0f, 25.0f);
     style.ItemSpacing = ImVec2(15.0f, 15.0f);
 }
 
-
+// Shader-based shadow placeholder
 static void RenderTextureGlow(ImVec2 pos, ImVec2 size, ImU32 color, float rounding) {
     ImGui::GetWindowDrawList()->AddRectFilled(
         ImVec2(pos.x - 4.0f, pos.y - 4.0f), 
@@ -1392,7 +1450,7 @@ static void RenderTextureGlow(ImVec2 pos, ImVec2 size, ImU32 color, float roundi
     );
 }
 
-
+// Multi-layered soft shadow glow (CSS-like box-shadow)
 static void RenderSoftGlow(ImDrawList* dl, ImVec2 pos, ImVec2 size, ImU32 color, float rounding) {
     float glowRadius[] = { 3.0f, 7.0f, 12.0f };
     float glowAlpha[] = { 0.45f, 0.22f, 0.08f };
@@ -1413,7 +1471,7 @@ static void RenderSoftGlow(ImDrawList* dl, ImVec2 pos, ImVec2 size, ImU32 color,
     }
 }
 
-
+// Draw a filled rectangle with rounded corners matching the border perfectly
 static void AddRoundedGradientRect(ImDrawList* dl, ImVec2 p_min, ImVec2 p_max, ImU32 col_top, ImU32 col_bot, float rounding) {
     unsigned char r1 = (col_top >> 0) & 0xFF;
     unsigned char g1 = (col_top >> 8) & 0xFF;
@@ -1429,7 +1487,7 @@ static void AddRoundedGradientRect(ImDrawList* dl, ImVec2 p_min, ImVec2 p_max, I
     dl->AddRectFilled(p_min, p_max, col, rounding);
 }
 
-
+// Get the theme color mapped to position context (horizontal gradient support)
 ImU32 GetThemeColor(float t) {
     float alphaVal = (g_MenuAlpha < 0.0f) ? 0.0f : ((g_MenuAlpha > 1.0f) ? 1.0f : g_MenuAlpha);
     if (g_RGBAccent) {
@@ -1459,7 +1517,7 @@ ImU32 GetThemeColor(float t) {
     return ImGui::GetColorU32(col);
 }
 
-
+// Visual-only Animated Toggle
 static void RenderToggleVisual(ImVec2 pos, bool v, ImGuiID id, float itemAlpha) {
     float height = 20.0f;
     float width = 38.0f;
@@ -1476,7 +1534,7 @@ static void RenderToggleVisual(ImVec2 pos, bool v, ImGuiID id, float itemAlpha) 
     float knobX = ImLerp(pos.x + radius, pos.x + width - radius, t);
     float knobY = pos.y + radius;
     
-    
+    // Texture-based glow architecture
     if (t > 0.01f) {
         ImU32 glowColor = GetThemeColor(0.5f);
         glowColor = (glowColor & 0x00FFFFFF) | (((unsigned int)(0.2f * t * 255 * itemAlpha)) << 24);
@@ -1491,9 +1549,9 @@ static void RenderToggleVisual(ImVec2 pos, bool v, ImGuiID id, float itemAlpha) 
     ));
     dl->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height), bgCol, radius);
 
-    
+    // Knob Drop Shadow
     dl->AddCircleFilled(ImVec2(knobX, knobY + 1.0f), radius - 2.0f, IM_COL32(0, 0, 0, 100 * itemAlpha));
-    
+    // Knob
     dl->AddCircleFilled(ImVec2(knobX, knobY), radius - 2.0f, IM_COL32(255, 255, 255, 255 * itemAlpha));
 }
 
@@ -1502,12 +1560,12 @@ bool SettingItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char*
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImGuiIO& io = ImGui::GetIO();
     
-    
+    // Smooth hover animation state tracking
     ImGuiStorage* storage = ImGui::GetStateStorage();
     ImGuiID hoverTimeId = ImGui::GetID("##hover_time");
     float hoverT = storage->GetFloat(hoverTimeId, 0.0f);
     
-    
+    // We register the item at the static position
     ImGui::SetCursorScreenPos(pos);
     bool changed = false;
     if (ImGui::InvisibleButton("##row", size)) {
@@ -1520,23 +1578,23 @@ bool SettingItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char*
     hoverT = ImLerp(hoverT, targetHover, io.DeltaTime * 12.0f);
     storage->SetFloat(hoverTimeId, hoverT);
     
-    
+    // Check for Right Click to open popup
     bool rightClicked = false;
     if (hovered && ImGui::IsMouseClicked(1)) {
         rightClicked = true;
     }
     
-    
+    // Multiplied alpha for transition transitions
     float itemAlpha = g_MenuAlpha * alphaMult;
     
-    
+    // Calculate magnetic / offset position
     ImVec2 renderPos = pos;
     ImVec2 renderSize = size;
     if (hoverT > 0.001f) {
         ImVec2 mousePos = io.MousePos;
         ImVec2 center(pos.x + size.x * 0.5f, pos.y + size.y * 0.5f);
         
-        
+        // Dynamic shift towards the cursor (magnetic offset)
         float maxOffset = 5.0f; 
         ImVec2 delta(mousePos.x - center.x, mousePos.y - center.y);
         float len = sqrtf(delta.x * delta.x + delta.y * delta.y);
@@ -1545,7 +1603,7 @@ bool SettingItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char*
             renderPos.y += (delta.y / len) * maxOffset * hoverT;
         }
         
-        
+        // Slight expansion/scale-up
         float scaleFactor = 1.0f + 0.02f * hoverT;
         float newW = size.x * scaleFactor;
         float newH = size.y * scaleFactor;
@@ -1554,11 +1612,11 @@ bool SettingItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char*
         renderSize = ImVec2(newW, newH);
     }
     
-    
+    // Render Panel Background with Vertical Gradient & Rounding (24.0f)
     ImU32 panelBgTop = ImGui::GetColorU32(ImVec4(0.10f, 0.10f, 0.12f, itemAlpha));
     ImU32 panelBgBot = ImGui::GetColorU32(ImVec4(0.06f, 0.06f, 0.08f, itemAlpha));
     if (hoverT > 0.001f) {
-        
+        // Soft backdrop glow
         ImU32 themeCol = GetThemeColor(pos.x / 1180.0f);
         ImU32 shadowCol = (themeCol & 0x00FFFFFF) | (((unsigned int)(0.12f * hoverT * 255.0f * itemAlpha)) << 24);
         RenderTextureGlow(ImVec2(renderPos.x - 8.0f, renderPos.y - 8.0f), ImVec2(renderSize.x + 16.0f, renderSize.y + 16.0f), shadowCol, 28.0f);
@@ -1566,12 +1624,12 @@ bool SettingItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char*
     
     AddRoundedGradientRect(dl, renderPos, ImVec2(renderPos.x + renderSize.x, renderPos.y + renderSize.y), panelBgTop, panelBgBot, 24.0f);
     
-    
+    // Draw a small left indicator stripe
     ImU32 themeCol = GetThemeColor(pos.x / 1180.0f);
     ImU32 stripeCol = (themeCol & 0x00FFFFFF) | (((unsigned int)(ImLerp(0.3f, 1.0f, hoverT) * 255.0f * itemAlpha)) << 24);
     dl->AddRectFilled(ImVec2(renderPos.x + 6.0f, renderPos.y + 14.0f), ImVec2(renderPos.x + 9.0f, renderPos.y + renderSize.y - 14.0f), stripeCol, 2.0f);
     
-    
+    // Render Border (Glows dynamically on hover, softer unhovered, 24.0f rounding)
     ImU32 borderCol = ImGui::GetColorU32(ImVec4(0.12f, 0.12f, 0.14f, itemAlpha * 0.4f));
     if (hoverT > 0.001f) {
         borderCol = ImGui::GetColorU32(ImVec4(
@@ -1583,7 +1641,7 @@ bool SettingItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char*
     }
     dl->AddRect(renderPos, ImVec2(renderPos.x + renderSize.x, renderPos.y + renderSize.y), borderCol, 24.0f, 0, 1.0f + 0.5f * hoverT);
     
-    
+    // Typography aligned & shifted right to account for stripe
     dl->AddText(ImVec2(renderPos.x + 18.0f, renderPos.y + 14.0f), ImGui::GetColorU32(ImVec4(0.95f, 0.95f, 0.95f, itemAlpha)), title);
     if (strcmp(title, "Anti-Aliasing (MSAA)") == 0) {
         float titleWidth = ImGui::CalcTextSize(title).x;
@@ -1591,14 +1649,14 @@ bool SettingItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char*
     }
     dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() - 1.0f, ImVec2(renderPos.x + 18.0f, renderPos.y + 32.0f), ImGui::GetColorU32(ImVec4(0.5f, 0.5f, 0.5f, itemAlpha)), desc, nullptr, renderSize.x - 76.0f);
     
-    
+    // Toggle pinned to exact right edge, vertically centered
     RenderToggleVisual(ImVec2(renderPos.x + renderSize.x - 53.0f, renderPos.y + (renderSize.y - 20.0f) * 0.5f), *v, ImGui::GetID("##toggle"), itemAlpha);
 
     if (rightClicked) {
         ImGui::OpenPopup("CardSettingsPopup");
     }
     
-    
+    // Dynamic popup dimensions based on feature needs - spacious & no scroll
     ImVec2 popupSize(300.0f, 130.0f);
     if (strcmp(title, "Custom Fog") == 0) {
         popupSize = ImVec2(380.0f, 250.0f);
@@ -1610,11 +1668,11 @@ bool SettingItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char*
     
     ImGui::SetNextWindowSize(popupSize, ImGuiCond_Always);
     
-    
+    // Style settings popup elements with accent palette
     ImU32 themeColU32 = GetThemeColor(pos.x / 1180.0f);
     ImVec4 themeColFloat = ImGui::ColorConvertU32ToFloat4(themeColU32);
  
-    
+    // Clear ImGui's default popup background and border to avoid a dark square behind our rounded corners
     ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::PushStyleColor(ImGuiCol_CheckMark, themeColFloat);
@@ -1631,31 +1689,31 @@ bool SettingItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char*
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24.0f, 24.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     
-    
+    // Draggable settings popup with no scrollbar
     if (ImGui::BeginPopup("CardSettingsPopup", ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar)) {
         ImDrawList* popDl = ImGui::GetWindowDrawList();
         ImVec2 popPos = ImGui::GetWindowPos();
         ImVec2 popSz = ImGui::GetWindowSize();
         
-        
+        // Custom background gradient
         ImU32 popBgTop = ImGui::GetColorU32(ImVec4(0.10f, 0.10f, 0.12f, 0.98f));
         ImU32 popBgBot = ImGui::GetColorU32(ImVec4(0.05f, 0.05f, 0.07f, 0.98f));
         AddRoundedGradientRect(popDl, popPos, ImVec2(popPos.x + popSz.x, popPos.y + popSz.y), popBgTop, popBgBot, 24.0f);
         
-        
+        // Draw left indicator stripe
         ImU32 popStripeCol = (themeColU32 & 0x00FFFFFF) | (0xE0U << 24);
         popDl->AddRectFilled(ImVec2(popPos.x + 6.0f, popPos.y + 14.0f), ImVec2(popPos.x + 9.0f, popPos.y + popSz.y - 14.0f), popStripeCol, 2.0f);
         
-        
+        // Draw custom rounded border to match the background perfectly
         ImU32 popBorderCol = ImGui::GetColorU32(ImVec4(0.14f, 0.14f, 0.16f, 1.0f));
         popDl->AddRect(ImVec2(popPos.x + 0.5f, popPos.y + 0.5f), ImVec2(popPos.x + popSz.x - 0.5f, popPos.y + popSz.y - 0.5f), popBorderCol, 24.0f, 0, 1.0f);
 
-        
+        // Draw Header
         ImGui::SetCursorPosX(16.0f);
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 0.95f), "%s", title);
         ImGui::SameLine(popSz.x - 36.0f);
         
-        
+        // Rounded close button
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.25f, 0.4f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.2f, 0.2f, 0.7f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.1f, 0.1f, 0.9f));
@@ -1669,15 +1727,15 @@ bool SettingItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char*
         popDl->AddLine(ImVec2(popPos.x + 16.0f, popPos.y + 42.0f), ImVec2(popPos.x + popSz.x - 16.0f, popPos.y + 42.0f), ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.08f)));
         ImGui::Dummy(ImVec2(0, 5));
         
-        
+        // Keybind option
         if (keybind) {
             ImGui::Dummy(ImVec2(0, 3));
             ImGui::SetCursorPosX(16.0f);
-            ImGui::Text("Клавиша активации (Keybind):");
+            ImGui::Text("Keybind:");
             
             char bindName[64];
             if (g_BindingKeybindPtr == keybind) {
-                strcpy(bindName, "Нажмите клавишу...");
+                strcpy(bindName, "Press any key...");
             } else {
                 strcpy(bindName, GetKeyName(*keybind).c_str());
             }
@@ -1692,11 +1750,11 @@ bool SettingItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char*
             ImGui::PopStyleColor(3);
         }
         
-        
+        // Feature-specific custom sub-options
         if (strcmp(title, "Custom Fog") == 0) {
             ImGui::Dummy(ImVec2(0, 6));
             ImGui::SetCursorPosX(16.0f);
-            ImGui::Text("Плотность тумана (Density):");
+            ImGui::Text("Density:");
             ImGui::SetCursorPosX(16.0f);
             ImGui::PushItemWidth(popSz.x - 40.0f);
             ImGui::SliderFloat("##density", &g_FogDensity, 0.0f, 0.1f, "%.4f");
@@ -1704,7 +1762,7 @@ bool SettingItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char*
             
             ImGui::Dummy(ImVec2(0, 6));
             ImGui::SetCursorPosX(16.0f);
-            ImGui::Text("Цвет тумана (Color):");
+            ImGui::Text("Color:");
             ImGui::SetCursorPosX(16.0f);
             ImGui::PushItemWidth(popSz.x - 40.0f);
             ImVec4 fogCol(g_FogR, g_FogG, g_FogB, 1.0f);
@@ -1717,7 +1775,7 @@ bool SettingItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char*
         } else if (strcmp(title, "Noclip Mode") == 0) {
             ImGui::Dummy(ImVec2(0, 6));
             ImGui::SetCursorPosX(16.0f);
-            ImGui::Text("Скорость камеры (Speed):");
+            ImGui::Text("Speed:");
             ImGui::SetCursorPosX(16.0f);
             ImGui::PushItemWidth(popSz.x - 40.0f);
             extern REAL sg_noclipSpeed;
@@ -1729,11 +1787,11 @@ bool SettingItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char*
         } else if (strcmp(title, "Clean Screen") == 0) {
             ImGui::Dummy(ImVec2(0, 6));
             ImGui::SetCursorPosX(16.0f);
-            ImGui::Checkbox("Скрыть консоль (Hide Console)", &sg_noclipHideConsole);
+            ImGui::Checkbox("Hide Console", &sg_noclipHideConsole);
             
             ImGui::Dummy(ImVec2(0, 4));
             ImGui::SetCursorPosX(16.0f);
-            ImGui::Checkbox("Скрыть имена (Hide Names)", &sg_noclipHideNames);
+            ImGui::Checkbox("Hide Names", &sg_noclipHideNames);
         }
         
         ImGui::EndPopup();
@@ -1751,12 +1809,12 @@ bool SliderItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImGuiIO& io = ImGui::GetIO();
     
-    
+    // Smooth hover animation state tracking
     ImGuiStorage* storage = ImGui::GetStateStorage();
     ImGuiID hoverTimeId = ImGui::GetID("##hover_time");
     float hoverT = storage->GetFloat(hoverTimeId, 0.0f);
     
-    
+    // Slider Math & Interaction
     float sliderWidth = size.x - 30.0f;
     float trackHeight = 6.0f;
     ImVec2 trackPos(pos.x + 15.0f, pos.y + 60.0f);
@@ -1764,7 +1822,7 @@ bool SliderItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* 
     ImGui::SetCursorScreenPos(ImVec2(trackPos.x, trackPos.y - 10.0f));
     bool changed = false;
     
-    
+    // Use InvisibleButton to handle drag events
     ImGui::InvisibleButton("##slider_click", ImVec2(sliderWidth, 26.0f));
     bool active = ImGui::IsItemActive();
     bool hovered = ImGui::IsItemHovered() || ImGui::IsMouseHoveringRect(pos, ImVec2(pos.x + size.x, pos.y + size.y));
@@ -1782,10 +1840,10 @@ bool SliderItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* 
         changed = true;
     }
     
-    
+    // Multiplied alpha for transition transitions
     float itemAlpha = g_MenuAlpha * alphaMult;
     
-    
+    // Calculate magnetic / offset position
     ImVec2 renderPos = pos;
     ImVec2 renderSize = size;
     if (hoverT > 0.001f) {
@@ -1808,7 +1866,7 @@ bool SliderItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* 
         renderSize = ImVec2(newW, newH);
     }
     
-    
+    // Render Panel Background with Vertical Gradient & Rounding (24.0f)
     ImU32 panelBgTop = ImGui::GetColorU32(ImVec4(0.10f, 0.10f, 0.12f, itemAlpha));
     ImU32 panelBgBot = ImGui::GetColorU32(ImVec4(0.06f, 0.06f, 0.08f, itemAlpha));
     if (hoverT > 0.001f) {
@@ -1819,12 +1877,12 @@ bool SliderItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* 
     
     AddRoundedGradientRect(dl, renderPos, ImVec2(renderPos.x + renderSize.x, renderPos.y + renderSize.y), panelBgTop, panelBgBot, 24.0f);
     
-    
+    // Draw a small left indicator stripe
     ImU32 themeColSlider = GetThemeColor(pos.x / 1180.0f);
     ImU32 stripeCol = (themeColSlider & 0x00FFFFFF) | (((unsigned int)(ImLerp(0.3f, 1.0f, hoverT) * 255.0f * itemAlpha)) << 24);
     dl->AddRectFilled(ImVec2(renderPos.x + 6.0f, renderPos.y + 14.0f), ImVec2(renderPos.x + 9.0f, renderPos.y + renderSize.y - 14.0f), stripeCol, 2.0f);
     
-    
+    // Render Border (softer unhovered, theme-colored on hover, 24.0f rounding)
     ImU32 borderCol = ImGui::GetColorU32(ImVec4(0.12f, 0.12f, 0.14f, itemAlpha * 0.4f));
     if (hoverT > 0.001f) {
         borderCol = ImGui::GetColorU32(ImVec4(
@@ -1836,33 +1894,33 @@ bool SliderItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* 
     }
     dl->AddRect(renderPos, ImVec2(renderPos.x + renderSize.x, renderPos.y + renderSize.y), borderCol, 24.0f, 0, 1.0f + 0.5f * hoverT);
     
-    
+    // Typography aligned & shifted right to account for stripe
     dl->AddText(ImVec2(renderPos.x + 18.0f, renderPos.y + 12.0f), ImGui::GetColorU32(ImVec4(0.95f, 0.95f, 0.95f, itemAlpha)), title);
     dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() - 1.0f, ImVec2(renderPos.x + 18.0f, renderPos.y + 30.0f), ImGui::GetColorU32(ImVec4(0.5f, 0.5f, 0.5f, itemAlpha)), desc, nullptr, renderSize.x - 36.0f);
     
-    
+    // Interpolate value for rendering
     float currentT = (*v - v_min) / (v_max - v_min);
     if (currentT < 0.0f) currentT = 0.0f;
     if (currentT > 1.0f) currentT = 1.0f;
     
-    
+    // Animation using state storage
     ImGuiID grabId = ImGui::GetID("##grab");
     float animT = storage->GetFloat(grabId, currentT);
     animT = ImLerp(animT, currentT, io.DeltaTime * 20.0f);
     storage->SetFloat(grabId, animT);
     
-    
+    // Hover/Active scale animation for grab circle
     float grabScale = storage->GetFloat(ImGui::GetID("##grabscale"), 1.0f);
     float targetScale = active ? 1.3f : (ImGui::IsItemHovered() ? 1.15f : 1.0f);
     grabScale = ImLerp(grabScale, targetScale, io.DeltaTime * 15.0f);
     storage->SetFloat(ImGui::GetID("##grabscale"), grabScale);
     
-    
+    // Draw track background relative to renderPos (shifted for left stripe alignment)
     ImVec2 renderTrackPos(renderPos.x + 18.0f, renderPos.y + (renderSize.y - 25.0f));
     float renderSliderWidth = renderSize.x - 36.0f;
     dl->AddRectFilled(renderTrackPos, ImVec2(renderTrackPos.x + renderSliderWidth, renderTrackPos.y + trackHeight), ImGui::GetColorU32(ImVec4(0.16f, 0.16f, 0.19f, itemAlpha)), 3.0f);
     
-    
+    // Draw track fill
     float filledWidth = renderSliderWidth * animT;
     if (filledWidth > 0.0f) {
         dl->AddRectFilledMultiColor(
@@ -1872,18 +1930,18 @@ bool SliderItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* 
         );
     }
     
-    
+    // Draw grab circle with glow shadow
     ImVec2 grabPos(renderTrackPos.x + filledWidth, renderTrackPos.y + trackHeight * 0.5f);
     float grabRadius = 6.0f * grabScale;
     
-    
+    // Grab Shadow
     dl->AddCircleFilled(ImVec2(grabPos.x, grabPos.y + 1.0f), grabRadius + 1.5f, IM_COL32(0, 0, 0, 60 * itemAlpha));
     
-    
+    // Grab Inner Circle
     dl->AddCircleFilled(grabPos, grabRadius, IM_COL32(255, 255, 255, 255 * itemAlpha));
     dl->AddCircle(grabPos, grabRadius, GetThemeColor(animT), 16, 1.2f);
     
-    
+    // Render current value text elegantly relative to renderPos
     char valBuf[64];
     if (strcmp(format, "ANNOUNCER_PACK_FORMAT") == 0) {
         int pack = (int)*v;
@@ -1895,6 +1953,10 @@ bool SliderItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* 
         if (style == 0) strcpy(valBuf, "Legacy (Decay after Delay)");
         else if (style == 1) strcpy(valBuf, "Blinking Warning (Competitive)");
         else strcpy(valBuf, "Gradual Fade & Shrink");
+    } else if (strcmp(format, "AMBIENT_PARTICLES_MODE_FORMAT") == 0) {
+        int mode = (int)*v;
+        if (mode == 0) strcpy(valBuf, "Uniform (Everywhere)");
+        else strcpy(valBuf, "Zone Only (Inside Sumo)");
     } else {
         sprintf(valBuf, format, *v);
     }
@@ -1910,7 +1972,7 @@ bool ColorItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* d
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImGuiIO& io = ImGui::GetIO();
     
-    
+    // Smooth hover animation state tracking
     ImGuiStorage* storage = ImGui::GetStateStorage();
     ImGuiID hoverTimeId = ImGui::GetID("##hover_time");
     float hoverT = storage->GetFloat(hoverTimeId, 0.0f);
@@ -1925,10 +1987,10 @@ bool ColorItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* d
     hoverT = ImLerp(hoverT, targetHover, io.DeltaTime * 12.0f);
     storage->SetFloat(hoverTimeId, hoverT);
     
-    
+    // Multiplied alpha for transition transitions
     float itemAlpha = g_MenuAlpha * alphaMult;
     
-    
+    // Calculate magnetic / offset position
     ImVec2 renderPos = pos;
     ImVec2 renderSize = size;
     if (hoverT > 0.001f) {
@@ -1951,7 +2013,7 @@ bool ColorItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* d
         renderSize = ImVec2(newW, newH);
     }
     
-    
+    // Render Panel Background with Vertical Gradient & Rounding (24.0f)
     ImU32 panelBgTop = ImGui::GetColorU32(ImVec4(0.10f, 0.10f, 0.12f, itemAlpha));
     ImU32 panelBgBot = ImGui::GetColorU32(ImVec4(0.06f, 0.06f, 0.08f, itemAlpha));
     if (hoverT > 0.001f) {
@@ -1962,12 +2024,12 @@ bool ColorItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* d
     
     AddRoundedGradientRect(dl, renderPos, ImVec2(renderPos.x + renderSize.x, renderPos.y + renderSize.y), panelBgTop, panelBgBot, 24.0f);
     
-    
+    // Draw a small left indicator stripe
     ImU32 themeColLeft = GetThemeColor(pos.x / 1180.0f);
     ImU32 stripeCol = (themeColLeft & 0x00FFFFFF) | (((unsigned int)(ImLerp(0.3f, 1.0f, hoverT) * 255.0f * itemAlpha)) << 24);
     dl->AddRectFilled(ImVec2(renderPos.x + 6.0f, renderPos.y + 14.0f), ImVec2(renderPos.x + 9.0f, renderPos.y + renderSize.y - 14.0f), stripeCol, 2.0f);
     
-    
+    // Render Border (softer unhovered, theme-colored on hover, 24.0f rounding)
     ImU32 borderCol = ImGui::GetColorU32(ImVec4(0.12f, 0.12f, 0.14f, itemAlpha * 0.4f));
     if (hoverT > 0.001f) {
         borderCol = ImGui::GetColorU32(ImVec4(
@@ -1979,11 +2041,11 @@ bool ColorItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* d
     }
     dl->AddRect(renderPos, ImVec2(renderPos.x + renderSize.x, renderPos.y + renderSize.y), borderCol, 24.0f, 0, 1.0f + 0.5f * hoverT);
     
-    
+    // Typography aligned & shifted right to account for stripe
     dl->AddText(ImVec2(renderPos.x + 18.0f, renderPos.y + 14.0f), ImGui::GetColorU32(ImVec4(0.95f, 0.95f, 0.95f, itemAlpha)), title);
     dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() - 1.0f, ImVec2(renderPos.x + 18.0f, renderPos.y + 32.0f), ImGui::GetColorU32(ImVec4(0.5f, 0.5f, 0.5f, itemAlpha)), desc, nullptr, renderSize.x - 76.0f);
     
-    
+    // Render Color Picker Button relative to renderPos
     ImVec2 renderBtnPos = ImVec2(renderPos.x + renderSize.x - 45.0f, renderPos.y + (renderSize.y - 20.0f) * 0.5f);
     ImGui::SetCursorScreenPos(renderBtnPos);
     bool changed = ImGui::ColorEdit4("##color", rawCol, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreview);
@@ -2003,7 +2065,7 @@ bool ButtonItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImGuiIO& io = ImGui::GetIO();
     
-    
+    // Smooth hover animation state tracking
     ImGuiStorage* storage = ImGui::GetStateStorage();
     ImGuiID hoverTimeId = ImGui::GetID("##hover_time");
     float hoverT = storage->GetFloat(hoverTimeId, 0.0f);
@@ -2040,7 +2102,7 @@ bool ButtonItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* 
         renderSize = ImVec2(newW, newH);
     }
     
-    
+    // Render Panel Background with Vertical Gradient & Rounding (24.0f)
     ImU32 panelBgTop = ImGui::GetColorU32(ImVec4(0.10f, 0.10f, 0.12f, itemAlpha));
     ImU32 panelBgBot = ImGui::GetColorU32(ImVec4(0.06f, 0.06f, 0.08f, itemAlpha));
     if (hoverT > 0.001f) {
@@ -2051,12 +2113,12 @@ bool ButtonItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* 
     
     AddRoundedGradientRect(dl, renderPos, ImVec2(renderPos.x + renderSize.x, renderPos.y + renderSize.y), panelBgTop, panelBgBot, 24.0f);
     
-    
+    // Draw a small left indicator stripe
     ImU32 themeColLeft = GetThemeColor(pos.x / 1180.0f);
     ImU32 stripeCol = (themeColLeft & 0x00FFFFFF) | (((unsigned int)(ImLerp(0.3f, 1.0f, hoverT) * 255.0f * itemAlpha)) << 24);
     dl->AddRectFilled(ImVec2(renderPos.x + 6.0f, renderPos.y + 14.0f), ImVec2(renderPos.x + 9.0f, renderPos.y + renderSize.y - 14.0f), stripeCol, 2.0f);
     
-    
+    // Render Border (softer unhovered, theme-colored on hover, 24.0f rounding)
     ImU32 borderCol = ImGui::GetColorU32(ImVec4(0.12f, 0.12f, 0.14f, itemAlpha * 0.4f));
     if (hoverT > 0.001f) {
         borderCol = ImGui::GetColorU32(ImVec4(
@@ -2068,11 +2130,11 @@ bool ButtonItemAbsolute(ImVec2 pos, ImVec2 size, const char* title, const char* 
     }
     dl->AddRect(renderPos, ImVec2(renderPos.x + renderSize.x, renderPos.y + renderSize.y), borderCol, 24.0f, 0, 1.0f + 0.5f * hoverT);
     
-    
+    // Typography aligned & shifted right to account for stripe
     dl->AddText(ImVec2(renderPos.x + 18.0f, renderPos.y + 14.0f), ImGui::GetColorU32(ImVec4(0.95f, 0.95f, 0.95f, itemAlpha)), title);
     dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() - 1.0f, ImVec2(renderPos.x + 18.0f, renderPos.y + 32.0f), ImGui::GetColorU32(ImVec4(0.5f, 0.5f, 0.5f, itemAlpha)), desc, nullptr, renderSize.x - 56.0f);
     
-    
+    // Render an action circle on the right
     ImU32 themeCol = GetThemeColor(pos.x / 1180.0f);
     ImVec2 actionPos = ImVec2(renderPos.x + renderSize.x - 30.0f, renderPos.y + renderSize.y * 0.5f);
     dl->AddCircle(actionPos, 8.0f, ImGui::GetColorU32(ImVec4(0.3f, 0.3f, 0.35f, itemAlpha)), 12, 1.0f);
@@ -2102,7 +2164,7 @@ bool ConfigItemAbsolute(ImVec2 pos, ImVec2 size, const char* filename, bool& app
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImGuiIO& io = ImGui::GetIO();
     
-    
+    // Smooth hover animation state tracking
     ImGuiStorage* storage = ImGui::GetStateStorage();
     ImGuiID hoverTimeId = ImGui::GetID("##hover_time");
     float hoverT = storage->GetFloat(hoverTimeId, 0.0f);
@@ -2122,7 +2184,7 @@ bool ConfigItemAbsolute(ImVec2 pos, ImVec2 size, const char* filename, bool& app
     ImVec2 renderPos = pos;
     ImVec2 renderSize = size;
     
-    
+    // Render Panel Background
     ImU32 panelBgTop = ImGui::GetColorU32(ImVec4(0.10f, 0.10f, 0.12f, itemAlpha));
     ImU32 panelBgBot = ImGui::GetColorU32(ImVec4(0.06f, 0.06f, 0.08f, itemAlpha));
     if (hoverT > 0.001f) {
@@ -2133,12 +2195,12 @@ bool ConfigItemAbsolute(ImVec2 pos, ImVec2 size, const char* filename, bool& app
     
     AddRoundedGradientRect(dl, renderPos, ImVec2(renderPos.x + renderSize.x, renderPos.y + renderSize.y), panelBgTop, panelBgBot, 24.0f);
     
-    
+    // Draw left indicator stripe
     ImU32 themeCol = GetThemeColor(pos.x / 1180.0f);
     ImU32 stripeCol = (themeCol & 0x00FFFFFF) | (((unsigned int)(ImLerp(0.3f, 1.0f, hoverT) * 255.0f * itemAlpha)) << 24);
     dl->AddRectFilled(ImVec2(renderPos.x + 6.0f, renderPos.y + 14.0f), ImVec2(renderPos.x + 9.0f, renderPos.y + renderSize.y - 14.0f), stripeCol, 2.0f);
     
-    
+    // Render Border
     ImU32 borderCol = ImGui::GetColorU32(ImVec4(0.12f, 0.12f, 0.14f, itemAlpha * 0.4f));
     if (hoverT > 0.001f) {
         borderCol = ImGui::GetColorU32(ImVec4(
@@ -2150,28 +2212,28 @@ bool ConfigItemAbsolute(ImVec2 pos, ImVec2 size, const char* filename, bool& app
     }
     dl->AddRect(renderPos, ImVec2(renderPos.x + renderSize.x, renderPos.y + renderSize.y), borderCol, 24.0f, 0, 1.0f);
     
-    
+    // Config Name Text
     tString displayName(filename);
     if (st_StringEndsWith(displayName, ".cfg")) {
         displayName = displayName.SubStr(0, displayName.Len() - 4);
     }
     
-    
+    // Title
     ImGui::SetCursorScreenPos(ImVec2(renderPos.x + 18.0f, renderPos.y + 12.0f));
     ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 0.95f * itemAlpha), "%s", (const char*)displayName);
     
-    
+    // Subtitle
     ImGui::SetCursorScreenPos(ImVec2(renderPos.x + 18.0f, renderPos.y + 30.0f));
     ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.52f, 0.85f * itemAlpha), "Profile Config file");
     
-    
+    // Action Buttons (4 buttons to fit within ~277px width)
     float btnW = 59.0f;
     float btnH = 26.0f;
     float btnY = renderPos.y + 52.0f;
     float spacing = 5.0f;
     float startX = 13.0f;
     
-    
+    // Apply Button
     ImGui::SetCursorScreenPos(ImVec2(renderPos.x + startX, btnY));
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.35f, 0.2f, 0.6f * itemAlpha));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.5f, 0.25f, 0.8f * itemAlpha));
@@ -2182,7 +2244,7 @@ bool ConfigItemAbsolute(ImVec2 pos, ImVec2 size, const char* filename, bool& app
     }
     ImGui::PopStyleColor(3);
     
-    
+    // Update Button
     ImGui::SetCursorScreenPos(ImVec2(renderPos.x + startX + btnW + spacing, btnY));
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.25f, 0.45f, 0.6f * itemAlpha));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.35f, 0.65f, 0.8f * itemAlpha));
@@ -2192,7 +2254,7 @@ bool ConfigItemAbsolute(ImVec2 pos, ImVec2 size, const char* filename, bool& app
     }
     ImGui::PopStyleColor(3);
     
-    
+    // Folder Button
     ImGui::SetCursorScreenPos(ImVec2(renderPos.x + startX + 2.0f * (btnW + spacing), btnY));
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.22f, 0.26f, 0.6f * itemAlpha));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.32f, 0.38f, 0.8f * itemAlpha));
@@ -2202,7 +2264,7 @@ bool ConfigItemAbsolute(ImVec2 pos, ImVec2 size, const char* filename, bool& app
     }
     ImGui::PopStyleColor(3);
     
-    
+    // Delete Button
     ImGui::SetCursorScreenPos(ImVec2(renderPos.x + startX + 3.0f * (btnW + spacing), btnY));
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.15f, 0.15f, 0.6f * itemAlpha));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.2f, 0.2f, 0.8f * itemAlpha));
@@ -2222,7 +2284,7 @@ bool CreateConfigItemAbsolute(ImVec2 pos, ImVec2 size, float alphaMult = 1.0f) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImGuiIO& io = ImGui::GetIO();
     
-    
+    // Smooth hover animation state tracking
     ImGuiStorage* storage = ImGui::GetStateStorage();
     ImGuiID hoverTimeId = ImGui::GetID("##hover_time_create");
     float hoverT = storage->GetFloat(hoverTimeId, 0.0f);
@@ -2242,7 +2304,7 @@ bool CreateConfigItemAbsolute(ImVec2 pos, ImVec2 size, float alphaMult = 1.0f) {
     ImVec2 renderPos = pos;
     ImVec2 renderSize = size;
     
-    
+    // Render Panel Background
     ImU32 panelBgTop = ImGui::GetColorU32(ImVec4(0.10f, 0.10f, 0.12f, itemAlpha * 0.5f));
     ImU32 panelBgBot = ImGui::GetColorU32(ImVec4(0.06f, 0.06f, 0.08f, itemAlpha * 0.5f));
     if (hoverT > 0.001f) {
@@ -2253,7 +2315,7 @@ bool CreateConfigItemAbsolute(ImVec2 pos, ImVec2 size, float alphaMult = 1.0f) {
     
     AddRoundedGradientRect(dl, renderPos, ImVec2(renderPos.x + renderSize.x, renderPos.y + renderSize.y), panelBgTop, panelBgBot, 24.0f);
     
-    
+    // Draw dashed border or thin accent border
     ImU32 borderCol = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.15f * itemAlpha));
     if (hoverT > 0.001f) {
         ImU32 themeCol = GetThemeColor(pos.x / 1180.0f);
@@ -2266,7 +2328,7 @@ bool CreateConfigItemAbsolute(ImVec2 pos, ImVec2 size, float alphaMult = 1.0f) {
     }
     dl->AddRect(renderPos, ImVec2(renderPos.x + renderSize.x, renderPos.y + renderSize.y), borderCol, 24.0f, 0, 1.0f);
     
-    
+    // Large Plus icon in center or left
     ImVec2 center(renderPos.x + renderSize.x * 0.5f, renderPos.y + renderSize.y * 0.45f);
     ImU32 plusCol = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, ImLerp(0.4f, 0.95f, hoverT) * itemAlpha));
     if (hoverT > 0.001f) {
@@ -2314,7 +2376,7 @@ bool ItemMatchesSearch(const char* title, const char* desc, const char* query) {
     return t.find(q) != std::string::npos || d.find(q) != std::string::npos;
 }
 
-
+// Function to draw text parsing game color codes (0xRRGGBB and 0xRESETT) in ImGui
 static inline bool IsHexChar(char c) {
     return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
@@ -2416,7 +2478,7 @@ std::string TruncateColoredString(const char* val, int maxLen) {
             strippedLen++;
             p += charLen;
         } else {
-            
+            // Check if there are actually more printable characters left
             const char* next_p = p;
             bool hasMorePrintable = false;
             while (*next_p != '\0') {
@@ -2447,8 +2509,6 @@ std::string TruncateColoredString(const char* val, int maxLen) {
 }
 
 void ModMenu::Init() {
-    volatile unsigned long long _salt = 0x496c6f6e61ULL;
-
     if (g_Initialized) return;
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -2457,7 +2517,7 @@ void ModMenu::Init() {
     io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-    
+    // Load System Font DejaVuSans supporting Cyrillic/Unicode natively
     tString fontPath = tDirectories::Data().GetReadPath("textures/DejaVuSans.ttf");
     bool fontExists = false;
     if (FILE* f = fopen((const char*)fontPath, "rb")) {
@@ -2466,6 +2526,51 @@ void ModMenu::Init() {
     }
     if (!fontExists) {
         fontPath = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+        if (FILE* f = fopen((const char*)fontPath, "rb")) {
+            fclose(f);
+            fontExists = true;
+        }
+    }
+    if (!fontExists) {
+        const char* windir = getenv("WINDIR");
+        if (!windir) windir = getenv("SystemRoot");
+        if (windir) {
+            std::string winFont = std::string(windir) + "\\Fonts\\segoeui.ttf";
+            if (FILE* f = fopen(winFont.c_str(), "rb")) {
+                fclose(f);
+                fontPath = winFont.c_str();
+                fontExists = true;
+            }
+        }
+    }
+    if (!fontExists) {
+        const char* windir = getenv("WINDIR");
+        if (!windir) windir = getenv("SystemRoot");
+        if (windir) {
+            std::string winFont = std::string(windir) + "\\Fonts\\arial.ttf";
+            if (FILE* f = fopen(winFont.c_str(), "rb")) {
+                fclose(f);
+                fontPath = winFont.c_str();
+                fontExists = true;
+            }
+        }
+    }
+    if (!fontExists) {
+        fontPath = "C:\\Windows\\Fonts\\segoeui.ttf";
+        if (FILE* f = fopen((const char*)fontPath, "rb")) {
+            fclose(f);
+            fontExists = true;
+        }
+    }
+    if (!fontExists) {
+        fontPath = "C:\\Windows\\Fonts\\arial.ttf";
+        if (FILE* f = fopen((const char*)fontPath, "rb")) {
+            fclose(f);
+            fontExists = true;
+        }
+    }
+    if (!fontExists) {
+        fontPath = "/System/Library/Fonts/Supplemental/Arial.ttf";
         if (FILE* f = fopen((const char*)fontPath, "rb")) {
             fclose(f);
             fontExists = true;
@@ -2498,7 +2603,7 @@ void ModMenu::Init() {
     }
     TranslateAllModKeybinds();
 
-    
+    // Initialize trackers with active engine values
     ePlayer* lp_cam = ePlayer::PlayerConfig(0);
     g_ShowHUD = subby_ShowHUD;
     prev_ShowHUD = g_ShowHUD;
@@ -2595,6 +2700,7 @@ void ModMenu::Init() {
     prev_FloorDetail = g_FloorDetail;
 
     g_MainMenuActive = true;
+    sn_programVersion = "ILONIUM";
     if (getenv("RETRO_TEST_START_GAME")) {
         g_ModMenuTab = 0;
     }
@@ -2678,7 +2784,7 @@ void ModMenu::ApplySettingsToEngine() {
     sr_smoothShading = g_SmoothShading;
     sr_floorDetail = (int)g_FloorDetail;
 
-    
+    // Trackers
     prev_ShowHUD = g_ShowHUD;
     prev_ShowFastest = g_ShowFastest;
     prev_ShowScores = g_ShowScores;
@@ -2718,11 +2824,9 @@ void ModMenu::ApplySettingsToEngine() {
 }
 
 bool ModMenu::ProcessEvent(const SDL_Event* event) {
-    volatile unsigned long long _salt = 0x496c6f6e61ULL;
-
     if (!g_Initialized) return false;
 
-    
+    // Exit HUD Editor Mode when Escape is pressed
     if (isHudEditing && event->type == SDL_EVENT_KEY_DOWN && event->key.key == SDLK_ESCAPE) {
         if (!ImGui::GetIO().WantTextInput) {
             isHudEditing = false;
@@ -2730,20 +2834,14 @@ bool ModMenu::ProcessEvent(const SDL_Event* event) {
         }
     }
 
-    
+    // If a legacy menu is active, do not intercept any events
     if (uMenu::IsLegacyMenuActive()) {
         return false;
     }
 
-    
-    if (ModMenu::g_InGameMenuOpen && event->type == SDL_EVENT_KEY_DOWN && event->key.key == SDLK_ESCAPE) {
-        if (!ImGui::GetIO().WantTextInput) {
-            g_CloseInGameMenuRequested = true;
-            return true;
-        }
-    }
 
-    
+
+    // Manual Packet Refresh keybind (Anti-Lag trigger)
     if (event->type == SDL_EVENT_KEY_DOWN && g_PacketRefreshKeybind != 0 && event->key.key == g_PacketRefreshKeybind) {
         if (!ImGui::GetIO().WantTextInput) {
             sn_Receive();
@@ -2754,11 +2852,11 @@ bool ModMenu::ProcessEvent(const SDL_Event* event) {
         }
     }
     
-    
+    // Capture keybinding if waiting
     if (g_BindingKeybindPtr && event->type == SDL_EVENT_KEY_DOWN) {
         int key = event->key.key;
         if (key == SDLK_ESCAPE) {
-            *g_BindingKeybindPtr = 0; 
+            *g_BindingKeybindPtr = 0; // Clear bind
         } else {
             *g_BindingKeybindPtr = key;
         }
@@ -2766,18 +2864,19 @@ bool ModMenu::ProcessEvent(const SDL_Event* event) {
         return true;
     }
 
-    
+    // Capture gameplay action keybinding if waiting
     if (s_BindingAction && event->type == SDL_EVENT_KEY_DOWN) {
         int key = event->key.scancode;
-        
-        for (int sym_i = 0; sym_i < SDLK_NEWLAST; ++sym_i) {
-            if (keymap[sym_i] && keymap[sym_i]->act == s_BindingAction) {
-                keymap[sym_i] = nullptr;
+        if (key == SDL_SCANCODE_ESCAPE) {
+            // ESC clears all existing keymap binds for this action
+            for (int sym_i = 0; sym_i < SDLK_NEWLAST; ++sym_i) {
+                if (keymap[sym_i] && keymap[sym_i]->act == s_BindingAction) {
+                    keymap[sym_i] = nullptr;
+                }
             }
-        }
-        if (key != SDL_SCANCODE_ESCAPE) {
+        } else {
             if (key >= 0 && key < SDLK_NEWLAST) {
-                keymap[key] = uBindPlayer::NewBind(s_BindingAction, 1); 
+                keymap[key] = uBindPlayer::NewBind(s_BindingAction, 1); // Player 1
             }
         }
         s_BindingAction = nullptr;
@@ -2785,8 +2884,10 @@ bool ModMenu::ProcessEvent(const SDL_Event* event) {
         return true;
     }
     
-    if (event->type == SDL_EVENT_KEY_DOWN && event->key.key == SDLK_INSERT) {
-        if (g_MainMenuActive) {
+    if (event->type == SDL_EVENT_KEY_DOWN && g_ModMenuKeybindEnabled && g_ModMenuKeybind != 0 && event->key.key == g_ModMenuKeybind) {
+        if (g_MenuOpen) {
+            Toggle();
+        } else if (g_MainMenuActive) {
             if (g_ActiveTab == 4) {
                 g_ActiveTab = 0;
                 g_DashboardLeftSelected = 0;
@@ -2841,7 +2942,7 @@ bool ModMenu::ProcessEvent(const SDL_Event* event) {
         
         bool inPopup = g_OpenApplyConfigPopup || g_OpenDeleteConfigPopup || g_OpenCreateConfigPopup || g_OpenUpdateConfigPopup || g_OpenResetHUDPopup;
         if (!inPopup && !ImGui::GetIO().WantTextInput) {
-            
+            // Right / Left arrow key column cycling
             if (key == SDLK_RIGHT) {
                 if (g_ActiveTab == 0 || g_DashboardActiveCol == 0) {
                     if (g_DashboardActiveCol < 2) {
@@ -2859,8 +2960,8 @@ bool ModMenu::ProcessEvent(const SDL_Event* event) {
                 }
             }
 
-            
-            
+            // Decide if ImGui's native keyboard navigation should handle this key
+            // We want ImGui to handle keys if we are on a settings page (g_ActiveTab != 0) AND focused on settings columns (g_DashboardActiveCol != 0)
             bool letImGuiHandle = (g_ActiveTab != 0 && g_DashboardActiveCol != 0);
 
             if (!letImGuiHandle) {
@@ -2874,23 +2975,31 @@ bool ModMenu::ProcessEvent(const SDL_Event* event) {
                 }
                 if (key == SDLK_UP) {
                     if (g_DashboardActiveCol == 0) {
-                        int numNavItems = sg_hasLastServer ? 7 : 6;
+                        int numNavItems = 8;
+                        if (ModMenu::g_InGameMenuOpen) {
+                            numNavItems = sg_hasLastServer ? 9 : 8;
+                        }
                         g_DashboardLeftSelected = (g_DashboardLeftSelected + numNavItems - 1) % numNavItems;
                     } else if (g_DashboardActiveCol == 1) {
                         g_DashboardMiddleSelected = (g_DashboardMiddleSelected + 1) % 2;
                     } else if (g_DashboardActiveCol == 2) {
-                        g_DashboardRightSelected--;
+                        int totalRightItems = (int)s_DashboardConfigs.size() + 1;
+                        g_DashboardRightSelected = (g_DashboardRightSelected + totalRightItems - 1) % totalRightItems;
                     }
                     return true;
                 }
                 if (key == SDLK_DOWN) {
                     if (g_DashboardActiveCol == 0) {
-                        int numNavItems = sg_hasLastServer ? 7 : 6;
+                        int numNavItems = 8;
+                        if (ModMenu::g_InGameMenuOpen) {
+                            numNavItems = sg_hasLastServer ? 9 : 8;
+                        }
                         g_DashboardLeftSelected = (g_DashboardLeftSelected + 1) % numNavItems;
                     } else if (g_DashboardActiveCol == 1) {
                         g_DashboardMiddleSelected = (g_DashboardMiddleSelected + 1) % 2;
                     } else if (g_DashboardActiveCol == 2) {
-                        g_DashboardRightSelected++;
+                        int totalRightItems = (int)s_DashboardConfigs.size() + 1;
+                        g_DashboardRightSelected = (g_DashboardRightSelected + 1) % totalRightItems;
                     }
                     return true;
                 }
@@ -2901,13 +3010,24 @@ bool ModMenu::ProcessEvent(const SDL_Event* event) {
             }
         }
     }
+    // Always forward event to ImGui to keep its keyboard/mouse state updated, e.g. for Keystroke visualizer
+    ImGui_ImplSDL3_ProcessEvent(event);
+
     if (g_MenuOpen || ModMenu::g_InGameMenuOpen || (g_MainMenuActive && !g_CustomMainMenuTempDisabled) || isHudEditing) {
-        ImGui_ImplSDL3_ProcessEvent(event);
         return true;
     }
     
-    
-    if (!g_MenuOpen && !ModMenu::g_InGameMenuOpen && event->type == SDL_EVENT_KEY_DOWN) {
+    // Process keybinds when menu is closed and user is not chatting
+    bool isChatting = false;
+    for (int i = 0; i < se_PlayerNetIDs.Len(); i++) {
+        ePlayerNetID* p = se_PlayerNetIDs[i];
+        if (p && p->Owner() == sn_myNetID && p->IsChatting()) {
+            isChatting = true;
+            break;
+        }
+    }
+
+    if (!g_MenuOpen && !ModMenu::g_InGameMenuOpen && !isChatting && event->type == SDL_EVENT_KEY_DOWN) {
         int key = event->key.key;
         if (key != 0) {
             bool matched = false;
@@ -2947,6 +3067,18 @@ bool ModMenu::ProcessEvent(const SDL_Event* event) {
                 sg_modKDResetFlag = true;
                 matched = true;
             }
+            if (g_MediaPlayPauseKeybind != 0 && key == g_MediaPlayPauseKeybind) {
+                SendMediaCommand(0);
+                matched = true;
+            }
+            if (g_MediaNextKeybind != 0 && key == g_MediaNextKeybind) {
+                SendMediaCommand(1);
+                matched = true;
+            }
+            if (g_MediaPrevKeybind != 0 && key == g_MediaPrevKeybind) {
+                SendMediaCommand(-1);
+                matched = true;
+            }
             
             if (matched) {
                 ApplySettingsToEngine();
@@ -2977,7 +3109,7 @@ void DrawBackgroundParticles(ImDrawList* dl, ImVec2 winPos, ImVec2 winSize, floa
             MenuParticle p;
             p.pos = ImVec2(winPos.x + (float)(rand() % (int)winSize.x), winPos.y + (float)(rand() % (int)winSize.y));
             
-            
+            // Assign to one of three depth layers
             int layer = rand() % 3;
             if (layer == 0) {
                 p.depth = 1.0f;
@@ -3001,14 +3133,14 @@ void DrawBackgroundParticles(ImDrawList* dl, ImVec2 winPos, ImVec2 winSize, floa
     if (dt > 0.1f) dt = 0.1f;
     float menuTime = (float)SDL_GetTicks() * 0.001f;
 
-    
+    // Cycle the gradient colors if requested
     ImVec4 c1 = g_RGBAccent ? RGBColorAtTime(menuTime) : g_AccentColor1;
     ImVec4 c2 = g_RGBAccent ? RGBColorAtTime(menuTime + 1.5f) : g_AccentColor2;
 
     for (size_t i = 0; i < g_Particles.size(); i++) {
         MenuParticle& p = g_Particles[i];
         
-        
+        // Wrap coordinates if screen bounds change
         if (p.pos.x < winPos.x - 20.0f) {
             p.pos.x = winPos.x + winSize.x + 10.0f;
             p.pos.y = winPos.y + (float)(rand() % (int)winSize.y);
@@ -3020,25 +3152,25 @@ void DrawBackgroundParticles(ImDrawList* dl, ImVec2 winPos, ImVec2 winSize, floa
         if (p.pos.y < winPos.y - 20.0f) p.pos.y = winPos.y + winSize.y + 10.0f;
         if (p.pos.y > winPos.y + winSize.y + 20.0f) p.pos.y = winPos.y - 10.0f;
 
-        
+        // 1. Particle Physics / Movement
         p.pos.x += p.vel.x * dt;
         p.pos.y += p.vel.y * dt;
 
-        
+        // Apply mouse repulsion if interactive
         if (g_InteractiveParticles) {
             float dx = p.pos.x - io.MousePos.x;
             float dy = p.pos.y - io.MousePos.y;
             float distSq = dx * dx + dy * dy;
             if (distSq > 0.001f && distSq < 150.0f * 150.0f) {
                 float dist = sqrtf(distSq);
-                float force = (150.0f - dist) / 150.0f; 
-                float push = force * 60.0f / p.depth; 
+                float force = (150.0f - dist) / 150.0f; // Scale force 0 to 1
+                float push = force * 60.0f / p.depth; // Deeper particles resist push
                 p.pos.x += (dx / dist) * push * dt;
                 p.pos.y += (dy / dist) * push * dt;
             }
         }
 
-        
+        // 2. Parallax Camera/Mouse offsets
         ImVec2 renderPos = p.pos;
         if (g_ParallaxEffect) {
             float parallaxScaleX = (io.MousePos.x - (winPos.x + winSize.x * 0.5f)) * 0.03f;
@@ -3047,7 +3179,7 @@ void DrawBackgroundParticles(ImDrawList* dl, ImVec2 winPos, ImVec2 winSize, floa
             renderPos.y += parallaxScaleY * (p.depth - 1.0f);
         }
 
-        
+        // 3. Render Web/Lines between close particles (Constellation style)
         if (g_ConstellationWeb) {
             for (size_t j = i + 1; j < g_Particles.size(); j++) {
                 MenuParticle& other = g_Particles[j];
@@ -3076,7 +3208,7 @@ void DrawBackgroundParticles(ImDrawList* dl, ImVec2 winPos, ImVec2 winSize, floa
             }
         }
 
-        
+        // 4. Render Particle itself
         float tCol = (renderPos.x - winPos.x) / winSize.x;
         if (tCol < 0.0f) tCol = 0.0f;
         if (tCol > 1.0f) tCol = 1.0f;
@@ -3091,11 +3223,11 @@ void DrawBackgroundParticles(ImDrawList* dl, ImVec2 winPos, ImVec2 winSize, floa
         float particleAlpha = 0.45f / p.depth;
         col = (col & 0x00FFFFFF) | (((unsigned int)((col >> 24) * particleAlpha * alphaMultiplier)) << 24);
         
-        if ((int)g_ParticleType == 0) { 
+        if ((int)g_ParticleType == 0) { // Dust
             dl->AddCircleFilled(renderPos, p.radius, col);
-        } else if ((int)g_ParticleType == 1) { 
+        } else if ((int)g_ParticleType == 1) { // Rain
             dl->AddLine(renderPos, ImVec2(renderPos.x + p.vel.x * 0.05f, renderPos.y + 8.0f), col, 1.0f);
-        } else if ((int)g_ParticleType == 2) { 
+        } else if ((int)g_ParticleType == 2) { // Stars
             float pulse = 0.5f + 0.5f * sinf(menuTime * 3.5f + renderPos.x * 0.1f);
             float r = p.radius * (1.0f + pulse);
             dl->AddLine(ImVec2(renderPos.x - r, renderPos.y), ImVec2(renderPos.x + r, renderPos.y), col, 1.0f);
@@ -3105,10 +3237,8 @@ void DrawBackgroundParticles(ImDrawList* dl, ImVec2 winPos, ImVec2 winSize, floa
 }
 
 void RenderModMenuModals() {
-    volatile unsigned long long _salt = 0x496c6f6e61ULL;
-
     ePlayer* lp_cam = ePlayer::PlayerConfig(0);
-    
+    // Open popups if requested
     if (g_OpenResetAllPopup) {
         ImGui::OpenPopup("Confirm Reset All");
         g_OpenResetAllPopup = false;
@@ -3147,14 +3277,14 @@ void RenderModMenuModals() {
     }
 
 
-    
+    // Style settings for popups
     ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.06f, 0.06f, 0.08f, 0.98f));
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20, 20));
     
-    
+    // Custom Theme Creator popup modal
     ImGui::SetNextWindowSize(ImVec2(340, 240), ImGuiCond_Always);
     if (ImGui::BeginPopupModal("Custom Theme Creator", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar)) {
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 0.9f), "Custom Theme Creator");
@@ -3188,7 +3318,7 @@ void RenderModMenuModals() {
         ImGui::EndPopup();
     }
 
-    
+    // Confirm Reset All
     ImGui::SetNextWindowSize(ImVec2(340, 180), ImGuiCond_Always);
     if (ImGui::BeginPopupModal("Confirm Reset All", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar)) {
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 0.9f), "Reset All Settings");
@@ -3359,7 +3489,7 @@ void RenderModMenuModals() {
         ImGui::EndPopup();
     }
 
-    
+    // Confirm Reset HUD Layout
     ImGui::SetNextWindowSize(ImVec2(340, 180), ImGuiCond_Always);
     if (ImGui::BeginPopupModal("Confirm Reset HUD Layout", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar)) {
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 0.9f), "Reset HUD Layout");
@@ -3382,7 +3512,7 @@ void RenderModMenuModals() {
             g_RubberGaugeX = -0.48f;
             g_RubberGaugeY = -0.9f;
 
-            
+            // Also reset toggles to defaults
             g_ShowHUD = true;
             g_RubberGauge = true;
             g_SpeedMeter = true;
@@ -3441,7 +3571,7 @@ void RenderModMenuModals() {
         ImGui::EndPopup();
     }
 
-    
+    // Confirm Apply Config
     ImGui::SetNextWindowSize(ImVec2(340, 180), ImGuiCond_Always);
     if (ImGui::BeginPopupModal("Confirm Apply Config", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar)) {
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 0.9f), "Apply Config Profile");
@@ -3468,7 +3598,7 @@ void RenderModMenuModals() {
         ImGui::EndPopup();
     }
 
-    
+    // Confirm Update Config
     ImGui::SetNextWindowSize(ImVec2(340, 180), ImGuiCond_Always);
     if (ImGui::BeginPopupModal("Confirm Update Config", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar)) {
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 0.9f), "Update Config Profile");
@@ -3494,7 +3624,7 @@ void RenderModMenuModals() {
         ImGui::EndPopup();
     }
 
-    
+    // Confirm Delete Config
     ImGui::SetNextWindowSize(ImVec2(340, 180), ImGuiCond_Always);
     if (ImGui::BeginPopupModal("Confirm Delete Config", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar)) {
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 0.9f), "Delete Config Profile");
@@ -3509,6 +3639,7 @@ void RenderModMenuModals() {
             tString path(g_SelectedConfig);
             tString fullPath = tDirectories::Var().GetWritePath(path);
             std::remove((const char*)fullPath);
+            LoadDashboardConfigs();
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
@@ -3518,7 +3649,7 @@ void RenderModMenuModals() {
         ImGui::EndPopup();
     }
 
-    
+    // Create Config Profile
     ImGui::SetNextWindowSize(ImVec2(340, 200), ImGuiCond_Always);
     if (ImGui::BeginPopupModal("Create Config Profile", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar)) {
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 0.9f), "Create Config Profile");
@@ -3532,6 +3663,11 @@ void RenderModMenuModals() {
             std::string nameStr(g_NewConfigName);
             nameStr.erase(0, nameStr.find_first_not_of(" \t\r\n"));
             nameStr.erase(nameStr.find_last_not_of(" \t\r\n") + 1);
+            for (char &c : nameStr) {
+                if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
+                    c = '_';
+                }
+            }
             if (!nameStr.empty()) {
                 if (nameStr.length() < 4 || nameStr.substr(nameStr.length() - 4) != ".cfg") {
                     nameStr += ".cfg";
@@ -3540,6 +3676,7 @@ void RenderModMenuModals() {
                 std::ofstream s;
                 if (tDirectories::Var().Open(s, path, std::ios::out, true)) {
                     SaveModSettings(s);
+                    LoadDashboardConfigs();
                 }
             }
             ImGui::CloseCurrentPopup();
@@ -3551,7 +3688,7 @@ void RenderModMenuModals() {
         ImGui::EndPopup();
     }
 
-    
+    // Direct Connect Modal
     ImGui::SetNextWindowSize(ImVec2(340, 240), ImGuiCond_Always);
     if (ImGui::BeginPopupModal("Direct Connect Modal", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar)) {
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 0.9f), "Direct Connect");
@@ -3585,7 +3722,7 @@ void RenderModMenuModals() {
         ImGui::EndPopup();
     }
 
-    
+    // Server Details Modal
     ImGui::SetNextWindowSize(ImVec2(340, 280), ImGuiCond_Always);
     if (ImGui::BeginPopupModal("Server Details Modal", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar)) {
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 0.9f), "Server Details");
@@ -3686,7 +3823,7 @@ bool ModMenu::AnimatedToggle(const char* label, bool* v) {
         ImGui::MarkItemEdited(id);
     }
 
-    
+    // Animation state
     static std::map<ImGuiID, float> anim_states;
     if (anim_states.find(id) == anim_states.end()) {
         anim_states[id] = *v ? 1.0f : 0.0f;
@@ -3695,7 +3832,7 @@ bool ModMenu::AnimatedToggle(const char* label, bool* v) {
     float target = *v ? 1.0f : 0.0f;
     anim += (target - anim) * 0.15f;
 
-    
+    // Render frame
     ImDrawList* dl = window->DrawList;
     ImU32 col_bg;
     if (hovered) {
@@ -3706,7 +3843,7 @@ bool ModMenu::AnimatedToggle(const char* label, bool* v) {
 
     dl->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height), col_bg, radius);
     
-    
+    // Render circle
     float knob_radius = radius - 2.0f;
     float knob_x = pos.x + radius + anim * (width - radius * 2.0f);
     dl->AddCircleFilled(ImVec2(knob_x, pos.y + radius), knob_radius, IM_COL32(255, 255, 255, 255));
@@ -3738,7 +3875,7 @@ bool ModMenu::AnimatedSlider(const char* label, float* v, float v_min, float v_m
     if (!ImGui::ItemAdd(total_bb, id))
         return false;
 
-    
+    // Slider behavior
     ImRect slider_bb(pos, ImVec2(pos.x + width, pos.y + height));
     ImRect grab_bb;
     bool pressed = ImGui::SliderBehavior(slider_bb, id, ImGuiDataType_Float, v, &v_min, &v_max, "%.2f", ImGuiSliderFlags_None, &grab_bb);
@@ -3749,7 +3886,7 @@ bool ModMenu::AnimatedSlider(const char* label, float* v, float v_min, float v_m
     bool hovered = ImGui::ItemHoverable(slider_bb, id, g.LastItemData.ItemFlags);
     bool held = (g.ActiveId == id);
 
-    
+    // Slider active animation
     static std::map<ImGuiID, float> anim_states;
     if (anim_states.find(id) == anim_states.end()) {
         anim_states[id] = 0.0f;
@@ -3758,18 +3895,18 @@ bool ModMenu::AnimatedSlider(const char* label, float* v, float v_min, float v_m
     float target = (hovered || held) ? 1.0f : 0.0f;
     anim += (target - anim) * 0.15f;
 
-    
+    // Render track
     ImDrawList* dl = window->DrawList;
     float track_y = pos.y + height * 0.5f - 2.0f;
     dl->AddRectFilled(ImVec2(pos.x, track_y), ImVec2(pos.x + width, track_y + 4.0f), ImGui::GetColorU32(ImVec4(0.12f, 0.12f, 0.15f, 1.0f)), 2.0f);
 
-    
+    // Render fill
     float percent = (*v - v_min) / (v_max - v_min);
     if (percent < 0.0f) percent = 0.0f;
     if (percent > 1.0f) percent = 1.0f;
     dl->AddRectFilled(ImVec2(pos.x, track_y), ImVec2(pos.x + width * percent, track_y + 4.0f), ImGui::GetColorU32(ImLerp(ImVec4(0.35f, 0.40f, 0.50f, 1.0f), ImVec4(0.40f, 0.55f, 0.90f, 1.0f), anim)), 2.0f);
 
-    
+    // Render grab
     float grab_radius = 6.0f + anim * 2.0f;
     dl->AddCircleFilled(ImVec2(pos.x + width * percent, pos.y + height * 0.5f), grab_radius, IM_COL32(255, 255, 255, 255));
 
@@ -3783,18 +3920,29 @@ bool ModMenu::AnimatedSlider(const char* label, float* v, float v_min, float v_m
 }
 
 void ModMenu::Render() {
-    volatile unsigned long long _salt = 0x496c6f6e61ULL;
-
     if (!g_Initialized) { Init(); if (!g_Initialized) return; }
 
-    
+    // Automatically turn off HUD editing if the Mod Menu / Dashboard is not actively showing the Mod Menu tab
+    if (isHudEditing) {
+        bool isModMenuVisible = false;
+        if (g_MenuOpen) {
+            isModMenuVisible = true;
+        } else if ((ModMenu::g_InGameMenuOpen || g_MainMenuActive) && g_ActiveTab == 4) {
+            isModMenuVisible = true;
+        }
+        if (!isModMenuVisible) {
+            isHudEditing = false;
+        }
+    }
+
+    // Auto Packet Refresh / Anti-Lag check (Anti-freeze/lag feature)
     if (g_AutoPacketRefresh && sn_GetNetState() == nCLIENT) {
         double curTime = tSysTimeFloat();
         if (sn_LastPacketTime > 0.0 && (curTime - sn_LastPacketTime) > 1.2) {
             sn_Receive();
             nNetObject::SyncAll();
             sn_SendPlanned();
-            sn_LastPacketTime = curTime - 0.7; 
+            sn_LastPacketTime = curTime - 0.7; // Prevent spamming, check again after 0.5s of simulated delay
         }
     }
 
@@ -3826,6 +3974,9 @@ void ModMenu::Render() {
     } else if (isHudEditing) {
         SDL_ShowCursor();
         io.MouseDrawCursor = true;
+    } else if (g_InGameMenuOpen) {
+        SDL_ShowCursor();
+        io.MouseDrawCursor = false;
     } else if (!g_MenuOpen) {
         SDL_HideCursor();
         io.MouseDrawCursor = false;
@@ -3845,12 +3996,12 @@ void ModMenu::Render() {
                     sg_modScoreboardWidgetEnabled || sg_modAliveWidgetEnabled || 
                     sg_modLiveScoreboardEnabled || sg_modZoneTimerEnabled || 
                     sg_modRubberBatteryEnabled || sg_modClassicRubberBatteryEnabled ||
-                    sg_modNetHealthEnabled || isHudEditing;
+                    sg_modNetHealthEnabled || sg_modMediaWidgetEnabled || isHudEditing;
     if (!g_MenuOpen && g_MenuAlpha < 0.01f && !needsHud) return;
 
     ePlayer* lp_cam = ePlayer::PlayerConfig(0);
 
-    
+    // Bidirectional synchronization logic (Pull)
     if (subby_ShowHUD != prev_ShowHUD) { g_ShowHUD = subby_ShowHUD; prev_ShowHUD = subby_ShowHUD; }
     if (subby_ShowSpeedFastest != prev_ShowFastest) { g_ShowFastest = subby_ShowSpeedFastest; prev_ShowFastest = subby_ShowSpeedFastest; }
     if (subby_ShowScore != prev_ShowScores) { g_ShowScores = subby_ShowScore; prev_ShowScores = subby_ShowScore; }
@@ -3887,6 +4038,7 @@ void ModMenu::Render() {
     if (sr_smoothShading != prev_SmoothShading) { g_SmoothShading = sr_smoothShading; prev_SmoothShading = sr_smoothShading; }
     if ((float)sr_floorDetail != prev_FloorDetail) { g_FloorDetail = (float)sr_floorDetail; prev_FloorDetail = (float)sr_floorDetail; }
     
+    CheckDisplaySizeRebuild();
     ImGui_ImplOpenGL2_NewFrame();
     ImGui_ImplSDL3_NewFrame();
 
@@ -3909,16 +4061,35 @@ void ModMenu::Render() {
     HudManager::Render();
 
     if (g_MenuAlpha > 0.01f) {
-        RenderInner();
+        if (isHudEditing) {
+            // Draw background particles while editing HUD via standalone menu
+            ImDrawList* bgDl = ImGui::GetBackgroundDrawList();
+            DrawBackgroundParticles(bgDl, ImVec2(0, 0), io.DisplaySize, 1.0f);
+        } else {
+            if (!g_MainMenuActive) {
+                ImGui::GetBackgroundDrawList()->AddRectFilled(
+                    ImVec2(0, 0),
+                    io.DisplaySize,
+                    ImGui::GetColorU32(ImVec4(0.02f, 0.02f, 0.03f, 0.85f * g_MenuAlpha))
+                );
+            }
+            RenderInner();
+        }
     }
 
     ImGui::Render();
     ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
 }
 
-void ModMenu::RenderInner() {
-    volatile unsigned long long _salt = 0x496c6f6e61ULL;
+static void DrawColumnSeparator() {
+    ImVec2 min = ImGui::GetCursorScreenPos();
+    min.y += 2.0f;
+    ImVec2 max = ImVec2(min.x + ImGui::GetContentRegionAvail().x, min.y);
+    ImGui::GetWindowDrawList()->AddLine(min, max, ImGui::GetColorU32(ImGuiCol_Separator));
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 6.0f);
+}
 
+void ModMenu::RenderInner() {
     ImGuiIO& io = ImGui::GetIO();
     ePlayer* lp_cam = ePlayer::PlayerConfig(0);
     static float g_MenuScale = 0.95f;
@@ -3942,7 +4113,7 @@ void ModMenu::RenderInner() {
     ImGui::SetNextWindowSize(currentSize, ImGuiCond_Always);
     ImGui::SetNextWindowPos(wPos, ImGuiCond_Always);
     
-    
+    // Dynamically update background color with opacity
     ImGuiStyle& style = ImGui::GetStyle();
     style.Colors[ImGuiCol_WindowBg] = ImVec4(g_MenuBgColor.x, g_MenuBgColor.y, g_MenuBgColor.z, g_MenuBgAlpha * g_MenuAlpha);
 
@@ -3953,7 +4124,7 @@ void ModMenu::RenderInner() {
     if (isInline) {
         style.Colors[ImGuiCol_Border] = ImGui::ColorConvertU32ToFloat4(GetThemeColor(0.5f));
         style.WindowBorderSize = 1.5f;
-        style.WindowRounding = 12.0f; 
+        style.WindowRounding = 12.0f; // Match dashboard panel rounding!
     }
 
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
@@ -3969,10 +4140,10 @@ void ModMenu::RenderInner() {
     ImVec2 winPos = ImGui::GetWindowPos();
     ImVec2 winSize = ImGui::GetWindowSize();
 
-    
+    // MAIN SHADOW VIA TEXTURE ARCHITECTURE
     RenderTextureGlow(winPos, winSize, ImGui::GetColorU32(ImVec4(0, 0, 0, 0.3f * g_MenuAlpha)), 16.0f);
 
-    
+    // Dynamic color updates for RGB mode
     float menuTime = (float)ImGui::GetTime();
     float r, g, b;
     ImGui::ColorConvertHSVtoRGB(fmodf(menuTime * g_RGBSpeed, 1.0f), 1.0f, 1.0f, r, g, b);
@@ -3983,10 +4154,10 @@ void ModMenu::RenderInner() {
         g_AccentColor = g_AccentColor1;
     }
 
-    
+    // BACKGROUND PARTICLES FIELD (Premium design detail)
     DrawBackgroundParticles(dl, winPos, winSize, g_MenuAlpha);
 
-    
+    // Window dragging logic (non-blocking - allows clicks on header buttons/inputs)
     if (!isInline && ImGui::IsWindowHovered() && ImGui::IsMouseDragging(0) && io.MousePos.y < winPos.y + 60.0f) {
         if (!ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive()) {
             ImVec2 delta = io.MouseDelta;
@@ -3994,25 +4165,25 @@ void ModMenu::RenderInner() {
         }
     }
 
-    
+    // RGB / GRADIENT TOP BAR - Absolute Coordinates
     ImVec2 p_min = winPos;
     ImVec2 p_max = ImVec2(p_min.x + winSize.x, p_min.y + 4.0f);
     ImU32 topBarColLeft = GetThemeColor(0.0f);
     ImU32 topBarColRight = GetThemeColor(1.0f);
     dl->AddRectFilledMultiColor(p_min, p_max, topBarColLeft, topBarColRight, topBarColRight, topBarColLeft);
 
-    
+    // LEFT SEPARATED SIDEBAR (Figma Style)
     float themeBarW = 70.0f;
     ImRect themeBarRect(ImVec2(winPos.x + 10, winPos.y + 10), ImVec2(winPos.x + themeBarW, winPos.y + winSize.y - 10));
     dl->AddRectFilled(themeBarRect.Min, themeBarRect.Max, ImGui::GetColorU32(ImVec4(0.05f, 0.05f, 0.06f, g_MenuAlpha)), 12.0f);
 
-    
+    // Theme dots on sidebar (Preserving Gradient Accents)
     ImU32 themeColors1[] = {
-        IM_COL32(122, 88, 255, 255), 
-        IM_COL32(50, 150, 250, 255), 
-        IM_COL32(50, 200, 100, 255), 
-        IM_COL32(250, 80, 50, 255),  
-        IM_COL32(250, 180, 50, 255)  
+        IM_COL32(122, 88, 255, 255), // Indigo
+        IM_COL32(50, 150, 250, 255), // Blue
+        IM_COL32(50, 200, 100, 255), // Green
+        IM_COL32(250, 80, 50, 255),  // Red
+        IM_COL32(250, 180, 50, 255)  // Gold
     };
     ImVec4 matchColors1[] = {
         ImVec4(122/255.0f, 88/255.0f, 255/255.0f, 1.0f),
@@ -4022,11 +4193,11 @@ void ModMenu::RenderInner() {
         ImVec4(250/255.0f, 180/255.0f, 50/255.0f, 1.0f)
     };
     ImVec4 matchColors2[] = {
-        ImVec4(200/255.0f, 80/255.0f, 250/255.0f, 1.0f), 
-        ImVec4(50/255.0f, 230/255.0f, 250/255.0f, 1.0f), 
-        ImVec4(50/255.0f, 250/255.0f, 180/255.0f, 1.0f), 
-        ImVec4(250/255.0f, 150/255.0f, 50/255.0f, 1.0f), 
-        ImVec4(250/255.0f, 240/255.0f, 50/255.0f, 1.0f)  
+        ImVec4(200/255.0f, 80/255.0f, 250/255.0f, 1.0f), // Purple
+        ImVec4(50/255.0f, 230/255.0f, 250/255.0f, 1.0f), // Cyan
+        ImVec4(50/255.0f, 250/255.0f, 180/255.0f, 1.0f), // Teal
+        ImVec4(250/255.0f, 150/255.0f, 50/255.0f, 1.0f), // Orange
+        ImVec4(250/255.0f, 240/255.0f, 50/255.0f, 1.0f)  // Yellow
     };
 
     for (int i = 0; i < 5; i++) {
@@ -4050,20 +4221,20 @@ void ModMenu::RenderInner() {
         ImU32 col2 = ImGui::GetColorU32(ImVec4(matchColors2[i].x, matchColors2[i].y, matchColors2[i].z, opacity * g_MenuAlpha));
         
         if (isActive) {
-            
+            // Draw a beautiful soft colored glow around the rounded square
             RenderSoftGlow(dl, dotMin, ImVec2(40.0f, 40.0f), col1, 10.0f);
         }
         
-        
+        // Draw the vertical gradient on the square
         AddRoundedGradientRect(dl, dotMin, dotMax, col1, col2, 10.0f);
         
         if (isActive) {
-            
+            // Draw the white outline
             dl->AddRect(dotMin, dotMax, IM_COL32(255, 255, 255, 220), 10.0f, 0, 1.5f);
         }
     }
     
-    
+    // Add custom theme plus button on sidebar (matching presets)
     ImGui::SetCursorScreenPos(ImVec2(themeBarRect.Min.x + 10.0f, themeBarRect.Min.y + 305.0f));
     ImGui::PushID("custom_plus_btn");
     
@@ -4089,7 +4260,7 @@ void ModMenu::RenderInner() {
         ImGui::OpenPopup("Custom Theme Creator");
     }
 
-    
+    // Add Reset All Settings button on sidebar at the very bottom (spaced dynamically from plus button)
     ImGui::SetCursorScreenPos(ImVec2(themeBarRect.Min.x + 10.0f, themeBarRect.Max.y - 50.0f));
     ImGui::PushID("reset_all_btn");
     
@@ -4105,7 +4276,7 @@ void ModMenu::RenderInner() {
     dl->AddRectFilled(resetMin, resetMax, resetBgCol, 10.0f);
     dl->AddRect(resetMin, resetMax, resetBorderCol, 10.0f, 0, 1.0f);
     
-    
+    // Draw Reset Arrow / Refresh icon
     ImU32 resetIconCol = ImGui::GetColorU32(resetHovered ? ImVec4(1.0f, 0.3f, 0.3f, 0.95f) : ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
     ImVec2 resetCenter(resetMin.x + 20.0f, resetMin.y + 20.0f);
     float radius = 7.0f;
@@ -4119,7 +4290,7 @@ void ModMenu::RenderInner() {
             resetIconCol, 2.0f
         );
     }
-    
+    // Arrowhead
     float arrowAngle = 12.0f / 16.0f * 2.0f * M_PI - M_PI/2.0f;
     ImVec2 arrowTip(resetCenter.x + cosf(arrowAngle) * radius, resetCenter.y + sinf(arrowAngle) * radius);
     dl->AddLine(arrowTip, ImVec2(arrowTip.x - 3.0f, arrowTip.y - 1.0f), resetIconCol, 2.0f);
@@ -4128,14 +4299,14 @@ void ModMenu::RenderInner() {
     ImGui::PopID();
     
     if (resetHovered) {
-        ImGui::SetTooltip("Сбросить все настройки мода (Reset All Settings)");
+        ImGui::SetTooltip("Reset All Settings");
     }
     
     if (resetClicked) {
         ImGui::OpenPopup("Confirm Reset All");
     }
 
-    
+    // HEADER TABS (Centered on Main Area, Capsule Style)
     float mainX = winPos.x + themeBarW + 20;
     float mainW = winSize.x - themeBarW - 30;
 
@@ -4156,7 +4327,7 @@ void ModMenu::RenderInner() {
         tabStartX = mainX;
     }
 
-    
+    // Draw Back / Close Button at top right
     float closeBtnX = winPos.x + winSize.x - 120.0f;
     float closeBtnY = winPos.y + 14.0f;
     ImGui::SetCursorScreenPos(ImVec2(closeBtnX, closeBtnY));
@@ -4165,7 +4336,10 @@ void ModMenu::RenderInner() {
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.10f, 0.10f, 0.12f, 1.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
     if (ImGui::Button("CLOSE", ImVec2(100.0f, 30.0f))) {
-        if (g_MainMenuActive || ModMenu::g_InGameMenuOpen) {
+        isHudEditing = false;
+        if (ModMenu::g_InGameMenuOpen) {
+            g_CloseInGameMenuRequested = true;
+        } else if (g_MainMenuActive) {
             g_ActiveTab = 0;
             g_DashboardLeftSelected = 0;
         } else {
@@ -4175,17 +4349,17 @@ void ModMenu::RenderInner() {
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
 
-    
+    // Draw tabs capsule container background
     ImRect capsuleRect(ImVec2(tabStartX - 10.0f, winPos.y + 12.0f), ImVec2(tabStartX + totalTabsW - 5.0f, winPos.y + 44.0f));
     dl->AddRectFilled(capsuleRect.Min, capsuleRect.Max, ImGui::GetColorU32(ImVec4(0.04f, 0.04f, 0.05f, g_MenuAlpha * 0.9f)), 16.0f);
 
-    
+    // Smoothly slide/lerp Tab Selector Pill
     float targetUnderlineX = tabStartX + g_ModMenuTab * tabSpacing - 5.0f;
     float targetUnderlineWidth = tabPillWidth;
     g_TabUnderlineX += (targetUnderlineX - g_TabUnderlineX) * io.DeltaTime * 14.0f;
     g_TabUnderlineWidth += (targetUnderlineWidth - g_TabUnderlineWidth) * io.DeltaTime * 14.0f;
     
-    
+    // Draw the sliding pill selector
     ImU32 selectorCol = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.08f));
     dl->AddRectFilled(ImVec2(g_TabUnderlineX, winPos.y + 15.0f), ImVec2(g_TabUnderlineX + g_TabUnderlineWidth, winPos.y + 41.0f), selectorCol, 13.0f);
 
@@ -4204,7 +4378,7 @@ void ModMenu::RenderInner() {
         bool selected = (g_ModMenuTab == i);
         ImVec4 textCol = selected ? COL_TEXT : COL_TEXT_DIM;
         
-        
+        // Layout: Icon + Text
         ImVec2 textSz = ImGui::CalcTextSize(tabs[i]);
         float iconW = 14.0f;
         bool showText = (tabButtonWidth >= 65.0f);
@@ -4212,28 +4386,28 @@ void ModMenu::RenderInner() {
         float contentW = showText ? (iconW + spacing + textSz.x) : iconW;
         float startX = tabPos.x + (tabSize.x - contentW) * 0.5f;
         
-        
+        // Draw programmatic vector icons inline
         ImVec2 iconCenter(startX + 7.0f, tabPos.y + tabSize.y * 0.5f);
         ImU32 iconColor = ImGui::GetColorU32(ImVec4(textCol.x, textCol.y, textCol.z, g_MenuAlpha));
         
-        if (i == 0) { 
+        if (i == 0) { // Visuals: Diamond/Spark
             dl->AddTriangleFilled(ImVec2(iconCenter.x, iconCenter.y - 7.0f), ImVec2(iconCenter.x - 5.0f, iconCenter.y), ImVec2(iconCenter.x + 5.0f, iconCenter.y), iconColor);
             dl->AddTriangleFilled(ImVec2(iconCenter.x, iconCenter.y + 7.0f), ImVec2(iconCenter.x - 5.0f, iconCenter.y), ImVec2(iconCenter.x + 5.0f, iconCenter.y), iconColor);
-        } else if (i == 1) { 
+        } else if (i == 1) { // HUD: Mini Layout Grid
             dl->AddRectFilled(ImVec2(iconCenter.x - 6.0f, iconCenter.y - 5.0f), ImVec2(iconCenter.x + 6.0f, iconCenter.y - 2.0f), iconColor, 1.0f);
             dl->AddRectFilled(ImVec2(iconCenter.x - 6.0f, iconCenter.y - 1.0f), ImVec2(iconCenter.x + 0.0f, iconCenter.y + 2.0f), iconColor, 1.0f);
             dl->AddRectFilled(ImVec2(iconCenter.x + 2.0f, iconCenter.y - 1.0f), ImVec2(iconCenter.x + 6.0f, iconCenter.y + 2.0f), iconColor, 1.0f);
             dl->AddRectFilled(ImVec2(iconCenter.x - 6.0f, iconCenter.y + 3.0f), ImVec2(iconCenter.x + 6.0f, iconCenter.y + 5.0f), iconColor, 1.0f);
-        } else if (i == 2) { 
+        } else if (i == 2) { // Client: Monitor / Screen
             dl->AddRect(ImVec2(iconCenter.x - 7.0f, iconCenter.y - 5.0f), ImVec2(iconCenter.x + 7.0f, iconCenter.y + 3.0f), iconColor, 1.5f, 0, 1.0f);
             dl->AddLine(ImVec2(iconCenter.x - 3.0f, iconCenter.y + 4.0f), ImVec2(iconCenter.x - 1.0f, iconCenter.y + 7.0f), iconColor, 1.0f);
             dl->AddLine(ImVec2(iconCenter.x + 3.0f, iconCenter.y + 4.0f), ImVec2(iconCenter.x + 1.0f, iconCenter.y + 7.0f), iconColor, 1.0f);
             dl->AddLine(ImVec2(iconCenter.x - 4.0f, iconCenter.y + 7.0f), ImVec2(iconCenter.x + 4.0f, iconCenter.y + 7.0f), iconColor, 1.0f);
-        } else if (i == 3) { 
+        } else if (i == 3) { // Combat: Crosshair
             dl->AddCircle(iconCenter, 5.0f, iconColor, 12, 1.0f);
             dl->AddLine(ImVec2(iconCenter.x - 7.0f, iconCenter.y), ImVec2(iconCenter.x + 7.0f, iconCenter.y), iconColor, 1.0f);
             dl->AddLine(ImVec2(iconCenter.x, iconCenter.y - 7.0f), ImVec2(iconCenter.x, iconCenter.y + 7.0f), iconColor, 1.0f);
-        } else if (i == 4) { 
+        } else if (i == 4) { // Util: Gear / Wrench
             dl->AddCircle(iconCenter, 4.0f, iconColor, 12, 1.5f);
             for (int a = 0; a < 8; a++) {
                 float angle = a * (IM_PI / 4.0f);
@@ -4243,19 +4417,23 @@ void ModMenu::RenderInner() {
                     iconColor, 1.5f
                 );
             }
-        } else if (i == 5) { 
+        } else if (i == 5) { // Theme: Paintbrush / Palette
             dl->AddCircleFilled(iconCenter, 6.0f, iconColor, 12);
             dl->AddCircleFilled(ImVec2(iconCenter.x - 2.0f, iconCenter.y - 2.0f), 1.2f, ImGui::GetColorU32(ImVec4(0.1f, 0.1f, 0.12f, g_MenuAlpha)));
             dl->AddCircleFilled(ImVec2(iconCenter.x + 2.0f, iconCenter.y - 2.0f), 1.2f, ImGui::GetColorU32(ImVec4(0.1f, 0.1f, 0.12f, g_MenuAlpha)));
             dl->AddCircleFilled(ImVec2(iconCenter.x - 2.0f, iconCenter.y + 2.0f), 1.2f, ImGui::GetColorU32(ImVec4(0.1f, 0.1f, 0.12f, g_MenuAlpha)));
             dl->AddCircleFilled(ImVec2(iconCenter.x + 2.0f, iconCenter.y + 2.0f), 1.2f, ImGui::GetColorU32(ImVec4(0.1f, 0.1f, 0.12f, g_MenuAlpha)));
-        } else if (i == 6) { 
+        } else if (i == 6) { // Configs: Folder / Document
             dl->AddRect(ImVec2(iconCenter.x - 7.0f, iconCenter.y - 4.0f), ImVec2(iconCenter.x + 7.0f, iconCenter.y + 5.0f), iconColor, 1.0f, 0, 1.5f);
             dl->AddLine(ImVec2(iconCenter.x - 7.0f, iconCenter.y - 1.0f), ImVec2(iconCenter.x + 7.0f, iconCenter.y - 1.0f), iconColor, 1.0f);
             dl->AddRectFilled(ImVec2(iconCenter.x - 5.0f, iconCenter.y - 6.0f), ImVec2(iconCenter.x - 1.0f, iconCenter.y - 4.0f), iconColor, 1.0f);
-        } else if (i == 7) { 
+        } else if (i == 7) { // Player: User Avatar
             dl->AddCircleFilled(ImVec2(iconCenter.x, iconCenter.y - 3.0f), 3.0f, iconColor, 10);
             dl->AddRectFilled(ImVec2(iconCenter.x - 6.0f, iconCenter.y + 2.0f), ImVec2(iconCenter.x + 6.0f, iconCenter.y + 6.0f), iconColor, 2.0f);
+        } else if (i == 8) { // Profiles: Id Card / List
+            dl->AddRect(ImVec2(iconCenter.x - 7.0f, iconCenter.y - 5.0f), ImVec2(iconCenter.x + 7.0f, iconCenter.y + 5.0f), iconColor, 1.0f, 0, 1.5f);
+            dl->AddLine(ImVec2(iconCenter.x - 4.0f, iconCenter.y - 2.0f), ImVec2(iconCenter.x + 4.0f, iconCenter.y - 2.0f), iconColor, 1.0f);
+            dl->AddLine(ImVec2(iconCenter.x - 4.0f, iconCenter.y + 1.0f), ImVec2(iconCenter.x + 4.0f, iconCenter.y + 1.0f), iconColor, 1.0f);
         }
         
         if (showText) {
@@ -4266,25 +4444,25 @@ void ModMenu::RenderInner() {
         }
     }
 
-    
+    // Search bar (English, fully functional)
     static char searchBuf[64] = "";
     if (showSearch) {
         ImVec2 searchPos = ImVec2(winPos.x + winSize.x - 300.0f, winPos.y + 16.0f);
         ImGui::SetCursorScreenPos(searchPos);
         ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.10f, 0.12f, 1.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 15.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 6.0f)); 
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 6.0f)); // Vertically center with CLOSE button
         ImGui::PushItemWidth(160.0f);
         ImGui::InputTextWithHint("##search", "Search...", searchBuf, sizeof(searchBuf));
         ImGui::PopItemWidth();
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor();
     } else {
-        
+        // Clear search so we don't hide items when the search bar itself is hidden
         searchBuf[0] = '\0';
     }
 
-    
+    // GRID MATH (Figma Layout) - with margins to prevent card glow clipping
     float startY = winPos.y + 80.0f;
     float gridMarginX = 12.0f;
     float gridMarginY = 12.0f;
@@ -4300,7 +4478,7 @@ void ModMenu::RenderInner() {
     float columnW = (mainW - scrollbarPadding - 2.0f * gridMarginX - (numCols - 1) * spacingX) / (float)numCols;
     float itemH = 90.0f;
 
-    
+    // Tab content transition animation
     static int prevTab = g_ModMenuTab;
     static float tabTransitionT = 1.0f;
     if (prevTab != g_ModMenuTab) {
@@ -4311,7 +4489,7 @@ void ModMenu::RenderInner() {
     float slideOffset = (1.0f - tabTransitionT) * 40.0f;
     float alphaMultiplier = tabTransitionT;
 
-    
+    // Custom scrollbar style matching active theme
     ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, ImVec4(g_AccentColor.x, g_AccentColor.y, g_AccentColor.z, 0.25f * g_MenuAlpha));
     ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, ImVec4(g_AccentColor.x, g_AccentColor.y, g_AccentColor.z, 0.45f * g_MenuAlpha));
@@ -4326,7 +4504,7 @@ void ModMenu::RenderInner() {
         ImGui::SetWindowFocus();
     }
 
-    
+    // Smooth scroll interpolation logic
     static float currentScrollY = 0.0f;
     static float targetScrollY = -1.0f;
     static float prevNativeScrollY = -1.0f;
@@ -4354,14 +4532,14 @@ void ModMenu::RenderInner() {
     if (ImGui::IsWindowHovered()) {
         float wheel = io.MouseWheel;
         if (wheel != 0.0f) {
-            targetScrollY -= wheel * 140.0f; 
+            targetScrollY -= wheel * 140.0f; // Fast, premium scrolling speed
             float maxScroll = ImGui::GetScrollMaxY();
             if (targetScrollY < 0.0f) targetScrollY = 0.0f;
             if (targetScrollY > maxScroll) targetScrollY = maxScroll;
         }
     }
 
-    
+    // Snappy and smooth framerate-independent lerp
     if (getenv("RETRO_TEST_START_GAME") && !se_mainGameTimer) {
         targetScrollY = 1900.0f;
         currentScrollY = 1900.0f;
@@ -4378,7 +4556,7 @@ void ModMenu::RenderInner() {
 
 #define GET_CELL_POS(col, row) ImVec2(mainX + gridMarginX + (col) * (columnW + spacingX) + slideOffset, startY + gridMarginY + (row) * (itemH + spacingY) - childScrollY)
 
-    
+    // Grid rendering logic
     int cellIdx = 0;
     auto renderItem = [&](const char* title, const char* desc, bool* v, int* keybind = nullptr) {
         if (searchBuf[0] != '\0' && !ItemMatchesSearch(title, desc, searchBuf)) return;
@@ -4426,7 +4604,7 @@ void ModMenu::RenderInner() {
     };
 
     if (searchBuf[0] != '\0') {
-        
+        // Global search view with reflowing
         renderItem("Noclip Mode", "Changes camera physics for cinematic flight", &g_NoclipMode, &g_NoclipKeybind);
         renderItem("Clean Screen", "Hide ALL HUD elements for pure cinematic view", &g_CleanScreen, &g_CleanScreenKeybind);
         renderItem("Camera Lock", "Locks camera orientation during glance", &g_CameraLock, &g_CameraLockKeybind);
@@ -4436,11 +4614,19 @@ void ModMenu::RenderInner() {
         renderItem("Corpse Fade Timer", "Show a timer above dead players until their corpse disappears", &sg_corpseTimerEnabled);
         renderItem("Corpse Timer Override", "Override server corpse delay with custom duration", &sg_corpseTimerOverride);
         renderRealSlider("Corpse Fade Duration", "Custom duration in seconds for corpse fade", &sg_corpseTimerDuration, 1.0f, 30.0f, "%.1f");
+        renderRealSlider("Player Name Size", "Scale factor for other players' names displayed above their cycles", &sg_modNameSizeScale, 0.2f, 5.0f, "%.2f");
         renderIntSlider("Corpse Trail Style", "0: Legacy, 1: Blinking Warning, 2: Gradual Fade & Shrink", &sg_corpseTrailStyle, 0.0f, 2.0f, "CORPSE_TRAIL_STYLE_FORMAT");
+        renderItem("Ambient Dust", "Enable glowing ambient dust particles rising from floor", &sg_modAmbientParticlesEnabled);
+        renderIntSlider("Ambient Particles Spawn Mode", "Spawn mode for ambient floor particles", &sg_modAmbientParticlesMode, 0.0f, 1.0f, "AMBIENT_PARTICLES_MODE_FORMAT");
+        renderIntSlider("Ambient Particles Min Limit", "Minimum active ambient floor particles count", &sg_modAmbientParticlesMin, 0.0f, 500.0f, "%.0f");
+        renderIntSlider("Ambient Particles Max Limit", "Maximum active ambient floor particles count", &sg_modAmbientParticlesMax, 0.0f, 1000.0f, "%.0f");
         renderItem("Rubber Battery", "Wide horizontal rubber bar above bottom panels", &sg_modRubberBatteryEnabled);
         renderItem("Classic Rubber Battery", "Classic horizontal rubber bar above bottom panels", &sg_modClassicRubberBatteryEnabled);
         renderItem("Network Health Widget", "Display connection quality, latency, and packet loss", &sg_modNetHealthEnabled);
         renderItem("Client Name Widget", "Separate widget showing the client logo name", &sg_modClientNameEnabled);
+        renderItem("Wall Timer Widget", "Countdown till wall dissolves for dead players", &sg_modWallTimerEnabled);
+        renderItem("Keystroke Visualizer 1", "Visual representation of pressed buttons (Widget 1)", &sg_modKeystroke1_Enabled);
+        renderItem("Keystroke Visualizer 2", "Visual representation of pressed buttons (Widget 2)", &sg_modKeystroke2_Enabled);
         renderItem("FPS Widget", "Separate widget showing current framerate", &sg_modFpsEnabled);
         renderItem("Ping Widget", "Separate widget showing network latency", &sg_modPingEnabled);
         renderItem("Time Widget", "Separate widget showing current local system time", &sg_modTimeEnabled);
@@ -4451,6 +4637,15 @@ void ModMenu::RenderInner() {
         renderItem("Modern Brake Reservoir", "Circular needle gauge of remaining braking capacity", &sg_modBrakeMeterEnabled);
         renderItem("Modern Scoreboard", "Top banner showing your score and the highest player score", &sg_modScoreboardWidgetEnabled);
         renderItem("Modern Alive Counter", "High-fidelity widget showing alive player counts", &sg_modAliveWidgetEnabled);
+        renderItem("Media Player Widget", "OS media / Spotify overlay with EQ bars and controls", &sg_modMediaWidgetEnabled);
+        {
+            bool dummyPlayPause = false;
+            bool dummyNext = false;
+            bool dummyPrev = false;
+            renderItem("Media: Play/Pause", "Bind key to play or pause media", &dummyPlayPause, &g_MediaPlayPauseKeybind);
+            renderItem("Media: Next Track", "Bind key to skip to next track", &dummyNext, &g_MediaNextKeybind);
+            renderItem("Media: Prev Track", "Bind key to go back to previous track", &dummyPrev, &g_MediaPrevKeybind);
+        }
         
         renderItem("Show HUD", "Toggle global visibility of HUD overlay", &g_ShowHUD, &g_ShowHUDKeybind);
         renderItem("Rubber Gauge", "Toggle display of the rubber gauge", &g_RubberGauge, &g_RubberGaugeKeybind);
@@ -4477,6 +4672,7 @@ void ModMenu::RenderInner() {
         renderItem("Cycle Sparks", "Toggle sparks generation on collisions", &g_Sparks, &g_SparksKeybind);
         renderItem("White Sparks", "Use clean white particles for sparks", &g_WhiteSparks, &g_WhiteSparksKeybind);
         renderItem("Explosions", "Toggle particle explosions upon death", &g_Explosions, &g_ExplosionsKeybind);
+        renderItem("Single Line Explosion", "Render legacy crash explosion as a single vertical vector line", &sg_explosionSingleLineUp);
         renderItem("Alpha Blending", "Enables smooth transparency blending", &g_AlphaBlend, &g_AlphaBlendKeybind);
         renderItem("Smooth Shading", "Enables smooth vertex normals shading", &g_SmoothShading, &g_SmoothShadingKeybind);
         renderSlider("Floor Detail", "Sets floor grid/texture complexity (0-3)", &g_FloorDetail, 0.0f, 3.0f, "%.0f");
@@ -4509,7 +4705,7 @@ void ModMenu::RenderInner() {
         cellIdx++;
         renderSlider("Fog Density", "Sets the thickness of the world fog", &g_FogDensity, 0.0f, 0.1f, "%.4f");
 
-        
+        // NEW MOD SETTINGS SEARCH:
         renderItem("Pathfinding Line", "Show escape vector on the floor", &sg_modPathLineEnabled);
         renderIntSlider("Search Depth", "How many turns ahead to explore (2-6)", &sg_modPathDepth, 2.0f, 6.0f, "%.0f");
         renderIntSlider("Max Range", "Maximum distance the path can extend (50-200)", &sg_modPathRange, 50.0f, 200.0f, "%.0f");
@@ -4522,6 +4718,7 @@ void ModMenu::RenderInner() {
 
         renderItem("Minimap Enabled", "Show/hide the static minimap radar overlay", &sg_modMinimapEnabled);
         renderItem("Minimap Rotate", "Rotate minimap smoothly to match player direction", &sg_modMinimapRotate);
+        renderRealSlider("Minimap Rot Speed", "Speed of minimap rotation. 1=Slow/smooth, 30=Instant", &sg_modMinimapRotateSpeed, 1.0f, 30.0f, "%.0f");
         renderRealSlider("Minimap Zoom", "Zoom into minimap content", &sg_modMinimapZoom, 1.0f, 5.0f, "%.1fx");
         renderRealSlider("Minimap Size", "Minimap window scale size", &sg_modMinimapScale, 0.1f, 3.0f, "%.1fx");
         
@@ -4545,15 +4742,20 @@ void ModMenu::RenderInner() {
         renderItem("3D Rubber Gauge", "Display rubber percentage near cycle in game world", &sg_modRubberGaugeEnabled);
         renderItem("Anti-360 Lock", "Prevent 360-degree suicide by ignoring fast 4th turns", &sg_modAnti360LockEnabled);
         renderRealSlider("Anti-360 Window", "Time window in seconds to check for consecutive turns", &sn_anti360Window, 0.1f, 3.0f, "%.2fs");
-        
-        
-        
+#if !PUBLIC_BUILD
+        renderRealSlider("Perfect Turn Calib", "Manual trigger distance (0 = rubber-only mode)", &sg_perfectTurnCalibration, 0.0f, 2.0f, "%.2f");
+        renderItem("AutoEscape Ping Comp", "Use network ping to time escape turns", &sg_autoEscapePingComp);
+        renderRealSlider("AutoEscape Margin", "Safety margin before max rubber", &sg_autoEscapeRubberMargin, 0.0f, 1.0f, "%.2f");
+#endif
 
         renderItem("Chat Calculator", "Auto-reply to math expressions in chat (e.g. 2+2)", &sg_modChatCalcEnabled);
-        
+#if !PUBLIC_BUILD
+        renderItem("AI Trash Talker", "Auto trash talk based on game events and keywords", &sg_modTrashTalkEnabled);
+#endif
         renderItem("Auto-Greet", "Automatically greet when joining a server", &sg_modAutoGreet);
-        
+        renderItem("Friendly Responder", "Polite responses only (gg, wp, gf, hi, bb)", &sg_modFriendlyChat);
         renderItem("Color Picker", "Type 'color NAME' in chat to see or apply player RGB", &sg_modColorPicker);
+        renderItem("Mod Menu Toggle Keybind", "Keybind to open the Mod Menu", &g_ModMenuKeybindEnabled, &g_ModMenuKeybind);
         renderItem("Auto Packet Refresh", "Trigger sync commands when packet delay exceeds 1.2s", &g_AutoPacketRefresh, &g_PacketRefreshKeybind);
 
         renderRealSlider("Flight Speed", "Base movement speed in noclip mode", &sg_noclipSpeed, 5.0f, 500.0f, "%.0f");
@@ -4586,8 +4788,8 @@ void ModMenu::RenderInner() {
             }
         }
     } else {
-        
-        if (g_ModMenuTab == 0) { 
+        // Tab-specific screens
+        if (g_ModMenuTab == 0) { // Visuals
             renderItem("Noclip Mode", "Changes camera physics for cinematic flight", &g_NoclipMode, &g_NoclipKeybind);
             renderItem("Clean Screen", "Hide ALL HUD elements for pure cinematic view", &g_CleanScreen, &g_CleanScreenKeybind);
             renderItem("Camera Lock", "Locks camera orientation during glance", &g_CameraLock, &g_CameraLockKeybind);
@@ -4605,12 +4807,13 @@ void ModMenu::RenderInner() {
             renderItem("Corpse Fade Timer", "Show a timer above dead players until their corpse disappears", &sg_corpseTimerEnabled);
             renderItem("Corpse Timer Override", "Override server corpse delay with custom duration", &sg_corpseTimerOverride);
             renderRealSlider("Corpse Fade Duration", "Custom duration in seconds for corpse fade", &sg_corpseTimerDuration, 1.0f, 30.0f, "%.1f");
+            renderRealSlider("Player Name Size", "Scale factor for other players' names displayed above their cycles", &sg_modNameSizeScale, 0.2f, 5.0f, "%.2f");
             renderIntSlider("Corpse Trail Style", "0: Legacy, 1: Blinking Warning, 2: Gradual Fade & Shrink", &sg_corpseTrailStyle, 0.0f, 2.0f, "CORPSE_TRAIL_STYLE_FORMAT");
             renderItem("Alpha Blending", "Enables smooth transparency blending", &g_AlphaBlend, &g_AlphaBlendKeybind);
             renderItem("Smooth Shading", "Enables smooth vertex normals shading", &g_SmoothShading, &g_SmoothShadingKeybind);
             renderSlider("Floor Detail", "Sets floor grid/texture complexity (0-3)", &g_FloorDetail, 0.0f, 3.0f, "%.0f");
             
-            
+            // Migrated Visuals: Pathfinding & Waypoints
             renderItem("Pathfinding Line", "Show escape vector on the floor", &sg_modPathLineEnabled);
             renderIntSlider("Search Depth", "How many turns ahead to explore (2-6)", &sg_modPathDepth, 2.0f, 6.0f, "%.0f");
             renderIntSlider("Max Range", "Maximum distance the path can extend (50-200)", &sg_modPathRange, 50.0f, 200.0f, "%.0f");
@@ -4621,15 +4824,19 @@ void ModMenu::RenderInner() {
             renderRealSlider("Waypoint Cooldown", "Cooldown in seconds between markers", &sg_modWaypointsCooldown, 1.0f, 30.0f, "%.0f");
             renderRealSlider("Waypoint Lifetime", "How long waypoint markers stay visible", &sg_modWaypointsLifetime, 5.0f, 30.0f, "%.0f");
 
-            
+            // [MOD] Visual Overhaul Settings
             renderItem("Particle Engine", "Enable custom cycle/ambient particles", &sg_modParticleSystemEnabled);
             renderIntSlider("Death Burst Count", "Number of particles spawned on cycle death", &sg_modDeathParticlesCount, 0.0f, 500.0f, "%.0f");
             renderItem("Camera Shake", "Enable camera shake when a cycle crashes", &sg_modScreenShakeEnabled);
             renderRealSlider("Shake Intensity", "Intensity offset of screen shaking", &sg_modScreenShakeIntensity, 0.0f, 2.0f, "%.2f");
             renderItem("Ambient Dust", "Enable glowing ambient dust particles rising from floor", &sg_modAmbientParticlesEnabled);
+            renderIntSlider("Ambient Particles Spawn Mode", "Spawn mode for ambient floor particles", &sg_modAmbientParticlesMode, 0.0f, 1.0f, "AMBIENT_PARTICLES_MODE_FORMAT");
+            renderIntSlider("Ambient Particles Min Limit", "Minimum active ambient floor particles count", &sg_modAmbientParticlesMin, 0.0f, 500.0f, "%.0f");
+            renderIntSlider("Ambient Particles Max Limit", "Maximum active ambient floor particles count", &sg_modAmbientParticlesMax, 0.0f, 1000.0f, "%.0f");
             renderItem("Trail Gradient", "Fades trail opacity from top (opaque) to bottom (transparent)", &sg_modTrailGradientEnabled);
             renderRealSlider("Trail Alpha Top", "Opacity level near the cycle/trail top", &sg_modTrailAlphaTop, 0.0f, 1.0f, "%.2f");
             renderRealSlider("Trail Alpha Bottom", "Opacity level near the grid floor", &sg_modTrailAlphaBottom, 0.0f, 1.0f, "%.2f");
+            renderRealSlider("Trail Height", "Height scale of all cycle trails (1.0 = normal, 0.1 = pixel line)", &sg_modWallHeightMultiplier, 0.1f, 1.0f, "%.2f");
             renderItem("Instanced Trails", "Enable next-gen instanced rendering for trail walls (Safe Fallback if disabled)", &cfg_EnableInstancing);
             bool prevMSAA = cfg_MSAA;
             renderItem("Anti-Aliasing (MSAA)", "Enables 8x hardware multi-sample anti-aliasing", &cfg_MSAA);
@@ -4656,7 +4863,7 @@ void ModMenu::RenderInner() {
                     sg_enemyUnifiedColorB = enemyCol.z;
                 }
             }
-        } else if (g_ModMenuTab == 1) { 
+        } else if (g_ModMenuTab == 1) { // HUD
             renderItem("Show HUD", "Toggle global visibility of HUD overlay", &g_ShowHUD, &g_ShowHUDKeybind);
             renderItem("Rubber Gauge", "Toggle display of the rubber gauge", &g_RubberGauge, &g_RubberGaugeKeybind);
             renderItem("Speed Meter", "Toggle display of the speedometer", &g_SpeedMeter, &g_SpeedMeterKeybind);
@@ -4667,9 +4874,12 @@ void ModMenu::RenderInner() {
             renderItem("Show Fastest", "Toggle display of peak speed attained", &g_ShowFastest, &g_ShowFastestKeybind);
             renderItem("Show FPS (Legacy)", "Toggle display of legacy FPS counter", &sr_FPSOut);
             
-            
+            // Migrated HUD: Minimap & In-Game Alerts
             renderItem("Minimap Enabled", "Show/hide the static minimap radar overlay", &sg_modMinimapEnabled);
             renderItem("Minimap Rotate", "Rotate minimap smoothly to match player direction", &sg_modMinimapRotate);
+            if (sg_modMinimapRotate) {
+                renderRealSlider("Rotation Speed", "Speed of minimap rotation. 1=Slow/smooth, 30=Instant", &sg_modMinimapRotateSpeed, 1.0f, 30.0f, "%.0f");
+            }
             renderRealSlider("Minimap Zoom", "Zoom into minimap content", &sg_modMinimapZoom, 1.0f, 5.0f, "%.1fx");
             renderRealSlider("Minimap Size", "Minimap window scale size", &sg_modMinimapScale, 0.1f, 3.0f, "%.1fx");
             
@@ -4696,6 +4906,9 @@ void ModMenu::RenderInner() {
             renderItem("Rubber Battery", "Wide horizontal rubber bar above bottom panels", &sg_modRubberBatteryEnabled);
             renderItem("Classic Rubber Battery", "Classic horizontal rubber bar above bottom panels", &sg_modClassicRubberBatteryEnabled);
             renderItem("Client Name Widget", "Separate widget showing the client logo name", &sg_modClientNameEnabled);
+            renderItem("Wall Timer Widget", "Countdown till wall dissolves for dead players", &sg_modWallTimerEnabled);
+            renderItem("Keystroke Visualizer 1", "Visual representation of pressed buttons (Widget 1)", &sg_modKeystroke1_Enabled);
+            renderItem("Keystroke Visualizer 2", "Visual representation of pressed buttons (Widget 2)", &sg_modKeystroke2_Enabled);
             renderItem("FPS Widget", "Separate widget showing current framerate", &sg_modFpsEnabled);
             renderItem("Ping Widget", "Separate widget showing network latency", &sg_modPingEnabled);
             renderItem("Time Widget", "Separate widget showing current local system time", &sg_modTimeEnabled);
@@ -4707,8 +4920,17 @@ void ModMenu::RenderInner() {
             renderItem("Modern Scoreboard", "Top banner showing your score and the highest player score", &sg_modScoreboardWidgetEnabled);
             renderItem("Modern Alive Counter", "High-fidelity widget showing alive player counts", &sg_modAliveWidgetEnabled);
             renderItem("Network Health Widget", "Display connection quality, latency, and packet loss", &sg_modNetHealthEnabled);
+            renderItem("Media Player Widget", "OS media / Spotify overlay with EQ bars and controls", &sg_modMediaWidgetEnabled);
+            {
+                bool dummyPlayPause = false;
+                bool dummyNext = false;
+                bool dummyPrev = false;
+                renderItem("  Media: Play/Pause", "Bind key to play or pause media", &dummyPlayPause, &g_MediaPlayPauseKeybind);
+                renderItem("  Media: Next Track", "Bind key to skip to next track", &dummyNext, &g_MediaNextKeybind);
+                renderItem("  Media: Prev Track", "Bind key to go back to previous track", &dummyPrev, &g_MediaPrevKeybind);
+            }
             renderItem("Edit HUD Layout", "Enter interactive dragging/snapping design mode", &isHudEditing);
-        } else if (g_ModMenuTab == 2) { 
+        } else if (g_ModMenuTab == 2) { // Client HUD Position adjustments
             renderSlider("Field of View (FOV)", "Adjust the client camera Field of View", &g_FOV, 30.0f, 150.0f, "%.0f");
             renderSlider("Speed Gauge Size", "Scale factor of the speed meter gauge", &g_SpeedGaugeSize, 0.1f, 3.0f, "%.2f");
             renderSlider("Speed Gauge X Offset", "Horizontal position of the speed meter", &g_SpeedGaugeX, -2.0f, 2.0f, "%.2f");
@@ -4737,17 +4959,19 @@ void ModMenu::RenderInner() {
             if (renderButton("Reset HUD Layout", "Restore default positions and sizes for all HUD gauges")) {
                 g_OpenResetHUDPopup = true;
             }
-        } else if (g_ModMenuTab == 3) { 
+        } else if (g_ModMenuTab == 3) { // Combat
             renderItem("Cut-off Predictor", "Show CUT/NO indicator when you can box in an enemy", &sg_modCutoffAimbot);
             renderItem("Proximity Warning", "Red edge glow when enemies are close behind", &sg_modProximityWarning);
             renderItem("3D Rubber Gauge", "Display rubber percentage near cycle in game world", &sg_modRubberGaugeEnabled);
             renderItem("Anti-360 Lock", "Prevent 360-degree suicide by ignoring fast 4th turns", &sg_modAnti360LockEnabled);
             renderRealSlider("Anti-360 Window", "Time window in seconds to check for consecutive turns", &sn_anti360Window, 0.1f, 3.0f, "%.2fs");
-            
-            
-            
-        } else if (g_ModMenuTab == 4) { 
-            
+#if !PUBLIC_BUILD
+            renderRealSlider("Perfect Turn Calib", "Manual trigger distance (0 = rubber-only mode)", &sg_perfectTurnCalibration, 0.0f, 2.0f, "%.2f");
+            renderItem("AutoEscape Ping Comp", "Use network ping to time escape turns", &sg_autoEscapePingComp);
+            renderRealSlider("AutoEscape Margin", "Safety margin before max rubber", &sg_autoEscapeRubberMargin, 0.0f, 1.0f, "%.2f");
+#endif
+        } else if (g_ModMenuTab == 4) { // Util
+            // Kill sounds
             renderItem("Kill Sounds", "Voice announcement pack on kill streaks", &sg_modKillSoundsEnabled);
             renderIntSlider("Announcer Pack", "Choose announcer pack style", &sg_modKillAnnouncerPack, 0.0f, 2.0f, "ANNOUNCER_PACK_FORMAT");
 
@@ -4756,15 +4980,19 @@ void ModMenu::RenderInner() {
             renderItem("Cycle Sparks", "Toggle sparks generation on collisions", &g_Sparks, &g_SparksKeybind);
             renderItem("White Sparks", "Use clean white particles for sparks", &g_WhiteSparks, &g_WhiteSparksKeybind);
             renderItem("Explosions", "Toggle particle explosions upon death", &g_Explosions, &g_ExplosionsKeybind);
+            renderItem("Single Line Explosion", "Render legacy crash explosion as a single vertical vector line", &sg_explosionSingleLineUp);
             renderItem("Auto Packet Refresh", "Trigger sync commands when packet delay exceeds 1.2s", &g_AutoPacketRefresh, &g_PacketRefreshKeybind);
             
-            
+            // Migrated Util: Chat Bots & Automation
             renderItem("Chat Calculator", "Auto-reply to math expressions in chat (e.g. 2+2)", &sg_modChatCalcEnabled);
-            
+#if !PUBLIC_BUILD
+            renderItem("AI Trash Talker", "Auto trash talk based on game events and keywords", &sg_modTrashTalkEnabled);
+#endif
             renderItem("Auto-Greet", "Automatically greet when joining a server", &sg_modAutoGreet);
-            
+            renderItem("Friendly Responder", "Polite responses only (gg, wp, gf, hi, bb)", &sg_modFriendlyChat);
             renderItem("Color Picker", "Type 'color NAME' in chat to see or apply player RGB", &sg_modColorPicker);
-        } else if (g_ModMenuTab == 5) { 
+            renderItem("Mod Menu Toggle Keybind", "Keybind to open the Mod Menu", &g_ModMenuKeybindEnabled, &g_ModMenuKeybind);
+        } else if (g_ModMenuTab == 5) { // Theme
             renderItem("Rainbow Top Bar", "Enables cycling RGB gradient on top bar", &g_RGBTopBar, &g_RGBTopBarKeybind);
             renderItem("Rainbow Accent", "Enables cycling RGB on all elements", &g_RGBAccent, &g_RGBAccentKeybind);
             renderSlider("Rainbow Speed", "Controls velocity of hue rotation", &g_RGBSpeed, 0.0f, 2.0f, "%.2f");
@@ -4783,8 +5011,8 @@ void ModMenu::RenderInner() {
             }
             renderColor("Background Color", "Changes the main window color", &g_MenuBgColor);
             renderSlider("Background Opacity", "Sets the transparency of the menu", &g_MenuBgAlpha, 0.05f, 1.0f, "%.2f");
-        } else if (g_ModMenuTab == 6) { 
-            
+        } else if (g_ModMenuTab == 6) { // Configs
+            // First item: "+ Create New Config"
             ImVec2 pos = GET_CELL_POS(cellIdx % numCols, cellIdx / numCols);
             if (CreateConfigItemAbsolute(pos, ImVec2(columnW, itemH), alphaMultiplier)) {
                 g_NewConfigName[0] = '\0';
@@ -4792,7 +5020,7 @@ void ModMenu::RenderInner() {
             }
             cellIdx++;
 
-            
+            // List files in the var directory
             tString varDir = tDirectories::Var().GetWritePath("x");
             if (varDir.Len() > 2) {
                 varDir = varDir.SubStr(0, varDir.Len() - 2);
@@ -4839,19 +5067,32 @@ void ModMenu::RenderInner() {
                 if (folderClicked) {
                     tString fullPath = tDirectories::Var().GetWritePath(filename);
                     std::string fullPathStr((const char*)fullPath);
+#ifdef WIN32
+                    for (size_t i = 0; i < fullPathStr.length(); ++i) {
+                        if (fullPathStr[i] == '/') {
+                            fullPathStr[i] = '\\';
+                        }
+                    }
+                    size_t lastSlash = fullPathStr.find_last_of('\\');
+#else
                     size_t lastSlash = fullPathStr.find_last_of('/');
+#endif
                     if (lastSlash != std::string::npos) {
                         std::string dirPath = fullPathStr.substr(0, lastSlash);
+#ifdef WIN32
+                        ::ShellExecuteA(NULL, "open", dirPath.c_str(), NULL, NULL, SW_SHOWNORMAL);
+#else
                         tString cmd;
                         cmd << "xdg-open \"" << dirPath.c_str() << "\" &";
                         int res = system((const char*)cmd);
                         (void)res;
+#endif
                     }
                 }
 
                 cellIdx++;
             }
-        } else if (g_ModMenuTab == 7) { 
+        } else if (g_ModMenuTab == 7) { // Player Setup
             ePlayer* lp = ePlayer::PlayerConfig(0);
             if (lp) {
                 ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.10f, 0.12f, 0.8f));
@@ -4864,9 +5105,9 @@ void ModMenu::RenderInner() {
                     ImGui::Columns(1);
                 }
                 
-                
+                // COLUMN 0: General Profile & Colors
                 ImGui::TextColored(ImVec4(0.0f, 0.94f, 1.0f, 1.0f), "PROFILE SETTINGS");
-                ImGui::Separator();
+                DrawColumnSeparator();
                 ImGui::Spacing();
                 
                 char nameBuf[256];
@@ -4875,7 +5116,7 @@ void ModMenu::RenderInner() {
                 nameBuf[sizeof(nameBuf)-1] = '\0';
                 if (ImGui::InputText("Screen Name", nameBuf, sizeof(nameBuf))) {
                     lp->name = Utf8ToCp1251(nameBuf);
-                    
+                    // request network synchronization
                     static nVersionFeature inGameRenames(5);
                     if (inGameRenames.Supported()) {
                         ePlayerNetID::Update();
@@ -4884,7 +5125,7 @@ void ModMenu::RenderInner() {
                 }
                 ImGui::Spacing();
                 
-                
+                // Player Color (R, G, B)
                 float col[3] = { (float)lp->rgb[0] / 15.0f, (float)lp->rgb[1] / 15.0f, (float)lp->rgb[2] / 15.0f };
                 if (ImGui::ColorEdit3("Cycle Color", col)) {
                     lp->rgb[0] = (int)(col[0] * 15.0f + 0.5f);
@@ -4934,7 +5175,7 @@ void ModMenu::RenderInner() {
                 ImGui::Spacing();
                 ImGui::Spacing();
                 
-                
+                // Camera Configurations
                 ImGui::TextColored(ImVec4(0.0f, 0.94f, 1.0f, 1.0f), "CAMERA CONFIGURATION");
                 ImGui::Separator();
                 ImGui::Spacing();
@@ -4973,9 +5214,9 @@ void ModMenu::RenderInner() {
                     ImGui::Spacing(); ImGui::Spacing();
                 }
                 
-                
+                // COLUMN 1: Instant Chat Macros
                 ImGui::TextColored(ImVec4(0.0f, 0.94f, 1.0f, 1.0f), "INSTANT CHAT MACROS");
-                ImGui::Separator();
+                DrawColumnSeparator();
                 ImGui::Spacing();
                 
                 ImGui::BeginChild("##MacrosScroll", ImVec2(useColumns ? 390.0f : (mainW - 30.0f), 420.0f), true, ImGuiWindowFlags_AlwaysVerticalScrollbar);
@@ -4998,7 +5239,7 @@ void ModMenu::RenderInner() {
                 }
                 ImGui::PopStyleColor();
             }
-        } else if (g_ModMenuTab == 8) { 
+        } else if (g_ModMenuTab == 8) { // Profiles & Managers
             ePlayer* lp = ePlayer::PlayerConfig(0);
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.10f, 0.12f, 0.8f));
             bool useColumns = (winSize.x >= 900.0f);
@@ -5010,10 +5251,10 @@ void ModMenu::RenderInner() {
                 ImGui::Columns(1);
             }
             
-            
-            
+            // ================= COLUMN 0: Profiles & Colors =================
+            // 1. Name & Account Manager
             ImGui::TextColored(ImVec4(0.0f, 0.94f, 1.0f, 1.0f), "NAME & ACCOUNT MANAGER");
-            ImGui::Separator();
+            DrawColumnSeparator();
             ImGui::Spacing();
 
             if (lp) {
@@ -5061,7 +5302,8 @@ void ModMenu::RenderInner() {
                 ImGui::PushID(i);
                 RenderArmagetronColoredText(g_SavedProfiles[i].name.c_str());
                 
-                ImGui::SameLine(ImGui::GetContentRegionAvail().x - 110.0f);
+                float rightAlignX = ImGui::GetContentRegionMax().x - 110.0f;
+                ImGui::SameLine(rightAlignX);
                 if (ImGui::Button("Load", ImVec2(50, 20))) {
                     if (lp) {
                         lp->name = g_SavedProfiles[i].name.c_str();
@@ -5074,7 +5316,7 @@ void ModMenu::RenderInner() {
                         }
                     }
                 }
-                ImGui::SameLine(ImGui::GetContentRegionAvail().x - 55.0f);
+                ImGui::SameLine(rightAlignX + 55.0f);
                 if (ImGui::Button("Delete", ImVec2(50, 20))) {
                     g_SavedProfiles.erase(g_SavedProfiles.begin() + i);
                     SaveProfiles();
@@ -5088,9 +5330,9 @@ void ModMenu::RenderInner() {
             ImGui::Spacing();
             ImGui::Spacing();
             
-            
+            // 2. Color Manager
             ImGui::TextColored(ImVec4(0.0f, 0.94f, 1.0f, 1.0f), "COLOR MANAGER");
-            ImGui::Separator();
+            DrawColumnSeparator();
             ImGui::Spacing();
 
             if (lp) {
@@ -5138,12 +5380,14 @@ void ModMenu::RenderInner() {
                 ImGui::Dummy(ImVec2(20, 15));
                 ImGui::SameLine();
                 
-                float nameWidth = ImGui::GetContentRegionAvail().x - 120.0f;
+                float rightAlignX = ImGui::GetContentRegionMax().x - 110.0f;
+                float nameWidth = rightAlignX - ImGui::GetCursorPosX() - 5.0f;
+                if (nameWidth < 50.0f) nameWidth = 50.0f;
                 if (ImGui::Selectable(g_SavedColors[i].name.c_str(), isSelected, 0, ImVec2(nameWidth, 0))) {
                     selectedColorIdx = i;
                 }
                 
-                ImGui::SameLine(ImGui::GetContentRegionAvail().x - 110.0f);
+                ImGui::SameLine(rightAlignX);
                 if (ImGui::Button("Load", ImVec2(50, 20))) {
                     if (lp) {
                         lp->rgb[0] = g_SavedColors[i].r;
@@ -5156,7 +5400,7 @@ void ModMenu::RenderInner() {
                         }
                     }
                 }
-                ImGui::SameLine(ImGui::GetContentRegionAvail().x - 55.0f);
+                ImGui::SameLine(rightAlignX + 55.0f);
                 if (ImGui::Button("Delete", ImVec2(50, 20))) {
                     g_SavedColors.erase(g_SavedColors.begin() + i);
                     SaveColors();
@@ -5179,10 +5423,10 @@ void ModMenu::RenderInner() {
                 ImGui::Spacing(); ImGui::Spacing();
             }
             
-            
-            
+            // ================= COLUMN 1: Camera & Textures =================
+            // 3. Camera Configuration Manager
             ImGui::TextColored(ImVec4(0.0f, 0.94f, 1.0f, 1.0f), "CAMERA MANAGER");
-            ImGui::Separator();
+            DrawColumnSeparator();
             ImGui::Spacing();
 
             std::vector<std::string> camConfigs = GetAvailableCameraConfigs();
@@ -5233,9 +5477,9 @@ void ModMenu::RenderInner() {
             ImGui::Spacing();
             ImGui::Spacing();
             
-            
+            // 4. Texture & Customization Manager
             ImGui::TextColored(ImVec4(0.0f, 0.94f, 1.0f, 1.0f), "TEXTURE MANAGER");
-            ImGui::Separator();
+            DrawColumnSeparator();
             ImGui::Spacing();
 
             std::vector<std::string> texPacks = GetAvailableTexturePacks();
@@ -5288,13 +5532,13 @@ void ModMenu::RenderInner() {
         }
     }
 
-    
+    // Put a dummy spacing element at the bottom of child content to define total height for scrollbar
     int totalRows = (cellIdx + numCols - 1) / numCols;
     float totalHeight = totalRows * (itemH + spacingY) + 2.0f * gridMarginY;
     if (g_ModMenuTab == 7) {
-        totalHeight = (winSize.x >= 900.0f) ? 580.0f : 1100.0f;
+        totalHeight = 0.0f;
     } else if (g_ModMenuTab == 8) {
-        totalHeight = (winSize.x >= 900.0f) ? 750.0f : 1250.0f;
+        totalHeight = 0.0f;
     }
     ImGui::Dummy(ImVec2(mainW - scrollbarPadding - 2.0f * gridMarginX, totalHeight));
     ImGui::EndChild();
@@ -5303,7 +5547,7 @@ void ModMenu::RenderInner() {
 
 #undef GET_CELL_POS
 
-    
+    // Apply configuration back to engine
     subby_ShowHUD = g_ShowHUD;
     subby_ShowSpeedFastest = g_ShowFastest;
     subby_ShowScore = g_ShowScores;
@@ -5343,7 +5587,7 @@ void ModMenu::RenderInner() {
     sr_floorDetail = (int)g_FloorDetail;
     sg_noclipCinematic = g_CleanScreen;
 
-    
+    // Bidirectional synchronization logic (Push back to trackers)
     prev_ShowHUD = g_ShowHUD;
     prev_ShowFastest = g_ShowFastest;
     prev_ShowScores = g_ShowScores;
@@ -5380,7 +5624,7 @@ void ModMenu::RenderInner() {
     prev_SmoothShading = g_SmoothShading;
     prev_FloorDetail = g_FloorDetail;
 
-    
+    // DIVIDER LINE ABOVE PROFILE AREA
     dl->AddLine(
         ImVec2(mainX, winPos.y + winSize.y - 80.0f),
         ImVec2(mainX + mainW, winPos.y + winSize.y - 80.0f),
@@ -5388,13 +5632,13 @@ void ModMenu::RenderInner() {
         1.0f
     );
 
-    
+    // PROFILE AREA IN BOTTOM LEFT
     ImVec2 avatarPos = ImVec2(mainX, winPos.y + winSize.y - 70);
     if (g_AvatarTexture == 0) {
         LoadAvatarTexture();
     }
     
-    
+    // Draw rounded avatar + border
     float avatarRounding = 10.0f;
     ImVec2 avatarSize(50, 50);
     ImVec2 avatarCenter = ImVec2(avatarPos.x + 25.0f, avatarPos.y + 25.0f);
@@ -5408,7 +5652,7 @@ void ModMenu::RenderInner() {
             IM_COL32(255,255,255,255),
             avatarRounding
         );
-        
+        // Subtle outline border
         dl->AddRect(avatarPos, ImVec2(avatarPos.x + avatarSize.x, avatarPos.y + avatarSize.y), ImGui::GetColorU32(ImVec4(0.16f, 0.16f, 0.18f, g_MenuAlpha)), avatarRounding, 0, 1.5f);
     } else {
         dl->AddRectFilled(avatarPos, ImVec2(avatarPos.x + avatarSize.x, avatarPos.y + avatarSize.y), ImGui::GetColorU32(ImVec4(0.15f, 0.15f, 0.18f, g_MenuAlpha)), avatarRounding);
@@ -5416,7 +5660,7 @@ void ModMenu::RenderInner() {
         dl->AddRect(avatarPos, ImVec2(avatarPos.x + avatarSize.x, avatarPos.y + avatarSize.y), ImGui::GetColorU32(ImVec4(0.16f, 0.16f, 0.18f, g_MenuAlpha)), avatarRounding, 0, 1.5f);
     }
 
-    
+    // Parse & render colored nickname safely
     const char* rawPlayerName = "Local Player";
     ePlayer* lp = ePlayer::PlayerConfig(0);
     if (lp) {
@@ -5437,13 +5681,26 @@ void ModMenu::RenderInner() {
     struct tm* timeinfo = localtime(&rawtime);
     strftime(dateBuf, sizeof(dateBuf), "%d.%m.%Y", timeinfo);
 
-    
+    // Render parsed colored name + status details
     RenderColoredText(dl, ImVec2(avatarPos.x + 60, avatarPos.y + 10), IM_COL32(255, 255, 255, 255), rawPlayerName);
     dl->AddText(ImVec2(avatarPos.x + 60, avatarPos.y + 25), ImGui::GetColorU32(ImVec4(0.5f,0.5f,0.5f,1)), connState);
     dl->AddText(ImVec2(avatarPos.x + 60, avatarPos.y + 40), GetThemeColor(0.0f), dateBuf);
 
-    
+    // Render modals/popups
     RenderModMenuModals();
+
+    // Draw the media player card below the standalone mod menu when it is open (in-game)
+    if (g_MenuOpen) {
+        MediaWidget* media = MediaWidget::GetInstance();
+        if (media) {
+            float bottomGap = io.DisplaySize.y - (wPos.y + currentSize.y);
+            ImVec2 mediaPos(
+                wPos.x + (currentSize.x - 380.0f) * 0.5f,
+                wPos.y + currentSize.y + (bottomGap - 125.0f) * 0.5f
+            );
+            media->Draw(ImGui::GetForegroundDrawList(), mediaPos, g_MenuAlpha);
+        }
+    }
 
     ImGui::End();
     ImGui::PopStyleVar();
@@ -5457,16 +5714,13 @@ void ModMenu::RenderInner() {
     g_MenuAlpha = savedMenuAlpha;
 }
 
-
-
-
+// ----------------------------------------------------
+// CUSTOM MAIN MENU DASHBOARD
+// ----------------------------------------------------
 extern uMenu* g_SettingsMenuPtr;
 extern void sg_SinglePlayerGame();
 extern void net_game();
 extern bool sr_FPSOut;
-
-static std::vector<std::string> s_DashboardConfigs;
-static bool s_DashboardConfigsLoaded = false;
 
 static void LoadDashboardConfigs() {
     s_DashboardConfigs.clear();
@@ -5498,7 +5752,7 @@ static void LoadDashboardConfigs() {
 void ConnectToServerHelper(nServerInfoBase* server) {
     if (!server) return;
     
-    
+    // Close the dashboard and completely stop rendering ImGui
     g_MenuOpen = false;
     g_MenuAlpha = 0.0f;
     ModMenu::g_CustomMainMenuTempDisabled = true;
@@ -5506,14 +5760,14 @@ void ConnectToServerHelper(nServerInfoBase* server) {
     SDL_HideCursor();
     SDL_WM_GrabInput(SDL_GRAB_ON);
     
-    
+    // Set ImGui MouseDrawCursor to false
     ImGuiIO& io = ImGui::GetIO();
     io.MouseDrawCursor = false;
     
-    
+    // Do the connection
     ConnectToServer(server);
     
-    
+    // Restore the custom menu state once we return
     ModMenu::g_MainMenuActive = true;
     ModMenu::g_CustomMainMenuTempDisabled = false;
     g_MenuOpen = true;
@@ -5521,13 +5775,13 @@ void ConnectToServerHelper(nServerInfoBase* server) {
     SDL_ShowCursor();
     SDL_WM_GrabInput(SDL_GRAB_OFF);
     
-    
+    // Purge input queue
     SDL_Event pEvent;
     while (su_GetSDLInput(pEvent)) {}
 }
 
 void StartLocalGameHelper() {
-    
+    // Close the dashboard and completely stop rendering ImGui
     g_MenuOpen = false;
     g_MenuAlpha = 0.0f;
     ModMenu::g_CustomMainMenuTempDisabled = true;
@@ -5535,14 +5789,14 @@ void StartLocalGameHelper() {
     SDL_HideCursor();
     SDL_WM_GrabInput(SDL_GRAB_ON);
     
-    
+    // Set ImGui MouseDrawCursor to false
     ImGuiIO& io = ImGui::GetIO();
     io.MouseDrawCursor = false;
     
-    
+    // Do local game start
     sg_SinglePlayerGame();
     
-    
+    // Restore the custom menu state once we return
     ModMenu::g_MainMenuActive = true;
     ModMenu::g_CustomMainMenuTempDisabled = false;
     g_MenuOpen = true;
@@ -5550,7 +5804,7 @@ void StartLocalGameHelper() {
     SDL_ShowCursor();
     SDL_WM_GrabInput(SDL_GRAB_OFF);
     
-    
+    // Purge input queue
     SDL_Event pEvent;
     while (su_GetSDLInput(pEvent)) {}
 }
@@ -5559,7 +5813,7 @@ void StartDemoPlaybackHelper() {
     auto& dp = DemoPlayerManager::Instance();
     if (!dp.IsLoaded()) return;
 
-    
+    // Temporarily disable the dashboard so it doesn't render on top
     ModMenu::g_CustomMainMenuTempDisabled = true;
     ModMenu::g_MainMenuActive = false;
     g_MenuOpen = false;
@@ -5567,12 +5821,12 @@ void StartDemoPlaybackHelper() {
 
     dp.StartViewer3D();
 
-    
+    // Run the game's actual local singleplayer game match loop
     sg_SinglePlayerGame();
 
     dp.StopViewer3D();
 
-    
+    // Restore dashboard state
     ModMenu::g_MainMenuActive = true;
     ModMenu::g_CustomMainMenuTempDisabled = false;
     g_MenuOpen = true;
@@ -5584,19 +5838,19 @@ void StartDemoPlaybackHelper() {
     ImGuiIO& io = ImGui::GetIO();
     io.MouseDrawCursor = false;
 
-    
+    // Purge stale SDL events accumulated during viewer
     SDL_Event pEvent;
     while (su_GetSDLInput(pEvent)) {}
 }
 
 
 
-
+// Forward declaration — drawPanel is defined below with RenderDemoRecorderTabContent
 static void drawPanel(ImDrawList* dl, ImVec2 pos, ImVec2 size, bool active, const char* title);
 
-
-
-
+// ── Demo Player Full Tab ─────────────────────────────────────────────────
+// Standalone tab (g_ActiveTab == 6) with file picker, transport controls
+// and live playback state — occupies all 3 panels, panel0 is NAVIGATION.
 static void RenderDemoPlayerFullTab(ImDrawList* dl, ImGuiIO& io,
                                     ImVec2 panel0Pos, ImVec2 panel0Size,
                                     ImVec2 panel1Pos, ImVec2 panel1Size,
@@ -5604,10 +5858,10 @@ static void RenderDemoPlayerFullTab(ImDrawList* dl, ImGuiIO& io,
                                     bool hasPanel2) {
     auto& dp = DemoPlayerManager::Instance();
 
-    
+    // ── Left main panel: File picker + Transport ──────────────────────────
     drawPanel(dl, panel1Pos, panel1Size, true, "DEMO PLAYER");
 
-    
+    // Pulsing blue dot status
     {
         float t   = (float)ImGui::GetTime();
         bool  act = dp.IsPlaying();
@@ -5629,7 +5883,7 @@ static void RenderDemoPlayerFullTab(ImDrawList* dl, ImGuiIO& io,
         float bW = ImGui::GetContentRegionAvail().x;
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.f);
 
-        
+        // ── File path ────────────────────────────────────────────────────
         static char s_Path[512] = "";
         static bool s_PathInited = false;
         if (!s_PathInited) {
@@ -5658,7 +5912,7 @@ static void RenderDemoPlayerFullTab(ImDrawList* dl, ImGuiIO& io,
         }
         ImGui::PopStyleColor(3);
 
-        
+        // Recent recordings quick-pick
         const auto& recent = DemoRecorder::Instance().RecentFiles();
         if (!recent.empty()) {
             ImGui::Spacing();
@@ -5705,11 +5959,11 @@ static void RenderDemoPlayerFullTab(ImDrawList* dl, ImGuiIO& io,
             ImGui::Separator();
             ImGui::Spacing();
 
-            
+            // ── Transport controls ────────────────────────────────────────
             ImGui::TextColored(ImVec4(0.55f,0.65f,0.80f,1.f), "Transport:");
             ImGui::Spacing();
 
-            
+            // Timeline slider
             float tot = (float)dp.TotalDuration();
             float cur = (float)dp.CurrentTime();
             static float s_SeekVal = 0.f;
@@ -5745,7 +5999,7 @@ static void RenderDemoPlayerFullTab(ImDrawList* dl, ImGuiIO& io,
 
             ImGui::Spacing();
 
-            
+            // Playback buttons row
             ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.13f,0.18f,0.28f,0.9f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f,0.38f,0.62f,1.f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.08f,0.12f,0.22f,1.f));
@@ -5761,7 +6015,7 @@ static void RenderDemoPlayerFullTab(ImDrawList* dl, ImGuiIO& io,
 
             ImGui::SameLine(0.f,14.f);
 
-            
+            // Speed buttons
             for (int i = 0; i < DEMO_SPEED_COUNT; ++i) {
                 static const char* spLabels[] = {"0.25x","0.5x","1x","2x","4x"};
                 char sid[24]; snprintf(sid, sizeof(sid), "%s##dps%d", spLabels[i], i);
@@ -5778,7 +6032,7 @@ static void RenderDemoPlayerFullTab(ImDrawList* dl, ImGuiIO& io,
             ImGui::Separator();
             ImGui::Spacing();
 
-            
+            // Camera mode
             ImGui::TextColored(ImVec4(0.55f,0.65f,0.80f,1.f), "Camera mode:");
             ImGui::Spacing();
             {
@@ -5802,13 +6056,13 @@ static void RenderDemoPlayerFullTab(ImDrawList* dl, ImGuiIO& io,
             }
         }
 
-        ImGui::PopStyleVar(); 
+        ImGui::PopStyleVar(); // FrameRounding
     }
     ImGui::EndChild();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
 
-    
+    // ── Right panel: Player list + Stats ─────────────────────────────────
     ImVec2 rPos  = hasPanel2 ? panel2Pos : ImVec2(panel1Pos.x + panel1Size.x + 14.f, panel1Pos.y);
     ImVec2 rSize = hasPanel2 ? panel2Size : ImVec2(panel2Size.x, panel1Size.y);
     drawPanel(dl, rPos, rSize, false, "PLAYBACK INFO");
@@ -5851,7 +6105,7 @@ static void RenderDemoPlayerFullTab(ImDrawList* dl, ImGuiIO& io,
             dl->AddText(ImVec2(sX, sY), IM_COL32(100,110,130,220), "Players:");
             sY += ImGui::GetTextLineHeight() + 8.f;
 
-            
+            // Player cards
             const auto& states = dp.CycleStates();
             ImGui::SetCursorScreenPos(ImVec2(sX, sY));
             ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0,0,0,0));
@@ -5883,16 +6137,16 @@ static void RenderDemoPlayerFullTab(ImDrawList* dl, ImGuiIO& io,
                     rDl->AddRect(cMin, cMax,
                         sel ? IM_COL32(80,140,255,220) : IM_COL32(30,35,50,140), 6.f);
 
-                    
+                    // Alive dot
                     ImVec2 dotC(cMin.x + 16.f, cMin.y + 24.f);
                     rDl->AddCircleFilled(dotC, 5.f,
                         st.alive ? IM_COL32(60,230,90,255) : IM_COL32(200,50,50,255));
 
-                    
+                    // Name
                     rDl->AddText(ImVec2(cMin.x + 30.f, cMin.y + 8.f),
                                  IM_COL32(220,230,250,245), st.name);
 
-                    
+                    // Stats line
                     char stLine[80];
                     snprintf(stLine,sizeof(stLine),"spd %.1f  rub %.2f  pos(%.0f,%.0f)",
                              st.speed, st.rubber, st.posX, st.posY);
@@ -5919,7 +6173,7 @@ static void RenderDemoPlayerFullTab(ImDrawList* dl, ImGuiIO& io,
     }
 }
 
-
+// ── Demo Player: file browser + open controls ────────────────────────────
 static void RenderDemoPlayerBrowserPanel(ImDrawList* dl, ImGuiIO& io,
                                          ImVec2 panel1Pos, ImVec2 panel1Size) {
     float panH  = 180.f;
@@ -6015,7 +6269,7 @@ static void RenderDemoPlayerBrowserPanel(ImDrawList* dl, ImGuiIO& io,
             }
         }
 
-        ImGui::PopStyleVar(); 
+        ImGui::PopStyleVar(); // FrameRounding
     }
     ImGui::EndChild();
     ImGui::PopStyleVar();
@@ -6023,28 +6277,28 @@ static void RenderDemoPlayerBrowserPanel(ImDrawList* dl, ImGuiIO& io,
 }
 
 static void drawPanel(ImDrawList* dl, ImVec2 pos, ImVec2 size, bool active, const char* title) {
-    if (pos.x < -500.0f) return; 
+    if (pos.x < -500.0f) return; // Hidden panel
     ImU32 bgCol = ImGui::GetColorU32(ImVec4(0.06f, 0.06f, 0.08f, 0.82f));
     ImU32 borderCol = active ? GetThemeColor(0.5f) : ImGui::GetColorU32(ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
     
-    
+    // Draw drop shadow glow if active
     if (active) {
         RenderTextureGlow(pos, size, (GetThemeColor(0.5f) & 0x00FFFFFF) | 0x22000000, 16.0f);
     } else {
         RenderTextureGlow(pos, size, IM_COL32(0, 0, 0, 45), 10.0f);
     }
     
-    
+    // Draw main panel background
     dl->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), bgCol, 12.0f);
-    
+    // Draw border
     dl->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), borderCol, 12.0f, 0, active ? 2.0f : 1.0f);
     
-    
+    // Panel Header text
     if (g_FontHeader) ImGui::PushFont(g_FontHeader);
     dl->AddText(ImVec2(pos.x + 20.0f, pos.y + 18.0f), GetThemeColor(0.2f), title);
     if (g_FontHeader) ImGui::PopFont();
     
-    
+    // Small panel accent line
     dl->AddRectFilledMultiColor(ImVec2(pos.x + 20.0f, pos.y + 42.0f), ImVec2(pos.x + size.x - 20.0f, pos.y + 44.0f),
                                GetThemeColor(0.0f), GetThemeColor(0.8f), GetThemeColor(0.8f), GetThemeColor(0.0f));
 }
@@ -6058,8 +6312,8 @@ void RenderDemoRecorderTabContent(ImDrawList* dl, ImGuiIO& io,
     const DemoRecorderStats& rstats = rec.Stats();
     bool isRec = rec.IsRecording();
 
-    
-    
+    // Persistent config: auto-record & overlay toggle
+    // (sg_demoRecorderOverlayEnabled declared in HudManager.h)
     static bool s_AutoRecord = false;
     static bool s_AutoInit   = false;
     if (!s_AutoInit) {
@@ -6067,7 +6321,7 @@ void RenderDemoRecorderTabContent(ImDrawList* dl, ImGuiIO& io,
         s_AutoInit = true;
     }
 
-    
+    // Filename state
     static char s_DemoFilename[512] = "";
     static bool s_FilenameInit = false;
     if (!s_FilenameInit) {
@@ -6079,17 +6333,17 @@ void RenderDemoRecorderTabContent(ImDrawList* dl, ImGuiIO& io,
         s_FilenameInit = true;
     }
 
-    
-    
+    // Dynamically calculate positions depending on whether we have 2 or 3 columns.
+    // panel0Pos is ALWAYS the Sidebar Navigation, so we MUST NEVER draw over it.
     ImVec2 ctrlPos, ctrlSize;
     ImVec2 statsPos, statsSize;
     ImVec2 recentPos, recentSize;
 
     if (hasPanel2) {
-        
-        
-        
-        
+        // 3 columns layout:
+        // Left Column (panel0): NAVIGATION Sidebar
+        // Middle Column (panel1): Controls (full height)
+        // Right Column (panel2): Stats (top) and Recent Demos (bottom)
         ctrlPos = panel1Pos;
         ctrlSize = panel1Size;
 
@@ -6099,9 +6353,9 @@ void RenderDemoRecorderTabContent(ImDrawList* dl, ImGuiIO& io,
         recentPos = ImVec2(panel2Pos.x, panel2Pos.y + 270.f);
         recentSize = ImVec2(panel2Size.x, panel2Size.y - 270.f);
     } else {
-        
-        
-        
+        // 2 columns layout:
+        // Left Column (panel0): NAVIGATION Sidebar
+        // Right Column (panel1): Split horizontally into Controls (left half) and Stats + Recent (right half stacked)
         float halfW = panel1Size.x * 0.5f - 10.f;
 
         ctrlPos = panel1Pos;
@@ -6114,10 +6368,10 @@ void RenderDemoRecorderTabContent(ImDrawList* dl, ImGuiIO& io,
         recentSize = ImVec2(halfW, panel1Size.y - 270.f);
     }
 
-    
+    // ---- Controls Sub-Panel ----
     drawPanel(dl, ctrlPos, ctrlSize, true, "REC CONTROL");
 
-    
+    // Animated status dot in top-right of panel header
     {
         float t    = (float)ImGui::GetTime();
         float dotA = isRec ? (0.4f + 0.6f * ((sinf(t * 4.6f) + 1.f) * .5f)) : 0.22f;
@@ -6142,16 +6396,16 @@ void RenderDemoRecorderTabContent(ImDrawList* dl, ImGuiIO& io,
         float btnW = ImGui::GetContentRegionAvail().x;
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.f);
 
-        
+        // BIG REC / STOP button
         if (isRec) {
             ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.68f, 0.10f, 0.10f, 0.92f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.90f, 0.16f, 0.16f, 1.00f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.45f, 0.04f, 0.04f, 1.00f));
             if (ImGui::Button("##stop_rec", ImVec2(btnW, 56.f))) {
                 rec.StopRecording();
-                s_FilenameInit = false; 
+                s_FilenameInit = false; // refresh timestamp on next frame
             }
-            
+            // Custom draw on the invisible button
             {
                 ImVec2 bMin = ImGui::GetItemRectMin();
                 ImVec2 bMax = ImGui::GetItemRectMax();
@@ -6195,13 +6449,13 @@ void RenderDemoRecorderTabContent(ImDrawList* dl, ImGuiIO& io,
             }
             ImGui::PopStyleColor(3);
         }
-        ImGui::PopStyleVar(); 
+        ImGui::PopStyleVar(); // FrameRounding
 
         ImGui::Spacing(); ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
 
-        
+        // Output filename
         ImGui::TextColored(ImVec4(0.55f,0.55f,0.60f,1.f), "Output file:");
         ImGui::PushItemWidth(btnW);
         if (isRec) ImGui::BeginDisabled();
@@ -6213,10 +6467,10 @@ void RenderDemoRecorderTabContent(ImDrawList* dl, ImGuiIO& io,
         ImGui::Separator();
         ImGui::Spacing();
 
-        
+        // Auto-record checkbox
         ImGui::TextColored(ImVec4(0.55f,0.55f,0.60f,1.f), "Automation:");
         ImGui::Spacing();
-        if (ImGui::Checkbox("Auto-record all matches", &s_AutoRecord)) {  }
+        if (ImGui::Checkbox("Auto-record all matches", &s_AutoRecord)) { /* conf auto-saved */ }
         ImGui::SameLine();
         ImGui::TextColored(ImVec4(0.35f,0.35f,0.40f,0.8f), "(starts on round begin)");
         ImGui::Spacing();
@@ -6227,7 +6481,7 @@ void RenderDemoRecorderTabContent(ImDrawList* dl, ImGuiIO& io,
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
 
-    
+    // ---- Live Statistics Sub-Panel ----
     drawPanel(dl, statsPos, statsSize, false, "LIVE STATISTICS");
     {
         double   dur   = rstats.duration.load(std::memory_order_relaxed);
@@ -6269,7 +6523,7 @@ void RenderDemoRecorderTabContent(ImDrawList* dl, ImGuiIO& io,
         snprintf(tmp, sizeof(tmp), "%llu", (unsigned long long)drp);
         statCard("Dropped",   tmp, drpCol);
 
-        
+        // Ring buffer health bar
         sY += 6.f;
         dl->AddText(ImVec2(sX, sY), IM_COL32(110,110,125,220), "Ring buffer:");
         sY += ImGui::GetTextLineHeight() + 4.f;
@@ -6303,7 +6557,7 @@ void RenderDemoRecorderTabContent(ImDrawList* dl, ImGuiIO& io,
         }
     }
 
-    
+    // ---- Recent Recordings Sub-Panel ----
     drawPanel(dl, recentPos, recentSize, false, "RECENT DEMOS");
     const auto& recent = rec.RecentFiles();
     float listY = recentPos.y + 60.f;
@@ -6328,7 +6582,7 @@ void RenderDemoRecorderTabContent(ImDrawList* dl, ImGuiIO& io,
                 std::string base = rpath;
                 size_t slash = rpath.find_last_of("/\\");
                 if (slash != std::string::npos) base = rpath.substr(slash + 1);
-                
+                // Strip .aarec extension
                 if (base.size() > 6 && base.substr(base.size()-6) == ".aarec")
                     base = base.substr(0, base.size()-6);
 
@@ -6375,16 +6629,19 @@ void ModMenu::RunCustomMainMenu() {
     }
     ImGuiIO& io = ImGui::GetIO();
     
+    g_MenuOpen = false;
+    CheckDisplaySizeRebuild();
     
+    // Clear stuck keys
     su_ClearKeys();
     
-    
+    // Purge pending SDL events to prevent splash screen enter skip leaking into main menu
     SDL_Event purgeEvent;
     while (su_GetSDLInput(purgeEvent)) {
-        
+        // Discard
     }
     
-    
+    // Reset ImGui's mouse click state on enter
     for (int i = 0; i < 5; i++) {
         io.MouseDown[i] = false;
         io.MouseClicked[i] = false;
@@ -6394,24 +6651,20 @@ void ModMenu::RunCustomMainMenu() {
         LoadDashboardConfigs();
     }
     
-    
+    // Smooth scrolling variables
     static float targetScrollY = 0.0f;
     static float currentScrollY = 0.0f;
     
-    
+    // Visual diagnostic flash animation timer
     static float diagFlashTimer = 0.0f;
     
-    float startupCooldown = 0.3f; 
+    float startupCooldown = 0.3f; // 0.3s cooldown to prevent input leak
     
     if (getenv("RETRO_TEST_START_GAME")) {
         s_PendingStartLocalGame = true;
     }
     if (getenv("RETRO_TEST_PLAY_DEMO")) {
-#ifdef _WIN32
-        _putenv("RETRO_TEST_PLAY_DEMO=");
-#else
         unsetenv("RETRO_TEST_PLAY_DEMO");
-#endif
         const char* path_env = getenv("RETRO_TEST_PLAY_DEMO_PATH");
         std::string dp_path = path_env ? path_env : "1.aarec";
         if (DemoPlayerManager::Instance().LoadFile(dp_path)) {
@@ -6421,6 +6674,7 @@ void ModMenu::RunCustomMainMenu() {
     }
 
     while (g_MainMenuActive && !g_CustomMainMenuTempDisabled && !uMenu::quickexit) {
+        CheckDisplaySizeRebuild();
         if (s_PendingReconnect) {
             s_PendingReconnect = false;
             if (sg_hasLastServer) {
@@ -6473,7 +6727,7 @@ void ModMenu::RunCustomMainMenu() {
         st_DoToDo();
         tAdvanceFrame();
         
-        
+        // SDL event polling
         SDL_Event event;
         while (su_GetSDLInput(event)) {
             if (event.type == SDL_EVENT_QUIT) {
@@ -6490,7 +6744,50 @@ void ModMenu::RunCustomMainMenu() {
             break;
         }
         
+        // --- HUD EDITOR MODE OVERLAY IN MAIN MENU ---
+        if (isHudEditing) {
+            // Update delta time
+            static struct timeval last_tv = {0, 0};
+            struct timeval tv;
+            gettimeofday(&tv, NULL);
+            if (last_tv.tv_sec != 0) {
+                double dt = (double)(tv.tv_sec - last_tv.tv_sec) + (double)(tv.tv_usec - last_tv.tv_usec) / 1000000.0;
+                if (dt > 0.0) {
+                    io.DeltaTime = (float)dt;
+                    last_tv = tv;
+                }
+            } else {
+                last_tv = tv;
+            }
+
+            SDL_ShowCursor();
+            io.MouseDrawCursor = true;
+
+            ImGui_ImplOpenGL2_NewFrame();
+            ImGui_ImplSDL3_NewFrame();
+            ImGui::NewFrame();
+
+            ImDrawList* bgDl = ImGui::GetBackgroundDrawList();
+            bgDl->AddRectFilled(ImVec2(0, 0), io.DisplaySize, ImGui::GetColorU32(ImVec4(0.02f, 0.02f, 0.03f, 0.65f)));
+            DrawBackgroundParticles(bgDl, ImVec2(0, 0), io.DisplaySize, 1.0f);
+
+            HudManager::Update(io.DeltaTime);
+            HudManager::Render();
+
+            if (sr_glOut) {
+                sr_ResetRenderState(true);
+                gLogo::Display();
+            }
+            
+            ImGui::Render();
+            ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
+            
+            rSysDep::SwapGL();
+            rSysDep::ClearGL();
+            continue;
+        }
         
+        // Setup ImGui frames
         ImGui_ImplOpenGL2_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
@@ -6507,11 +6804,13 @@ void ModMenu::RunCustomMainMenu() {
         } else {
             last_tv = tv;
         }
+
+        HudManager::Update(io.DeltaTime);
         
         if (startupCooldown > 0.0f) {
             startupCooldown -= io.DeltaTime;
             g_DashboardActionTriggered = false;
-            
+            // Clear any clicked mouse inputs as well during cooldown
             for (int i = 0; i < 5; i++) {
                 io.MouseDown[i] = false;
                 io.MouseClicked[i] = false;
@@ -6521,11 +6820,11 @@ void ModMenu::RunCustomMainMenu() {
             diagFlashTimer -= io.DeltaTime;
         }
         
-        
+        // Temporarily set g_MenuAlpha to 1.0 to render with full opacity
         float savedAlpha = g_MenuAlpha;
         g_MenuAlpha = 1.0f;
         
-        
+        // Fullscreen Dashboard Window
         ImVec2 cardSize = io.DisplaySize;
         ImVec2 cardPos(0.0f, 0.0f);
         ImGui::SetNextWindowPos(cardPos, ImGuiCond_Always);
@@ -6544,10 +6843,10 @@ void ModMenu::RunCustomMainMenu() {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 winPos = ImGui::GetWindowPos();
         
-        
+        // Draw background particles directly on the window's draw list
         DrawBackgroundParticles(dl, ImVec2(0, 0), io.DisplaySize, 1.0f);
         
-        
+        // Accent/RGB update
         float menuTime = (float)ImGui::GetTime();
         float r, g, b;
         ImGui::ColorConvertHSVtoRGB(fmodf(menuTime * g_RGBSpeed, 1.0f), 1.0f, 1.0f, r, g, b);
@@ -6557,26 +6856,30 @@ void ModMenu::RunCustomMainMenu() {
             g_AccentColor = g_AccentColor1;
         }
         
-        
+        // 3. Header and title
         float paddingX = cardSize.x < 1180.0f ? 20.0f : 50.0f;
         float headerY = 70.0f;
         
-        
+        // Neon Title Text
         if (g_FontHeader) ImGui::PushFont(g_FontHeader);
         dl->AddText(ImVec2(winPos.x + paddingX, winPos.y + 25.0f), IM_COL32(255, 255, 255, 255), "RETROCYCLES COMPETITIVE DASHBOARD");
         if (g_FontHeader) ImGui::PopFont();
         
-        
+        // Subtitle or version tag on top-right
         char verBuf[64];
-        snprintf(verBuf, sizeof(verBuf), "v%s | COMPETITIVE EDITION", (const char*)sn_programVersion);
+        if (sn_programVersion == "ILONIUM" || sn_programVersion == "ilonium") {
+            snprintf(verBuf, sizeof(verBuf), "ILONIUM | COMPETITIVE EDITION");
+        } else {
+            snprintf(verBuf, sizeof(verBuf), "v%s | COMPETITIVE EDITION", (const char*)sn_programVersion);
+        }
         ImVec2 verSize = ImGui::CalcTextSize(verBuf);
         dl->AddText(ImVec2(winPos.x + cardSize.x - paddingX - verSize.x, winPos.y + 35.0f), ImGui::GetColorU32(ImVec4(0.5f, 0.5f, 0.6f, 0.8f)), verBuf);
         
-        
+        // Beautiful gradient separator line below header
         dl->AddRectFilledMultiColor(ImVec2(winPos.x + paddingX, winPos.y + headerY), ImVec2(winPos.x + cardSize.x - paddingX, winPos.y + headerY + 3.0f),
                                    GetThemeColor(0.0f), GetThemeColor(1.0f), GetThemeColor(1.0f), GetThemeColor(0.0f));
         
-        
+        // 4. Grid Columns layout (Fullscreen Symmetrical)
         float colY = headerY + 30.0f;
         float colH = cardSize.y - colY - 45.0f;
         
@@ -6614,38 +6917,38 @@ void ModMenu::RunCustomMainMenu() {
             panel2Size = ImVec2(0.0f, 0.0f);
         }
         
-        
+        // Panel Drawer helper lambda
         auto drawPanel = [&](ImVec2 pos, ImVec2 size, bool active, const char* title) {
-            if (pos.x < -500.0f) return; 
+            if (pos.x < -500.0f) return; // Hidden panel
             ImU32 bgCol = ImGui::GetColorU32(ImVec4(0.06f, 0.06f, 0.08f, 0.82f));
             ImU32 borderCol = active ? GetThemeColor(0.5f) : ImGui::GetColorU32(ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
             
-            
+            // Draw drop shadow glow if active
             if (active) {
                 RenderTextureGlow(pos, size, (GetThemeColor(0.5f) & 0x00FFFFFF) | 0x22000000, 16.0f);
             } else {
                 RenderTextureGlow(pos, size, IM_COL32(0, 0, 0, 45), 10.0f);
             }
             
-            
+            // Draw main panel background
             dl->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), bgCol, 12.0f);
-            
+            // Draw border
             dl->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), borderCol, 12.0f, 0, active ? 2.0f : 1.0f);
             
-            
+            // Panel Header text
             if (g_FontHeader) ImGui::PushFont(g_FontHeader);
             dl->AddText(ImVec2(pos.x + 20.0f, pos.y + 18.0f), GetThemeColor(0.2f), title);
             if (g_FontHeader) ImGui::PopFont();
             
-            
+            // Small panel accent line
             dl->AddRectFilledMultiColor(ImVec2(pos.x + 20.0f, pos.y + 42.0f), ImVec2(pos.x + size.x - 20.0f, pos.y + 44.0f),
                                        GetThemeColor(0.0f), GetThemeColor(0.8f), GetThemeColor(0.8f), GetThemeColor(0.0f));
         };
         
-        ImVec2 panelSize = panel1Size; 
+        ImVec2 panelSize = panel1Size; // For compatibility
 
         
-        
+        // --- COLUMN 0: NAVIGATION (Left) ---
         drawPanel(panel0Pos, panel0Size, g_DashboardActiveCol == 0, "NAVIGATION");
         
         const char* navLabels[8] = { "Dashboard", "Local Play", "Server Browser", "Settings", "Mod Menu", "Demo Recorder", "Demo Player", "Exit Game" };
@@ -6675,7 +6978,7 @@ void ModMenu::RunCustomMainMenu() {
                     g_DashboardActionTriggered = true;
                 }
                 
-                
+                // Highlight selected tab visually
                 bool isActiveTab = (g_ActiveTab == i);
                 
                 ImU32 itemBg = (selected || hovered || isActiveTab) ? GetThemeColor(0.1f * i) : ImGui::GetColorU32(ImVec4(0.10f, 0.10f, 0.12f, 0.6f));
@@ -6684,29 +6987,29 @@ void ModMenu::RunCustomMainMenu() {
                 navDl->AddRectFilled(itemMin, itemMax, itemBg, 8.0f);
                 navDl->AddRect(itemMin, itemMax, itemBorder, 8.0f, 0, (selected || isActiveTab) ? 1.5f : 1.0f);
                 
-                
+                // Draw neon indicator dot on active selected item
                 if (selected) {
                     navDl->AddCircleFilled(ImVec2(itemMin.x + 15.0f, itemMin.y + itemH * 0.5f), 4.0f, GetThemeColor(0.5f));
                 }
                 
-                
+                // Draw text
                 navDl->AddText(ImVec2(itemMin.x + (selected ? 30.0f : 20.0f), itemMin.y + (itemH - ImGui::GetTextLineHeight()) * 0.5f),
                             IM_COL32(255, 255, 255, 255), navLabels[i]);
                 
                 if (g_DashboardActionTriggered && selected) {
                     g_DashboardActionTriggered = false;
-                    if (i == 4) { 
+                    if (i == 4) { // Mod Menu (toggle)
                         if (g_ActiveTab == 4) {
                             g_ActiveTab = 0;
                             g_DashboardLeftSelected = 0;
                         } else {
                             g_ActiveTab = 4;
                         }
-                    } else if (i == 5) { 
+                    } else if (i == 5) { // Demo Recorder
                         g_ActiveTab = 5;
-                    } else if (i == 6) { 
+                    } else if (i == 6) { // Demo Player
                         g_ActiveTab = 6;
-                    } else if (i == 7) { 
+                    } else if (i == 7) { // Exit Game
                         uMenu::quickexit = uMenu::QuickExit_Total;
                     } else {
                         g_ActiveTab = i;
@@ -6719,11 +7022,11 @@ void ModMenu::RunCustomMainMenu() {
         ImGui::PopStyleColor();
         
         if (g_ActiveTab == 0) {
-            
-            static int s_DashSubTab = 0; 
+            // --- TAB 0: DASHBOARD ---
+            static int s_DashSubTab = 0; // 0: Info, 1: Profiles
             
             if (!hasPanel2) {
-                
+                // Render sub-tabs at the top of Panel 1
                 ImGui::SetCursorScreenPos(ImVec2(panel1Pos.x + 20.0f, panel1Pos.y + 55.0f));
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
                 if (ImGui::Button("System Info", ImVec2((panel1Size.x - 50.0f)/2.0f, 30.0f))) {
@@ -6739,10 +7042,10 @@ void ModMenu::RunCustomMainMenu() {
             float offsetDashY = hasPanel2 ? 0.0f : 40.0f;
             
             if (hasPanel2 || s_DashSubTab == 0) {
-                
+                // --- COLUMN 1: SYSTEM INFORMATION (Middle) ---
                 drawPanel(panel1Pos, panel1Size, g_DashboardActiveCol == 1, "SYSTEM INFORMATION");
                 
-                
+                // Profile Info
                 const char* rawPlayerName = "Local Player";
                 ePlayer* lp = ePlayer::PlayerConfig(0);
                 if (lp) {
@@ -6758,7 +7061,7 @@ void ModMenu::RunCustomMainMenu() {
                     connState = "Main Menu";
                 }
                 
-                
+                // Draw avatar at the top of Middle Column
                 ImVec2 avatarPos(panel1Pos.x + 25.0f, panel1Pos.y + 60.0f + offsetDashY);
                 if (g_AvatarTexture == 0) {
                     LoadAvatarTexture();
@@ -6772,7 +7075,7 @@ void ModMenu::RunCustomMainMenu() {
                     dl->AddText(ImVec2(avatarPos.x + avatarSize*0.5f - 5.0f, avatarPos.y + avatarSize*0.5f - 8.0f + offsetDashY), IM_COL32(255,255,255,255), "R");
                 }
                 
-                
+                // Name and state text next to avatar
                 RenderColoredText(dl, ImVec2(avatarPos.x + avatarSize + 15.0f, avatarPos.y + 6.0f), IM_COL32(255,255,255,255), rawPlayerName);
                 dl->AddText(ImVec2(avatarPos.x + avatarSize + 15.0f, avatarPos.y + 26.0f), ImGui::GetColorU32(ImVec4(0.5f, 0.5f, 0.5f, 1.0f)), connState);
                 
@@ -6781,7 +7084,7 @@ void ModMenu::RunCustomMainMenu() {
                     dl->AddText(ImVec2(panel1Pos.x + 25.0f, infoY), ImGui::GetColorU32(ImVec4(0.55f, 0.55f, 0.60f, 1.0f)), label);
                     dl->AddText(ImVec2(panel1Pos.x + panel1Size.x - 25.0f - ImGui::CalcTextSize(val).x, infoY), valCol, val);
                     
-                    
+                    // Subtle horizontal row divider
                     dl->AddLine(ImVec2(panel1Pos.x + 20.0f, infoY + 28.0f), ImVec2(panel1Pos.x + panel1Size.x - 20.0f, infoY + 28.0f),
                                 ImGui::GetColorU32(ImVec4(0.11f, 0.11f, 0.13f, 0.4f)));
                     infoY += 40.0f;
@@ -6795,13 +7098,13 @@ void ModMenu::RunCustomMainMenu() {
                 
                 std::string glVendor = (const char*)glGetString(GL_VENDOR);
                 std::string glRenderer = (const char*)glGetString(GL_RENDERER);
-                if (glVendor.length() > 20) glVendor = glVendor.substr(0, 20) + "...";
-                if (glRenderer.length() > 20) glRenderer = glRenderer.substr(0, 20) + "...";
+                if (glVendor.length() > 60) glVendor = glVendor.substr(0, 60) + "...";
+                if (glRenderer.length() > 60) glRenderer = glRenderer.substr(0, 60) + "...";
                 
                 drawInfoRow("GPU Vendor:", glVendor.c_str());
                 drawInfoRow("GPU Renderer:", glRenderer.c_str());
                 
-                
+                // interactive buttons in middle column
                 const char* midLabels[2] = { "Refresh Diagnostics", "Toggle FPS Overlay" };
                 for (int i = 0; i < 2; i++) {
                     float itemY = infoY + 20.0f + i * 65.0f;
@@ -6822,12 +7125,12 @@ void ModMenu::RunCustomMainMenu() {
                     ImU32 itemBg = (selected || hovered) ? GetThemeColor(0.3f * i + 0.2f) : ImGui::GetColorU32(ImVec4(0.10f, 0.10f, 0.12f, 0.6f));
                     ImU32 itemBorder = (selected) ? GetThemeColor(0.5f) : ImGui::GetColorU32(ImVec4(0.15f, 0.15f, 0.18f, 0.5f));
                     
-                    
+                    // If we are currently flashing diagnostics green, override bg color
                     if (i == 0 && diagFlashTimer > 0.0f) {
                         itemBg = ImGui::GetColorU32(ImVec4(0.1f, 0.6f, 0.2f, 0.8f * (diagFlashTimer / 0.5f)));
                     }
                     
-                    
+                    // If FPS is on, highlight the toggle button slightly
                     if (i == 1 && sr_FPSOut) {
                         itemBg = ImGui::GetColorU32(ImVec4(g_AccentColor.x * 0.2f, g_AccentColor.y * 0.2f, g_AccentColor.z * 0.2f, 0.6f));
                     }
@@ -6842,7 +7145,7 @@ void ModMenu::RunCustomMainMenu() {
                     dl->AddText(ImVec2(itemMin.x + (selected ? 30.0f : 20.0f), itemMin.y + (itemH - ImGui::GetTextLineHeight()) * 0.5f),
                                 IM_COL32(255, 255, 255, 255), midLabels[i]);
                     
-                    
+                    // Draw status for FPS Overlay
                     if (i == 1) {
                         const char* statusStr = sr_FPSOut ? "ON" : "OFF";
                         ImVec2 sSize = ImGui::CalcTextSize(statusStr);
@@ -6852,10 +7155,10 @@ void ModMenu::RunCustomMainMenu() {
                     
                     if (g_DashboardActionTriggered && selected) {
                         g_DashboardActionTriggered = false;
-                        if (i == 0) { 
+                        if (i == 0) { // Refresh
                             LoadDashboardConfigs();
                             diagFlashTimer = 0.5f;
-                        } else if (i == 1) { 
+                        } else if (i == 1) { // Toggle FPS
                             sr_FPSOut = !sr_FPSOut;
                         }
                     }
@@ -6866,10 +7169,10 @@ void ModMenu::RunCustomMainMenu() {
                 ImVec2 targetPos = hasPanel2 ? panel2Pos : panel1Pos;
                 ImVec2 targetSize = hasPanel2 ? panel2Size : panel1Size;
                 
-                
+                // --- COLUMN 2: CONFIG PROFILES (Right) ---
                 drawPanel(targetPos, targetSize, g_DashboardActiveCol == 2, "CONFIG PROFILES");
                 
-                
+                // Clamp selection to actual configs count
                 int numConfigs = (int)s_DashboardConfigs.size();
                 if (numConfigs > 0) {
                     if (g_DashboardRightSelected < 0) g_DashboardRightSelected = numConfigs;
@@ -6878,12 +7181,12 @@ void ModMenu::RunCustomMainMenu() {
                     g_DashboardRightSelected = 0;
                 }
                 
-                
+                // Scroll view boundaries
                 float listStartY = targetPos.y + 65.0f + offsetDashY;
                 float visibleHeight = targetSize.y - 65.0f - 45.0f - 60.0f - offsetDashY;
                 float itemHeight = 55.0f;
                 
-                
+                // Scroll target calculation
                 if (numConfigs > 0 && g_DashboardRightSelected < numConfigs) {
                     float selectedY = g_DashboardRightSelected * itemHeight;
                     if (selectedY < targetScrollY) {
@@ -6894,19 +7197,20 @@ void ModMenu::RunCustomMainMenu() {
                 }
                 currentScrollY += (targetScrollY - currentScrollY) * 0.2f;
                 
-                
-                float scrollbarX = targetPos.x + targetSize.x - 12.0f;
-                float scrollbarY = listStartY;
-                float scrollbarH = visibleHeight;
-                dl->AddRectFilled(ImVec2(scrollbarX, scrollbarY), ImVec2(scrollbarX + 4.0f, scrollbarY + scrollbarH), ImGui::GetColorU32(ImVec4(0.08f, 0.08f, 0.10f, 0.5f)), 2.0f);
-                
-                if (numConfigs > 0) {
-                    float thumbH = std::max(20.0f, (visibleHeight / (numConfigs * itemHeight)) * scrollbarH);
-                    float thumbY = scrollbarY + (currentScrollY / (numConfigs * itemHeight)) * scrollbarH;
+                float totalHeightOfItems = numConfigs * itemHeight;
+                if (totalHeightOfItems > visibleHeight) {
+                    float scrollbarX = targetPos.x + targetSize.x - 12.0f;
+                    float scrollbarY = listStartY;
+                    float scrollbarH = visibleHeight;
+                    dl->AddRectFilled(ImVec2(scrollbarX, scrollbarY), ImVec2(scrollbarX + 4.0f, scrollbarY + scrollbarH), ImGui::GetColorU32(ImVec4(0.08f, 0.08f, 0.10f, 0.5f)), 2.0f);
+                    
+                    float thumbH = std::max(20.0f, (visibleHeight / totalHeightOfItems) * scrollbarH);
+                    if (thumbH > scrollbarH) thumbH = scrollbarH;
+                    float thumbY = scrollbarY + (currentScrollY / totalHeightOfItems) * scrollbarH;
                     dl->AddRectFilled(ImVec2(scrollbarX, thumbY), ImVec2(scrollbarX + 4.0f, thumbY + thumbH), GetThemeColor(0.5f), 2.0f);
                 }
                 
-                
+                // Push clipping rect to prevent items from rendering outside scroll view
                 dl->PushClipRect(ImVec2(targetPos.x, listStartY), ImVec2(targetPos.x + targetSize.x - 15.0f, listStartY + visibleHeight), true);
                 
                 if (numConfigs == 0) {
@@ -6958,7 +7262,7 @@ void ModMenu::RunCustomMainMenu() {
                 
                 dl->PopClipRect();
                 
-                
+                // "+ Create New Profile" button at bottom of Right Column
                 float createY = targetPos.y + targetSize.y - 60.0f;
                 float createH = 45.0f;
                 ImVec2 createMin(targetPos.x + 20.0f, createY);
@@ -6991,19 +7295,19 @@ void ModMenu::RunCustomMainMenu() {
                 }
             }
         } else if (g_ActiveTab == 1) {
-            
+            // --- TAB 1: LOCAL PLAY ---
             float width1 = panel1Size.x;
             float width2 = hasPanel2 ? panel2Size.x : panel1Size.x;
             
             drawPanel(panel1Pos, panel1Size, g_DashboardActiveCol == 1, hasPanel2 ? "GAMEPLAY RULES" : "LOCAL PLAY CONFIG");
             
-            
+            // Render settings inside a child scroll area to prevent overflow
             ImGui::SetCursorScreenPos(ImVec2(panel1Pos.x + 15.0f, panel1Pos.y + 60.0f));
             ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
             ImGui::BeginChild("LocalPlayRulesScroll", ImVec2(width1 - 30.0f, colH - 80.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NavFlattened);
             
-            
+            // 1. Game Mode
             const char* modeNames[] = { "Free For All", "Duel", "Human vs AI" };
             int currentMode = (int)singlePlayer.gameType;
             ImGui::Text("Game Mode:");
@@ -7014,7 +7318,7 @@ void ModMenu::RunCustomMainMenu() {
             
             ImGui::Spacing(); ImGui::Spacing();
             
-            
+            // 2. Game Speed
             float speedFactVal = (float)singlePlayer.speedFactor;
             float speedMult = exp(speedFactVal);
             ImGui::Text("Game Speed Multiplier (%.2fx):", speedMult);
@@ -7025,7 +7329,7 @@ void ModMenu::RunCustomMainMenu() {
             
             ImGui::Spacing(); ImGui::Spacing();
             
-            
+            // 3. Grid Size
             float sizeFactVal = (float)singlePlayer.sizeFactor;
             float sizeMult = exp(sizeFactVal);
             ImGui::Text("Arena Size Multiplier (%.2fx):", sizeMult);
@@ -7036,7 +7340,7 @@ void ModMenu::RunCustomMainMenu() {
             
             ImGui::Spacing(); ImGui::Spacing();
             
-            
+            // 4. Walls Stay Up Delay
             ImGui::Text("Wall Stay-up Delay (sec, <0 for infinite):");
             ImGui::SetNextItemWidth(width1 - 50.0f);
             float wDelay = (float)singlePlayer.wallsStayUpDelay;
@@ -7046,7 +7350,7 @@ void ModMenu::RunCustomMainMenu() {
             
             ImGui::Spacing(); ImGui::Spacing();
             
-            
+            // 5. Walls Length
             ImGui::Text("Max Wall Length:");
             ImGui::SetNextItemWidth(width1 - 50.0f);
             float wLen = (float)singlePlayer.wallsLength;
@@ -7055,7 +7359,7 @@ void ModMenu::RunCustomMainMenu() {
             }
             
             if (!hasPanel2) {
-                
+                // If single column layout, stack the Match Config and Start Button directly inside the scroll pane
                 ImGui::Spacing(); ImGui::Spacing();
                 ImGui::Separator();
                 ImGui::Spacing(); ImGui::Spacing();
@@ -7063,21 +7367,21 @@ void ModMenu::RunCustomMainMenu() {
                 ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "MATCH CONFIG & LAUNCH");
                 ImGui::Spacing();
                 
-                
+                // 1. Number of AIs
                 ImGui::Text("AI Opponents count:");
                 ImGui::SetNextItemWidth(width1 - 50.0f);
                 ImGui::SliderInt("##SPAIs", &singlePlayer.numAIs, 0, 15);
                 
                 ImGui::Spacing(); ImGui::Spacing();
                 
-                
+                // 2. AI Intelligence (IQ)
                 ImGui::Text("AI Difficulty level:");
                 ImGui::SetNextItemWidth(width1 - 50.0f);
                 ImGui::SliderInt("##SPAI_IQ", &singlePlayer.AI_IQ, 0, 100);
                 
                 ImGui::Spacing(); ImGui::Spacing();
                 
-                
+                // 3. Auto AI count adjustment
                 bool autoAI = singlePlayer.autoNum;
                 if (ImGui::Checkbox("Auto-adjust AI count", &autoAI)) {
                     singlePlayer.autoNum = autoAI;
@@ -7085,14 +7389,14 @@ void ModMenu::RunCustomMainMenu() {
                 
                 ImGui::Spacing(); ImGui::Spacing();
                 
-                
+                // 4. Score Limit
                 ImGui::Text("Match Score Limit:");
                 ImGui::SetNextItemWidth(width1 - 50.0f);
                 ImGui::InputInt("##SPScoreLimit", &singlePlayer.limitScore);
                 
                 ImGui::Spacing(); ImGui::Spacing();
                 
-                
+                // 5. Round Limit
                 ImGui::Text("Match Round Limit:");
                 ImGui::SetNextItemWidth(width1 - 50.0f);
                 ImGui::InputInt("##SPRoundLimit", &singlePlayer.limitRounds);
@@ -7109,7 +7413,7 @@ void ModMenu::RunCustomMainMenu() {
             ImGui::PopStyleColor();
             
             if (hasPanel2) {
-                
+                // --- COLUMN 2: MATCH LIMITS & START MATCH (Right) ---
                 drawPanel(panel2Pos, panel2Size, g_DashboardActiveCol == 2, "MATCH CONFIG & LAUNCH");
                 
                 ImGui::SetCursorScreenPos(ImVec2(panel2Pos.x + 15.0f, panel2Pos.y + 60.0f));
@@ -7117,21 +7421,21 @@ void ModMenu::RunCustomMainMenu() {
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
                 ImGui::BeginChild("LocalPlayLimitsScroll", ImVec2(width2 - 30.0f, colH - 150.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NavFlattened);
                 
-                
+                // 1. Number of AIs
                 ImGui::Text("AI Opponents count:");
                 ImGui::SetNextItemWidth(width2 - 50.0f);
                 ImGui::SliderInt("##SPAIs", &singlePlayer.numAIs, 0, 15);
                 
                 ImGui::Spacing(); ImGui::Spacing();
                 
-                
+                // 2. AI Intelligence (IQ)
                 ImGui::Text("AI Difficulty level:");
                 ImGui::SetNextItemWidth(width2 - 50.0f);
                 ImGui::SliderInt("##SPAI_IQ", &singlePlayer.AI_IQ, 0, 100);
                 
                 ImGui::Spacing(); ImGui::Spacing();
                 
-                
+                // 3. Auto AI count adjustment
                 bool autoAI = singlePlayer.autoNum;
                 if (ImGui::Checkbox("Auto-adjust AI count", &autoAI)) {
                     singlePlayer.autoNum = autoAI;
@@ -7139,14 +7443,14 @@ void ModMenu::RunCustomMainMenu() {
                 
                 ImGui::Spacing(); ImGui::Spacing();
                 
-                
+                // 4. Score Limit
                 ImGui::Text("Match Score Limit:");
                 ImGui::SetNextItemWidth(width2 - 50.0f);
                 ImGui::InputInt("##SPScoreLimit", &singlePlayer.limitScore);
                 
                 ImGui::Spacing(); ImGui::Spacing();
                 
-                
+                // 5. Round Limit
                 ImGui::Text("Match Round Limit:");
                 ImGui::SetNextItemWidth(width2 - 50.0f);
                 ImGui::InputInt("##SPRoundLimit", &singlePlayer.limitRounds);
@@ -7155,7 +7459,7 @@ void ModMenu::RunCustomMainMenu() {
                 ImGui::PopStyleVar();
                 ImGui::PopStyleColor();
                 
-                
+                // Big start button
                 float startBtnY = panel2Pos.y + colH - 70.0f;
                 ImGui::SetCursorScreenPos(ImVec2(panel2Pos.x + 20.0f, startBtnY));
                 if (ImGui::Button("START LOCAL GAME", ImVec2(width2 - 40.0f, 50.0f))) {
@@ -7163,20 +7467,21 @@ void ModMenu::RunCustomMainMenu() {
                 }
             }
         } else if (g_ActiveTab == 2) {
-            
+            // --- TAB 2: SERVER BROWSER ---
             static nServerInfo* s_SelectedServer = nullptr;
             static int s_SelectedFavoriteIdx = -1;
             static bool s_ServerQueryStarted = false;
             static char s_DirectIP[128] = "";
             static int s_DirectPort = 4534;
             static bool s_ShowFavoritesOnly = false;
+            static char s_ServerSearchBuf[128] = "";
             
-            
+            // Poll query/network events so the list is updated
             sn_Receive();
             sn_SendPlanned();
-            nServerInfo::DoQueryAll(10);
+            nServerInfo::DoQueryAll(32); // batch of 32 simultaneous UDP pings
             
-            
+            // Validate selected server pointer to prevent crash from dangling pointers
             bool selectedServerValid = false;
             if (s_SelectedServer) {
                 nServerInfo* check = nServerInfo::GetFirstServer();
@@ -7203,10 +7508,10 @@ void ModMenu::RunCustomMainMenu() {
             float width1 = panel1Size.x;
             float width2 = hasPanel2 ? panel2Size.x : panel1Size.x;
             
-            
+            // --- COLUMN 1: SERVER LIST ---
             drawPanel(panel1Pos, panel1Size, g_DashboardActiveCol == 1, "SERVER BROWSER");
             
-            
+            // Render Refresh button and optional Direct Connect button in header area of Column 1
             float refreshBtnW = 75.0f;
             float directBtnW = 60.0f;
             float refreshBtnH = 26.0f;
@@ -7250,11 +7555,11 @@ void ModMenu::RunCustomMainMenu() {
                 }
             }
             
-            
+            // Render Sort options below header
             ImGui::SetCursorScreenPos(ImVec2(panel1Pos.x + 20.0f, panel1Pos.y + 50.0f));
             ImGui::PushItemWidth(110.0f);
             const char* sortKeys[] = { "Name", "Ping", "Players", "Score" };
-            static int selectedSort = 3; 
+            static int selectedSort = 3; // default to Score
             if (ImGui::Combo("Sort By", &selectedSort, sortKeys, 4)) {
                 nServerInfo::PrimaryKey pKey = nServerInfo::KEY_SCORE;
                 if (selectedSort == 0) pKey = nServerInfo::KEY_NAME;
@@ -7265,7 +7570,7 @@ void ModMenu::RunCustomMainMenu() {
             }
             ImGui::PopItemWidth();
             
-            
+            // Favorites filter checkbox next to sort
             ImGui::SameLine(0.0f, 15.0f);
             bool prevShowFavoritesOnly = s_ShowFavoritesOnly;
             if (ImGui::Checkbox("Favs Only", &s_ShowFavoritesOnly)) {
@@ -7275,7 +7580,7 @@ void ModMenu::RunCustomMainMenu() {
                 }
             }
             
-            
+            // Periodic sorting update
             static int sortCooldown = 0;
             if (sortCooldown++ > 30) {
                 sortCooldown = 0;
@@ -7287,13 +7592,25 @@ void ModMenu::RunCustomMainMenu() {
                 nServerInfo::Sort(pKey);
             }
             
+            // Search input box
+            ImGui::SetCursorScreenPos(ImVec2(panel1Pos.x + 20.0f, panel1Pos.y + 80.0f));
+            ImGui::PushItemWidth(width1 - 110.0f);
+            ImGui::InputTextWithHint("##Search", "Search servers...", s_ServerSearchBuf, sizeof(s_ServerSearchBuf));
+            ImGui::PopItemWidth();
+            if (s_ServerSearchBuf[0] != '\0') {
+                ImGui::SameLine(0.0f, 8.0f);
+                if (ImGui::Button("Clear", ImVec2(50.0f, 0.0f))) {
+                    s_ServerSearchBuf[0] = '\0';
+                }
+            }
             
-            ImGui::SetCursorScreenPos(ImVec2(panel1Pos.x + 15.0f, panel1Pos.y + 85.0f));
+            // Server List Scrollable Child Area
+            ImGui::SetCursorScreenPos(ImVec2(panel1Pos.x + 15.0f, panel1Pos.y + 115.0f));
             ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-            ImGui::BeginChild("ServerListScroll", ImVec2(width1 - 30.0f, colH - 105.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NavFlattened);
+            ImGui::BeginChild("ServerListScroll", ImVec2(width1 - 30.0f, colH - 135.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NavFlattened);
             ImDrawList* child_dl = ImGui::GetWindowDrawList();
-            child_dl->PushClipRect(ImVec2(panel1Pos.x + 15.0f, panel1Pos.y + 85.0f), ImVec2(panel1Pos.x + width1 - 15.0f, panel1Pos.y + colH - 20.0f), true);
+            child_dl->PushClipRect(ImVec2(panel1Pos.x + 15.0f, panel1Pos.y + 115.0f), ImVec2(panel1Pos.x + width1 - 15.0f, panel1Pos.y + colH - 20.0f), true);
             
             int serverIdx = 0;
             if (s_ShowFavoritesOnly) {
@@ -7303,6 +7620,16 @@ void ModMenu::RunCustomMainMenu() {
                     int favPort;
                     if (!gServerFavorites::GetFavoriteInfo(i, favName, favAddress, favPort)) {
                         continue;
+                    }
+                    if (s_ServerSearchBuf[0] != '\0') {
+                        std::string needle(s_ServerSearchBuf);
+                        std::string rawName = static_cast<const char*>(favName);
+                        tString tName(favName);
+                        std::string strippedName = static_cast<const char*>(tColoredString::RemoveColors(tName));
+                        if (!CaseInsensitiveSubstringSearch(rawName, needle) &&
+                            !CaseInsensitiveSubstringSearch(strippedName, needle)) {
+                            continue;
+                        }
                     }
                     
                     ImVec2 curPos = ImGui::GetCursorScreenPos();
@@ -7350,6 +7677,17 @@ void ModMenu::RunCustomMainMenu() {
                 nServerInfo* s = nServerInfo::GetFirstServer();
                 while (s) {
                     if (s->Reachable()) {
+                        if (s_ServerSearchBuf[0] != '\0') {
+                            std::string needle(s_ServerSearchBuf);
+                            std::string rawName = (s->GetName() ? static_cast<const char*>(s->GetName()) : "");
+                            tString tName(rawName.c_str());
+                            std::string strippedName = static_cast<const char*>(tColoredString::RemoveColors(tName));
+                            if (!CaseInsensitiveSubstringSearch(rawName, needle) &&
+                                !CaseInsensitiveSubstringSearch(strippedName, needle)) {
+                                s = s->Next();
+                                continue;
+                            }
+                        }
                         ImVec2 curPos = ImGui::GetCursorScreenPos();
                         float itemH = 45.0f;
                         
@@ -7396,7 +7734,7 @@ void ModMenu::RunCustomMainMenu() {
             ImGui::PopStyleColor();
             
             if (hasPanel2) {
-                
+                // --- COLUMN 2: SELECTED SERVER INFO & DIRECT CONNECT ---
                 drawPanel(panel2Pos, panel2Size, g_DashboardActiveCol == 2, "SERVER INFO");
                 
                 float infoY = panel2Pos.y + 65.0f;
@@ -7439,7 +7777,7 @@ void ModMenu::RunCustomMainMenu() {
                         s_PendingConnectServer = s_SelectedServer;
                     }
                     
-                    
+                    // Add/Remove Favorite button
                     bool isFav = gServerFavorites::IsFavorite(s_SelectedServer);
                     ImGui::SetCursorScreenPos(ImVec2(panel2Pos.x + 20.0f, infoY + 60.0f));
                     if (isFav) {
@@ -7452,7 +7790,7 @@ void ModMenu::RunCustomMainMenu() {
                         }
                     }
 
-                    
+                    // Render players online list
                     float pListY = infoY + 100.0f;
                     float dcStartY = panel2Pos.y + colH - 180.0f;
                     if (dcStartY > pListY + 40.0f) {
@@ -7562,7 +7900,7 @@ void ModMenu::RunCustomMainMenu() {
                 }
             }
         } else if (g_ActiveTab == 3) {
-            
+            // --- TAB 3: SYSTEM SETTINGS ---
             float width1 = panel1Size.x;
             float width2 = hasPanel2 ? panel2Size.x : panel1Size.x;
             
@@ -7583,11 +7921,11 @@ void ModMenu::RunCustomMainMenu() {
                 { "Team Chat", "CHAT_TEAM", nullptr },
                 { "Toggle Console", "CONSOLE_TOGGLE", nullptr },
                 { "Take Screenshot", "SCREENSHOT", nullptr },
-                { "Pause Game", "PAUSE", nullptr }
-                
-                
-                
-                
+                { "Pause Game", "PAUSE", nullptr },
+                { "Perfect Turn Left", "CYCLE_PERFECT_LEFT", nullptr },
+                { "Perfect Turn Right", "CYCLE_PERFECT_RIGHT", nullptr },
+                { "AutoEscape Left", "CYCLE_AUTOESCAPE_LEFT", nullptr },
+                { "AutoEscape Right", "CYCLE_AUTOESCAPE_RIGHT", nullptr }
             };
             
             for (auto& b : binds) {
@@ -7615,7 +7953,7 @@ void ModMenu::RunCustomMainMenu() {
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
             ImGui::BeginChild("GeneralSettingsScroll", ImVec2(width1 - 30.0f, colH - 80.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NavFlattened);
             
-            
+            // --- SECTION 1: PLAYER PROFILE ---
             ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "PLAYER PROFILE");
             ImGui::Separator();
             ImGui::Spacing();
@@ -7686,7 +8024,7 @@ void ModMenu::RunCustomMainMenu() {
             ImGui::Spacing();
             ImGui::Spacing();
             
-            
+            // --- SECTION 2: VIDEO & GRAPHICS ---
             ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "VIDEO & GRAPHICS");
             ImGui::Separator();
             ImGui::Spacing();
@@ -7746,7 +8084,7 @@ void ModMenu::RunCustomMainMenu() {
             ImGui::Spacing();
             ImGui::Spacing();
             
-            
+            // --- SECTION 3: CAMERA SETTINGS ---
             ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "CAMERA SETTINGS");
             ImGui::Separator();
             ImGui::Spacing();
@@ -7772,7 +8110,7 @@ void ModMenu::RunCustomMainMenu() {
             ImGui::Spacing();
             ImGui::Spacing();
             
-            
+            // --- SECTION 4: GRAPHICS QUALITY ---
             ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "GRAPHICS QUALITY");
             ImGui::Separator();
             ImGui::Spacing();
@@ -7816,7 +8154,7 @@ void ModMenu::RunCustomMainMenu() {
             ImGui::Spacing();
             ImGui::Spacing();
             
-            
+            // --- SECTION 5: SKY & ENVIRONMENT ---
             ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "SKY & ENVIRONMENT");
             ImGui::Separator();
             ImGui::Spacing();
@@ -7834,7 +8172,7 @@ void ModMenu::RunCustomMainMenu() {
             ImGui::Spacing();
             ImGui::Spacing();
             
-            
+            // --- SECTION 6: SOUND SETTINGS ---
             ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "SOUND SETTINGS");
             ImGui::Separator();
             ImGui::Spacing();
@@ -7874,7 +8212,7 @@ void ModMenu::RunCustomMainMenu() {
             ImGui::Spacing();
             ImGui::Spacing();
             
-            
+            // --- SECTION 7: ADVANCED ENGINE SETTINGS ---
             ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "ADVANCED ENGINE SETTINGS");
             ImGui::Separator();
             ImGui::Spacing();
@@ -7908,7 +8246,7 @@ void ModMenu::RunCustomMainMenu() {
             }
             
             if (!hasPanel2) {
-                
+                // If single column layout, stack the Keybindings directly inside the scroll pane
                 ImGui::Spacing(); ImGui::Spacing();
                 ImGui::Separator();
                 ImGui::Spacing(); ImGui::Spacing();
@@ -7921,7 +8259,7 @@ void ModMenu::RunCustomMainMenu() {
                     
                     std::string btnLabel = getBindsString(b.act);
                     if (s_BindingAction == b.act) {
-                        btnLabel = "PRESS ANY KEY (ESC TO CLEAR)";
+                        btnLabel = "PRESS KEY TO BIND (ESC TO CLEAR ALL)";
                     }
                     
                     ImGui::SetNextItemWidth(width1 - 55.0f);
@@ -7937,7 +8275,7 @@ void ModMenu::RunCustomMainMenu() {
             ImGui::PopStyleColor();
             
             if (hasPanel2) {
-                
+                // Column 2: Keybindings
                 drawPanel(panel2Pos, panel2Size, g_DashboardActiveCol == 2, "KEYBINDINGS");
                 
                 ImGui::SetCursorScreenPos(ImVec2(panel2Pos.x + 15.0f, panel2Pos.y + 60.0f));
@@ -7950,7 +8288,7 @@ void ModMenu::RunCustomMainMenu() {
                     
                     std::string btnLabel = getBindsString(b.act);
                     if (s_BindingAction == b.act) {
-                        btnLabel = "PRESS ANY KEY (ESC TO CLEAR)";
+                        btnLabel = "PRESS KEY TO BIND (ESC TO CLEAR ALL)";
                     }
                     
                     ImGui::SetNextItemWidth(width2 - 55.0f);
@@ -7978,8 +8316,17 @@ void ModMenu::RunCustomMainMenu() {
             RenderDemoPlayerFullTab(dl, io, panel0Pos, panel0Size, panel1Pos, panel1Size, panel2Pos, panel2Size, hasPanel2);
         }
         
-        
+        // Render popups/modals
         RenderModMenuModals();
+        
+        // Draw the embedded media player card inside panel 1 (central box) if active tab is Dashboard (0)
+        if (g_ActiveTab == 0) {
+            MediaWidget* media = MediaWidget::GetInstance();
+            if (media) {
+                ImVec2 mediaPos(panel1Pos.x + (panel1Size.x - 380.0f) * 0.5f, panel1Pos.y + panel1Size.y - 125.0f - 20.0f);
+                media->Draw(dl, mediaPos, g_MenuAlpha);
+            }
+        }
         
         ImGui::End();
         ImGui::PopStyleColor(2);
@@ -7999,7 +8346,7 @@ void ModMenu::RunCustomMainMenu() {
     }
     su_ClearKeys();
     while (su_GetSDLInput(purgeEvent)) {
-        
+        // Discard
     }
     SDL_HideCursor();
 }
@@ -8026,7 +8373,7 @@ void ModMenu::RenderInGameTeams(float width) {
                 
                 ImGui::Spacing();
                 
-                
+                // Join buttons
                 if (!pni->IsSpectating()) {
                     char spectateId[64];
                     snprintf(spectateId, sizeof(spectateId), "Spectate##spec_%d", i);
@@ -8045,7 +8392,7 @@ void ModMenu::RenderInGameTeams(float width) {
                 
                 ImGui::Spacing();
                 
-                
+                // Active teams list
                 for (int t = 0; t < eTeam::teams.Len(); ++t) {
                     eTeam* team = eTeam::teams(t);
                     if (team != pni->NextTeam()) {
@@ -8059,7 +8406,7 @@ void ModMenu::RenderInGameTeams(float width) {
                     }
                 }
                 
-                
+                // Create new team
                 if (pni->IsSpectating() ||
                     !(pni->NextTeam() && pni->NextTeam()->NumHumanPlayers() == 1 &&
                       pni->CurrentTeam() && pni->CurrentTeam()->NumHumanPlayers() == 1)) {
@@ -8086,7 +8433,7 @@ void ModMenu::RenderInGameTeams(float width) {
 void ModMenu::RenderInGameSettings(float width) {
     ePlayer* lp = ePlayer::PlayerConfig(0);
     
-    
+    // --- PLAYER SETUP ---
     if (ImGui::CollapsingHeader("PLAYER SETUP")) {
         if (lp) {
             char nameBuf[256];
@@ -8095,7 +8442,7 @@ void ModMenu::RenderInGameSettings(float width) {
             nameBuf[sizeof(nameBuf)-1] = '\0';
             if (ImGui::InputText("Screen Name", nameBuf, sizeof(nameBuf))) {
                 lp->name = Utf8ToCp1251(nameBuf);
-                
+                // request network synchronization
                 static nVersionFeature inGameRenames(5);
                 if (inGameRenames.Supported()) {
                     ePlayerNetID::Update();
@@ -8173,7 +8520,7 @@ void ModMenu::RenderInGameSettings(float width) {
         }
     }
     
-    
+    // --- CAMERA SETTINGS ---
     if (ImGui::CollapsingHeader("CAMERA CONFIG")) {
         if (lp) {
             ImGui::Text("Field of View (FOV):");
@@ -8193,7 +8540,7 @@ void ModMenu::RenderInGameSettings(float width) {
         }
     }
     
-    
+    // --- GRAPHICS QUALITY ---
     if (ImGui::CollapsingHeader("GRAPHICS QUALITY")) {
         ImGui::Checkbox("Alpha Blending", &sr_alphaBlend);
         ImGui::Checkbox("Smooth Shading", &sr_smoothShading);
@@ -8229,7 +8576,7 @@ void ModMenu::RenderInGameSettings(float width) {
         }
     }
     
-    
+    // --- SKY & ENVIRONMENT ---
     if (ImGui::CollapsingHeader("SKY & ENVIRONMENT")) {
         ImGui::Checkbox("Upper Sky", &sr_upperSky);
         ImGui::Checkbox("Lower Sky", &sr_lowerSky);
@@ -8242,7 +8589,7 @@ void ModMenu::RenderInGameSettings(float width) {
         ImGui::Checkbox("Use Moviepack (Custom Walls/Sky/Floor)", &sg_moviepackUse);
     }
     
-    
+    // --- SOUND SETTINGS ---
     if (ImGui::CollapsingHeader("SOUND SETTINGS")) {
         {
             const char* soundQualityNames[] = { "Off", "Low", "Medium", "High" };
@@ -8278,7 +8625,7 @@ void ModMenu::RenderInGameSettings(float width) {
         ImGui::SliderInt("##InGameSoundSources", &sound_sources, 2, 20);
     }
     
-    
+    // --- KEYBINDINGS ---
     if (ImGui::CollapsingHeader("KEYBINDINGS")) {
         struct KeybindItem {
             const char* label;
@@ -8297,11 +8644,11 @@ void ModMenu::RenderInGameSettings(float width) {
             { "Team Chat", "CHAT_TEAM", nullptr },
             { "Toggle Console", "CONSOLE_TOGGLE", nullptr },
             { "Take Screenshot", "SCREENSHOT", nullptr },
-            { "Pause Game", "PAUSE", nullptr }
-            
-            
-            
-            
+            { "Pause Game", "PAUSE", nullptr },
+            { "Perfect Turn Left", "CYCLE_PERFECT_LEFT", nullptr },
+            { "Perfect Turn Right", "CYCLE_PERFECT_RIGHT", nullptr },
+            { "AutoEscape Left", "CYCLE_AUTOESCAPE_LEFT", nullptr },
+            { "AutoEscape Right", "CYCLE_AUTOESCAPE_RIGHT", nullptr }
         };
         
         for (auto& b : binds) {
@@ -8327,7 +8674,7 @@ void ModMenu::RenderInGameSettings(float width) {
             
             std::string btnLabel = getBindsString(b.act);
             if (s_BindingAction == b.act) {
-                btnLabel = "PRESS ANY KEY (ESC TO CLEAR)";
+                btnLabel = "PRESS KEY TO BIND (ESC TO CLEAR ALL)";
             }
             
             if (ImGui::Button((btnLabel + "##ingame_btn_" + b.actionName).c_str(), ImVec2(width - 25.0f, 28.0f))) {
@@ -8339,7 +8686,7 @@ void ModMenu::RenderInGameSettings(float width) {
     ImGui::Spacing();
     ImGui::Spacing();
     
-    
+    // --- ADVANCED ENGINE SETTINGS ---
     if (ImGui::CollapsingHeader("ADVANCED ENGINE SETTINGS")) {
         if (ImGui::Button("MATCH RULES & PHYSICS SETTINGS", ImVec2(width - 25.0f, 30.0f))) {
             g_PendingLegacyMenuAction = []() { GameSettingsCurrent(); };
@@ -8401,13 +8748,13 @@ void ModMenu::RunCustomInGameMenu() {
     ImGuiIO& io = ImGui::GetIO();
     su_ClearKeys();
     
-    
+    // Purge pending SDL events
     SDL_Event purgeEvent;
     while (su_GetSDLInput(purgeEvent)) {
-        
+        // Discard
     }
     
-    
+    // Reset ImGui's mouse click state on enter
     for (int i = 0; i < 5; i++) {
         io.MouseDown[i] = false;
         io.MouseClicked[i] = false;
@@ -8416,7 +8763,7 @@ void ModMenu::RunCustomInGameMenu() {
     bool inGameMenuOpen = true;
     ModMenu::g_InGameMenuOpen = true;
     g_MenuOpen = false;
-    g_ActiveTab = 0; 
+    g_ActiveTab = 0; // Default to Dashboard on entry
     if (getenv("RETRO_TEST_START_GAME")) {
         g_ActiveTab = 4;
         g_DashboardLeftSelected = 4;
@@ -8428,9 +8775,10 @@ void ModMenu::RunCustomInGameMenu() {
     static float currentScrollY = 0.0f;
     static float diagFlashTimer = 0.0f;
     
-    float startupCooldown = 0.3f; 
+    float startupCooldown = 0.3f; // Cooldown to absorb stray inputs
     
     while (inGameMenuOpen && !uMenu::quickexit && !uMenu::exitToMain) {
+        CheckDisplaySizeRebuild();
         SDL_ShowCursor();
         SDL_WM_GrabInput(SDL_GRAB_OFF);
         io.MouseDrawCursor = false;
@@ -8448,18 +8796,18 @@ void ModMenu::RunCustomInGameMenu() {
             break;
         }
         
-        
-        
-        
-        
+        // Aggressive network pump: flush all pending packets immediately.
+        // The old uMenu::Enter() loop did this implicitly through its tight
+        // idle callback. Without this, opening the pause menu wouldn't
+        // "unfreeze" a stalled game — packets would remain queued.
         sn_Receive();
         nNetObject::SyncAll();
         sn_SendPlanned();
         
         gameloop_idle();
         
-        
-        
+        // Second pump after gameloop_idle to push out any state changes
+        // that the game simulation produced (acks, sync requests, etc.)
         sn_Receive();
         sn_SendPlanned();
         
@@ -8470,20 +8818,80 @@ void ModMenu::RunCustomInGameMenu() {
                 break;
             }
             if (ProcessEvent(&event)) {
-                if (g_CloseInGameMenuRequested) {
-                    g_CloseInGameMenuRequested = false;
-                    inGameMenuOpen = false;
-                }
                 continue;
             }
             su_HandleEvent(event, true);
+        }
+        
+        if (g_CloseInGameMenuRequested) {
+            g_CloseInGameMenuRequested = false;
+            inGameMenuOpen = false;
         }
         
         if (!inGameMenuOpen || uMenu::quickexit || uMenu::exitToMain) {
             break;
         }
         
+        // --- HUD EDITOR MODE OVERLAY IN IN-GAME MENU ---
+        if (isHudEditing) {
+            // Update delta time
+            static struct timeval last_tv = {0, 0};
+            struct timeval tv;
+            gettimeofday(&tv, NULL);
+            if (last_tv.tv_sec != 0) {
+                double dt = (double)(tv.tv_sec - last_tv.tv_sec) + (double)(tv.tv_usec - last_tv.tv_usec) / 1000000.0;
+                if (dt > 0.0) {
+                    io.DeltaTime = (float)dt;
+                    last_tv = tv;
+                }
+            } else {
+                last_tv = tv;
+            }
+
+            SDL_ShowCursor();
+            io.MouseDrawCursor = true;
+
+            ImGui_ImplOpenGL2_NewFrame();
+            ImGui_ImplSDL3_NewFrame();
+            ImGui::NewFrame();
+
+            ImDrawList* bgDl = ImGui::GetBackgroundDrawList();
+            bgDl->AddRectFilled(ImVec2(0, 0), io.DisplaySize, ImGui::GetColorU32(ImVec4(0.02f, 0.02f, 0.03f, 0.65f)));
+            DrawBackgroundParticles(bgDl, ImVec2(0, 0), io.DisplaySize, 1.0f);
+
+            HudManager::Update(io.DeltaTime);
+            HudManager::Render();
+
+            ImGui::Render();
+            
+            GLboolean blendEnabled = glIsEnabled(GL_BLEND);
+            GLint blendSrcSrc, blendSrcDst;
+            glGetIntegerv(GL_BLEND_SRC_ALPHA, &blendSrcSrc);
+            glGetIntegerv(GL_BLEND_DST_ALPHA, &blendSrcDst);
+            GLboolean depthEnabled = glIsEnabled(GL_DEPTH_TEST);
+            GLboolean lightingEnabled = glIsEnabled(GL_LIGHTING);
+            GLboolean cullEnabled = glIsEnabled(GL_CULL_FACE);
+            
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_LIGHTING);
+            glDisable(GL_CULL_FACE);
+            
+            ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
+            
+            if (!blendEnabled) glDisable(GL_BLEND);
+            else glBlendFunc(blendSrcSrc, blendSrcDst);
+            if (depthEnabled) glEnable(GL_DEPTH_TEST);
+            if (lightingEnabled) glEnable(GL_LIGHTING);
+            if (cullEnabled) glEnable(GL_CULL_FACE);
+
+            rSysDep::SwapGL();
+            rSysDep::ClearGL();
+            continue;
+        }
         
+        // Setup ImGui frames
         ImGui_ImplOpenGL2_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         
@@ -8499,6 +8907,8 @@ void ModMenu::RunCustomInGameMenu() {
         } else {
             last_tv = tv;
         }
+
+        HudManager::Update(io.DeltaTime);
         
         if (diagFlashTimer > 0.0f) {
             diagFlashTimer -= io.DeltaTime;
@@ -8515,18 +8925,18 @@ void ModMenu::RunCustomInGameMenu() {
         
         ImGui::NewFrame();
         
-        
-        
+        // --- DRAW IN-GAME DASHBOARD ---
+        // 1. Semi-transparent backdrop overlay
         ImGui::SetNextWindowPos(ImVec2(0, 0));
         ImGui::SetNextWindowSize(io.DisplaySize);
         ImGuiWindowFlags bgFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                                    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
                                    ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-                                   ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoInputs;
+                                   ImGuiWindowFlags_NoBringToFrontOnFocus;
         
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.02f, 0.02f, 0.03f, 0.65f)); 
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.02f, 0.02f, 0.03f, 0.65f)); // Soft dark backdrop
         ImGui::Begin("##InGameDashboardBG", nullptr, bgFlags);
         ImDrawList* bgDl = ImGui::GetWindowDrawList();
         DrawBackgroundParticles(bgDl, ImVec2(0, 0), io.DisplaySize, 1.0f);
@@ -8534,7 +8944,7 @@ void ModMenu::RunCustomInGameMenu() {
         ImGui::PopStyleColor();
         ImGui::PopStyleVar(2);
         
-        
+        // 2. Centered In-Game Dashboard Card Window
         bool hasPanel2 = (io.DisplaySize.x >= 1200.0f);
         ImVec2 cardSize(hasPanel2 ? 1180.0f : 750.0f, 700.0f);
         ImVec2 cardPos((io.DisplaySize.x - cardSize.x) * 0.5f, (io.DisplaySize.y - cardSize.y) * 0.5f);
@@ -8554,7 +8964,7 @@ void ModMenu::RunCustomInGameMenu() {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 winPos = ImGui::GetWindowPos();
         
-        
+        // Accent/RGB update
         float menuTime = (float)ImGui::GetTime();
         float r, g, b;
         ImGui::ColorConvertHSVtoRGB(fmodf(menuTime * g_RGBSpeed, 1.0f), 1.0f, 1.0f, r, g, b);
@@ -8564,17 +8974,29 @@ void ModMenu::RunCustomInGameMenu() {
             g_AccentColor = g_AccentColor1;
         }
         
-        
+        // 3. Header and title
         float paddingX = cardSize.x < 1180.0f ? 20.0f : 30.0f;
         float headerY = 70.0f;
         
         char verBuf[64];
-        snprintf(verBuf, sizeof(verBuf), "v%s | COMPETITIVE EDITION", (const char*)sn_programVersion);
+        if (sn_programVersion == "ILONIUM" || sn_programVersion == "ilonium") {
+            snprintf(verBuf, sizeof(verBuf), "ILONIUM | COMPETITIVE EDITION");
+        } else {
+            snprintf(verBuf, sizeof(verBuf), "v%s | COMPETITIVE EDITION", (const char*)sn_programVersion);
+        }
         ImVec2 verSize = ImGui::CalcTextSize(verBuf);
 
         std::string headerTitle = "RETROCYCLES IN-GAME PAUSE MENU";
         if (sn_GetNetState() == nCLIENT) {
-            headerTitle = "SERVER: " + std::string(static_cast<const char*>(tColoredString::RemoveColors(sn_serverName)));
+            if (sg_lastServerName.Len() > 0) {
+                headerTitle = "SERVER: " + std::string(static_cast<const char*>(tColoredString::RemoveColors(sg_lastServerName)));
+            } else if (sg_lastServerIP.Len() > 0) {
+                char serverAddr[128];
+                snprintf(serverAddr, sizeof(serverAddr), "%s:%u", (const char*)sg_lastServerIP, sg_lastServerPort);
+                headerTitle = "SERVER: " + std::string(serverAddr);
+            } else {
+                headerTitle = "SERVER: Connected Server";
+            }
         }
 
         if (g_FontHeader) ImGui::PushFont(g_FontHeader);
@@ -8594,9 +9016,9 @@ void ModMenu::RunCustomInGameMenu() {
         dl->AddRectFilledMultiColor(ImVec2(winPos.x + paddingX, winPos.y + headerY), ImVec2(winPos.x + cardSize.x - paddingX, winPos.y + headerY + 3.0f),
                                    GetThemeColor(0.0f), GetThemeColor(1.0f), GetThemeColor(1.0f), GetThemeColor(0.0f));
         
-        
+        // 4. Grid Columns layout (1180x700px Card Optimized)
         float colY = headerY + 30.0f;
-        float colH = cardSize.y - colY - 35.0f; 
+        float colH = cardSize.y - colY - 35.0f; // Calculate dynamically
         float colW0 = 230.0f;
         float colW = hasPanel2 ? 425.0f : (cardSize.x - colW0 - 2.0f * paddingX - 20.0f);
         
@@ -8621,7 +9043,7 @@ void ModMenu::RunCustomInGameMenu() {
                                        GetThemeColor(0.0f), GetThemeColor(0.8f), GetThemeColor(0.8f), GetThemeColor(0.0f));
         };
         
-        
+        // Setup column positions
         ImVec2 panel0Pos(winPos.x + paddingX, winPos.y + colY);
         ImVec2 panel0Size(colW0, colH);
         
@@ -8630,9 +9052,9 @@ void ModMenu::RunCustomInGameMenu() {
         
         ImVec2 panel2Pos(winPos.x + paddingX + colW0 + 40.0f + colW, winPos.y + colY);
         ImVec2 panel2Size(colW, colH);
-        ImVec2 panelSize = panel1Size; 
+        ImVec2 panelSize = panel1Size; // For compatibility
         
-        
+        // --- COLUMN 0: NAVIGATION (Left) ---
         drawPanel(panel0Pos, panel0Size, g_DashboardActiveCol == 0, "NAVIGATION");
         
         std::vector<const char*> navLabels;
@@ -8674,7 +9096,7 @@ void ModMenu::RunCustomInGameMenu() {
                     g_DashboardActionTriggered = true;
                 }
                 
-                
+                // Map the displayed items to g_ActiveTab
                 bool isActiveTab = false;
                 std::string labelStr = navLabels[i];
                 if (labelStr == "Dashboard") isActiveTab = (g_ActiveTab == 0);
@@ -8730,11 +9152,11 @@ void ModMenu::RunCustomInGameMenu() {
         ImGui::PopStyleColor();
         
         if (g_ActiveTab == 0) {
-            
-            static int s_DashSubTab = 0; 
+            // --- TAB 0: DASHBOARD ---
+            static int s_DashSubTab = 0; // 0: Info, 1: Profiles
             
             if (!hasPanel2) {
-                
+                // Render sub-tabs at the top of Panel 1
                 ImGui::SetCursorScreenPos(ImVec2(panel1Pos.x + 20.0f, panel1Pos.y + 55.0f));
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
                 if (ImGui::Button("System Info", ImVec2((panel1Size.x - 50.0f)/2.0f, 30.0f))) {
@@ -8750,14 +9172,14 @@ void ModMenu::RunCustomInGameMenu() {
             float offsetDashY = hasPanel2 ? 0.0f : 40.0f;
             
             if (hasPanel2 || s_DashSubTab == 0) {
-                
+                // COLUMN 1: SYSTEM INFORMATION / SERVER INFORMATION
                 bool isMultiplayer = (sn_GetNetState() == nCLIENT);
                 const char* panel1Title = isMultiplayer ? "SERVER INFORMATION" : "SYSTEM INFORMATION";
                 drawPanel(panel1Pos, panel1Size, g_DashboardActiveCol == 1, panel1Title);
                 
                 if (isMultiplayer) {
                     float listY = panel1Pos.y + 60.0f + offsetDashY;
-                    float listH = colH - 80.0f - offsetDashY; 
+                    float listH = colH - 80.0f - offsetDashY; // Fills the column area nicely
                     
                     ImGui::SetCursorScreenPos(ImVec2(panel1Pos.x + 15.0f, listY));
                     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
@@ -8769,11 +9191,9 @@ void ModMenu::RunCustomInGameMenu() {
                             ePlayerNetID* pni = se_PlayerNetIDs(i);
                             if (pni) {
                                 std::string loginStr = "not logged in";
-#ifdef KRAWALL_SERVER
                                 if (pni->IsAuthenticated() && pni->GetRawAuthenticatedName().Len() > 0) {
                                     loginStr = (const char*)pni->GetRawAuthenticatedName();
                                 }
-#endif
                                 
                                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
                                 ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.10f, 0.12f, 0.4f));
@@ -8783,13 +9203,13 @@ void ModMenu::RunCustomInGameMenu() {
                                 ImDrawList* cellDl = ImGui::GetWindowDrawList();
                                 ImVec2 framePos = ImGui::GetWindowPos();
                                 
-                                
+                                // Player Name
                                 RenderColoredText(cellDl, ImVec2(framePos.x + 10.0f, framePos.y + 4.0f), IM_COL32(255, 255, 255, 255), pni->GetName());
-                                
+                                // Login
                                 std::string loginDisplay = "@" + loginStr;
                                 cellDl->AddText(ImVec2(framePos.x + 10.0f, framePos.y + 24.0f), ImGui::GetColorU32(ImVec4(0.5f, 0.5f, 0.6f, 0.8f)), loginDisplay.c_str());
                                 
-                                
+                                // Ping on the right
                                 char pingBuf[32];
                                 snprintf(pingBuf, sizeof(pingBuf), "%d ms", (int)(pni->ping * 1000.0f));
                                 ImVec2 pSz = ImGui::CalcTextSize(pingBuf);
@@ -8844,13 +9264,13 @@ void ModMenu::RunCustomInGameMenu() {
                     
                     std::string glVendor = (const char*)glGetString(GL_VENDOR);
                     std::string glRenderer = (const char*)glGetString(GL_RENDERER);
-                    if (glVendor.length() > 20) glVendor = glVendor.substr(0, 20) + "...";
-                    if (glRenderer.length() > 20) glRenderer = glRenderer.substr(0, 20) + "...";
+                    if (glVendor.length() > 60) glVendor = glVendor.substr(0, 60) + "...";
+                    if (glRenderer.length() > 60) glRenderer = glRenderer.substr(0, 60) + "...";
                     
                     drawInfoRow("GPU Vendor:", glVendor.c_str());
                     drawInfoRow("GPU Renderer:", glRenderer.c_str());
                     
-                    
+                    // interactive buttons in middle column
                     const char* midLabels[2] = { "Refresh Settings", "Toggle FPS Overlay" };
                     for (int i = 0; i < 2; i++) {
                         float itemY = panel1Pos.y + colH - 140.0f + i * 65.0f;
@@ -8905,7 +9325,7 @@ void ModMenu::RunCustomInGameMenu() {
                 ImVec2 targetPos = hasPanel2 ? panel2Pos : panel1Pos;
                 ImVec2 targetSize = hasPanel2 ? panel2Size : panel1Size;
                 
-                
+                // COLUMN 2: CONFIG PROFILES (Right)
                 drawPanel(targetPos, targetSize, g_DashboardActiveCol == 2, "CONFIG PROFILES");
                 
                 int numConfigs = (int)s_DashboardConfigs.size();
@@ -8927,14 +9347,16 @@ void ModMenu::RunCustomInGameMenu() {
                 }
                 currentScrollY += (targetScrollY - currentScrollY) * 0.2f;
                 
-                float scrollbarX = targetPos.x + targetSize.x - 12.0f;
-                float scrollbarY = listStartY;
-                float scrollbarH = visibleHeight;
-                dl->AddRectFilled(ImVec2(scrollbarX, scrollbarY), ImVec2(scrollbarX + 4.0f, scrollbarY + scrollbarH), ImGui::GetColorU32(ImVec4(0.08f, 0.08f, 0.10f, 0.5f)), 2.0f);
-                
-                if (numConfigs > 0) {
-                    float thumbH = std::max(20.0f, (visibleHeight / (numConfigs * itemHeight)) * scrollbarH);
-                    float thumbY = scrollbarY + (currentScrollY / (numConfigs * itemHeight)) * scrollbarH;
+                float totalHeightOfItems = numConfigs * itemHeight;
+                if (totalHeightOfItems > visibleHeight) {
+                    float scrollbarX = targetPos.x + targetSize.x - 12.0f;
+                    float scrollbarY = listStartY;
+                    float scrollbarH = visibleHeight;
+                    dl->AddRectFilled(ImVec2(scrollbarX, scrollbarY), ImVec2(scrollbarX + 4.0f, scrollbarY + scrollbarH), ImGui::GetColorU32(ImVec4(0.08f, 0.08f, 0.10f, 0.5f)), 2.0f);
+                    
+                    float thumbH = std::max(20.0f, (visibleHeight / totalHeightOfItems) * scrollbarH);
+                    if (thumbH > scrollbarH) thumbH = scrollbarH;
+                    float thumbY = scrollbarY + (currentScrollY / totalHeightOfItems) * scrollbarH;
                     dl->AddRectFilled(ImVec2(scrollbarX, thumbY), ImVec2(scrollbarX + 4.0f, thumbY + thumbH), GetThemeColor(0.5f), 2.0f);
                 }
                 
@@ -9024,8 +9446,8 @@ void ModMenu::RunCustomInGameMenu() {
             }
         }
         else if (g_ActiveTab == 2) {
-            
-            
+            // --- TAB 2: TEAMS & VOTING ---
+            // COLUMN 1: TEAMS CONFIGURATION
             drawPanel(panel1Pos, panel1Size, g_DashboardActiveCol == 1, hasPanel2 ? "TEAMS CONFIGURATION" : "TEAMS & VOTING");
             
             ImGui::SetCursorScreenPos(ImVec2(panel1Pos.x + 15.0f, panel1Pos.y + 60.0f));
@@ -9049,7 +9471,7 @@ void ModMenu::RunCustomInGameMenu() {
             ImGui::PopStyleColor();
             
             if (hasPanel2) {
-                
+                // COLUMN 2: VOTING & POLICE
                 drawPanel(panel2Pos, panel2Size, g_DashboardActiveCol == 2, "VOTING & POLICE");
                 
                 ImGui::SetCursorScreenPos(ImVec2(panel2Pos.x + 15.0f, panel2Pos.y + 60.0f));
@@ -9065,8 +9487,8 @@ void ModMenu::RunCustomInGameMenu() {
             }
         }
         else if (g_ActiveTab == 3) {
-            
-            
+            // --- TAB 3: SETTINGS ---
+            // COLUMN 1: PLAYER SETUP & SETTINGS
             drawPanel(panel1Pos, panel1Size, g_DashboardActiveCol == 1, hasPanel2 ? "PLAYER SETUP & SETTINGS" : "GAME SETTINGS");
             
             struct KeybindItem {
@@ -9086,11 +9508,13 @@ void ModMenu::RunCustomInGameMenu() {
                 { "Team Chat", "CHAT_TEAM", nullptr },
                 { "Toggle Console", "CONSOLE_TOGGLE", nullptr },
                 { "Take Screenshot", "SCREENSHOT", nullptr },
-                { "Pause Game", "PAUSE", nullptr }
-                
-                
-                
-                
+                { "Pause Game", "PAUSE", nullptr },
+#if !PUBLIC_BUILD
+                { "Perfect Turn Left", "CYCLE_PERFECT_LEFT", nullptr },
+                { "Perfect Turn Right", "CYCLE_PERFECT_RIGHT", nullptr },
+                { "AutoEscape Left", "CYCLE_AUTOESCAPE_LEFT", nullptr },
+                { "AutoEscape Right", "CYCLE_AUTOESCAPE_RIGHT", nullptr }
+#endif
             };
             
             for (auto& b : binds) {
@@ -9128,7 +9552,7 @@ void ModMenu::RunCustomInGameMenu() {
                     
                     std::string btnLabel = getBindsString(b.act);
                     if (s_BindingAction == b.act) {
-                        btnLabel = "PRESS ANY KEY (ESC TO CLEAR)";
+                        btnLabel = "PRESS KEY TO BIND (ESC TO CLEAR ALL)";
                     }
                     
                     ImGui::SetNextItemWidth(colW - 55.0f);
@@ -9144,7 +9568,7 @@ void ModMenu::RunCustomInGameMenu() {
             ImGui::PopStyleColor();
             
             if (hasPanel2) {
-                
+                // COLUMN 2: KEYBINDINGS
                 drawPanel(panel2Pos, panel2Size, g_DashboardActiveCol == 2, "KEYBINDINGS");
                 
                 ImGui::SetCursorScreenPos(ImVec2(panel2Pos.x + 15.0f, panel2Pos.y + 60.0f));
@@ -9157,7 +9581,7 @@ void ModMenu::RunCustomInGameMenu() {
                     
                     std::string btnLabel = getBindsString(b.act);
                     if (s_BindingAction == b.act) {
-                        btnLabel = "PRESS ANY KEY (ESC TO CLEAR)";
+                        btnLabel = "PRESS KEY TO BIND (ESC TO CLEAR ALL)";
                     }
                     
                     ImGui::SetNextItemWidth(colW - 55.0f);
@@ -9190,8 +9614,20 @@ void ModMenu::RunCustomInGameMenu() {
 
         }
         
-        
+        // Render modals/popups
         RenderModMenuModals();
+        
+        // Draw the embedded media player card below the in-game pause menu card
+        MediaWidget* media = MediaWidget::GetInstance();
+        if (media) {
+            float bottomGap = io.DisplaySize.y - (cardPos.y + cardSize.y);
+            float mediaY = cardPos.y + cardSize.y + (bottomGap - 125.0f) * 0.5f;
+            if (mediaY + 125.0f > io.DisplaySize.y - 10.0f) {
+                mediaY = io.DisplaySize.y - 125.0f - 10.0f;
+            }
+            ImVec2 mediaPos(cardPos.x + (cardSize.x - 380.0f) * 0.5f, mediaY);
+            media->Draw(ImGui::GetForegroundDrawList(), mediaPos, 1.0f);
+        }
         
         ImGui::End();
         ImGui::PopStyleColor(2);
@@ -9228,7 +9664,7 @@ void ModMenu::RunCustomInGameMenu() {
     su_ClearKeys();
     ModMenu::g_InGameMenuOpen = false;
     while (su_GetSDLInput(purgeEvent)) {
-        
+        // Discard
     }
     SDL_HideCursor();
     if (currentScreensetting.fullscreen || su_mouseGrab) {

@@ -658,7 +658,7 @@ void sg_TopologyPoliceCheck( gCycle* cycle, eWall* oldWall, gPlayerWall* newWall
         std::stringstream filename;
         if ( cycle && cycle->Player() )
         {
-            filename << cycle->Player()->GetPlayerUserName() << "_";
+            filename << cycle->Player()->GetUserName() << "_";
         }
         filename << "topology";
         std::ofstream f( filename.str().c_str(), std::ios::app );
@@ -1145,7 +1145,8 @@ void gNetPlayerWall::RenderNormal(const eCoord &p1,const eCoord &p2,REAL ta,REAL
             }
         }
     }
-    REAL h=1;
+    extern REAL sg_modWallHeightMultiplier;
+    REAL h=sg_modWallHeightMultiplier;
 
 
     if (hfrac>0){
@@ -1313,7 +1314,8 @@ void gNetPlayerWall::RenderBegin(const eCoord &p1,const eCoord &pp2,REAL ta,REAL
         }
     }
 
-    REAL h=1;
+    extern REAL sg_modWallHeightMultiplier;
+    REAL h=sg_modWallHeightMultiplier;
 
     eCoord ppos=cycle_->PredictPosition() - cycle_->dir*REAL(gCYCLE_LEN);
 

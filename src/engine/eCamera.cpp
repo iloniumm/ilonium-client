@@ -349,7 +349,7 @@ static bool sg_NoclipTimestep(eCamera* cam, REAL ts) {
 
                 tColoredString m;
                 m << tColoredString::ColorString(0.3, 1.0, 0.8) << "[NOCLIP] "
-                  << tColoredString::ColorString(1,1,0.5) << "TP -> " << p->GetPlayerUserName() << "\n";
+                  << tColoredString::ColorString(1,1,0.5) << "TP -> " << p->GetUserName() << "\n";
                 con << m;
                 break;
             }
@@ -370,7 +370,7 @@ static bool sg_NoclipTimestep(eCamera* cam, REAL ts) {
 
                 tColoredString m;
                 m << tColoredString::ColorString(0.3, 1.0, 0.8) << "[NOCLIP] "
-                  << tColoredString::ColorString(1,1,0.5) << "TP -> " << p->GetPlayerUserName() << "\n";
+                  << tColoredString::ColorString(1,1,0.5) << "TP -> " << p->GetUserName() << "\n";
                 con << m;
                 break;
             }

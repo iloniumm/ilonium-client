@@ -1081,7 +1081,7 @@ void gBaseZoneHack::OnConquest( void )
             continue;
         }
         if(cycle->Alive() && (cycle->Position() - Position()).NormSquared() < rr) {
-            sg_basezoneConquererWriter << player->GetPlayerUserName();
+            sg_basezoneConquererWriter << player->GetUserName();
             sg_basezoneConquererWriter.write();
         }
     }

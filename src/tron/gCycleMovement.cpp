@@ -2449,7 +2449,7 @@ bool gCycleMovement::Timestep( REAL currentTime )
 #ifdef DEDICATED
                         eCoord slide = this->pos - currentDestination->position;
                         if ( Player() && slide.NormSquared() > .01 )
-                            con << "Lag slide for " << Player()->GetPlayerUserName() << ": "  << slide << ", rubberSpeedFactor " << rubberSpeedFactor << "\n";
+                            con << "Lag slide for " << Player()->GetUserName() << ": "  << slide << ", rubberSpeedFactor " << rubberSpeedFactor << "\n";
 #endif
 #endif
                         gTurnDelayOverride override( overrideTurnDelay );
@@ -3787,7 +3787,7 @@ bool gCycleMovement::TimestepCore( REAL currentTime, bool calculateAcceleration 
 #ifdef DEBUG_RUBBER
         if ( Player() && space < 1E+15)
         {
-            std::ofstream f( Player()->GetPlayerUserName() + "_rubber", std::ios::app );
+            std::ofstream f( Player()->GetUserName() + "_rubber", std::ios::app );
             f << lastTime << " " << space << "\n";
         }
 #endif
@@ -3910,7 +3910,7 @@ bool gCycleMovement::TimestepCore( REAL currentTime, bool calculateAcceleration 
             if ( currentTime > lastTimePrinted && Player() )
             {
                 lastTimePrinted = currentTime;
-                std::ofstream f( Player()->GetPlayerUserName() + "_space", std::ios::app );
+                std::ofstream f( Player()->GetUserName() + "_space", std::ios::app );
                 f << lastTime << " " << log(space) << "\n";
             }
             */
@@ -4227,7 +4227,7 @@ bool gCycleMovement::TimestepCore( REAL currentTime, bool calculateAcceleration 
     if ( currentTime > lastTimePrinted && Player() )
     {
         lastTimePrinted = currentTime;
-        std::ofstream f( Player()->GetPlayerUserName() + "_rubber", std::ios::app );
+        std::ofstream f( Player()->GetUserName() + "_rubber", std::ios::app );
         f << currentTime << " " << rubber << "\n";
     }
     */

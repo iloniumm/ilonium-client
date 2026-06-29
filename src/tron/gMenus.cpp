@@ -1,4 +1,29 @@
+/*
 
+*************************************************************************
+
+ArmageTron -- Just another Tron Lightcycle Game in 3D.
+Copyright (C) 2000  Manuel Moos (manuel@moosnet.de)
+
+**************************************************************************
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+  
+***************************************************************************
+
+*/
 
 #include "gMenus.h"
 #include "ePlayer.h"
@@ -22,8 +47,8 @@
 #include <array>
 #include <memory>
 
-
-
+// ============ MOD SETTINGS ============
+// Console variables for mod features — settable via console and saved to config
 bool sg_modWaypointsEnabled = true;
 bool sg_modWaypointsEnemyWalls = false;
 REAL sg_modWaypointsMinRubber = 3.0f;
@@ -36,6 +61,7 @@ bool sg_modClassicRubberBatteryEnabled = true;
 REAL sg_modMinimapScale = 1.0f;
 REAL sg_modMinimapZoom = 1.0f;
 bool sg_modMinimapRotate = false;
+REAL sg_modMinimapRotateSpeed = 10.0f;
 bool sg_modProximityWarning = true;
 bool sg_modZoneTimers = true;
 bool sg_modCutoffAimbot = true;
@@ -58,15 +84,19 @@ bool sg_modColorPicker = true;
 bool sg_modKillSoundsEnabled = true;
 int  sg_modKillAnnouncerPack = 0;
 
-
+// [MOD] Visual Overhaul Settings definitions
 bool sg_modParticleSystemEnabled = true;
 int  sg_modDeathParticlesCount = 150;
 bool sg_modScreenShakeEnabled = true;
 REAL sg_modScreenShakeIntensity = 0.5f;
 bool sg_modAmbientParticlesEnabled = true;
+int sg_modAmbientParticlesMode = 0;
+int sg_modAmbientParticlesMin = 50;
+int sg_modAmbientParticlesMax = 200;
 bool sg_modTrailGradientEnabled = true;
 REAL sg_modTrailAlphaTop = 0.8f;
 REAL sg_modTrailAlphaBottom = 0.0f;
+REAL sg_modWallHeightMultiplier = 1.0f;
 
 tString sg_activeCameraConfig;
 static tConfItemLine sg_activeCameraConfigConf("MOD_ACTIVE_CAMERA_CONFIG", sg_activeCameraConfig);
@@ -86,6 +116,7 @@ static tConfItem<bool> sg_modClassicRubberBatteryEnabledConf("MOD_CLASSIC_RUBBER
 static tConfItem<REAL> sg_modMinimapScaleConf("MOD_MINIMAP_SCALE", sg_modMinimapScale);
 static tConfItem<REAL> sg_modMinimapZoomConf("MOD_MINIMAP_ZOOM", sg_modMinimapZoom);
 static tConfItem<bool> sg_modMinimapRotateConf("MOD_MINIMAP_ROTATE", sg_modMinimapRotate);
+static tConfItem<REAL> sg_modMinimapRotateSpeedConf("MOD_MINIMAP_ROTATE_SPEED", sg_modMinimapRotateSpeed);
 static tConfItem<bool> sg_modProximityWarningConf("MOD_PROXIMITY_WARNING", sg_modProximityWarning);
 static tConfItem<bool> sg_modZoneTimersConf("MOD_ZONE_TIMERS", sg_modZoneTimers);
 static tConfItem<bool> sg_modCutoffAimbotConf("MOD_CUTOFF_AIMBOT", sg_modCutoffAimbot);
@@ -97,10 +128,10 @@ static tConfItem<int>  sg_modPathRangeConf("MOD_PATH_RANGE", sg_modPathRange);
 static tConfItem<bool> sg_modScoreboardEnabledConf("MOD_SCOREBOARD", sg_modScoreboardEnabled);
 static tConfItem<bool> sg_modAnti360LockEnabledConf("ANTI_360_LOCK_ENABLED", sg_modAnti360LockEnabled);
 static tConfItem<bool> sg_modChatCalcEnabledConf("MOD_CHAT_CALC", sg_modChatCalcEnabled);
-
+static tConfItem<bool> sg_modTrashTalkEnabledConf("MOD_TRASH_TALK", sg_modTrashTalkEnabled);
 static tConfItem<bool> sg_modKDEnabledConf("MOD_KD_COUNTER", sg_modKDEnabled);
 static tConfItem<bool> sg_modAutoGreetConf("MOD_AUTO_GREET", sg_modAutoGreet);
-
+static tConfItem<bool> sg_modFriendlyChatConf("MOD_FRIENDLY_CHAT", sg_modFriendlyChat);
 static tConfItem<bool> sg_modColorPickerConf("MOD_COLOR_PICKER", sg_modColorPicker);
 static tConfItem<bool> sg_modKillSoundsEnabledConf("MOD_KILL_SOUNDS_ENABLED", sg_modKillSoundsEnabled);
 static tConfItem<int>  sg_modKillAnnouncerPackConf("MOD_KILL_ANNOUNCER_PACK", sg_modKillAnnouncerPack);
@@ -109,18 +140,20 @@ static tConfItem<int>  sg_modDeathParticlesCountConf("MOD_DEATH_PARTICLES_COUNT"
 static tConfItem<bool> sg_modScreenShakeEnabledConf("MOD_SCREEN_SHAKE_ENABLED", sg_modScreenShakeEnabled);
 static tConfItem<REAL> sg_modScreenShakeIntensityConf("MOD_SCREEN_SHAKE_INTENSITY", sg_modScreenShakeIntensity);
 static tConfItem<bool> sg_modAmbientParticlesEnabledConf("MOD_AMBIENT_PARTICLES_ENABLED", sg_modAmbientParticlesEnabled);
+static tConfItem<int> sg_modAmbientParticlesModeConf("MOD_AMBIENT_PARTICLES_MODE", sg_modAmbientParticlesMode);
+static tConfItem<int> sg_modAmbientParticlesMinConf("MOD_AMBIENT_PARTICLES_MIN", sg_modAmbientParticlesMin);
+static tConfItem<int> sg_modAmbientParticlesMaxConf("MOD_AMBIENT_PARTICLES_MAX", sg_modAmbientParticlesMax);
 static tConfItem<bool> sg_modTrailGradientEnabledConf("MOD_TRAIL_GRADIENT_ENABLED", sg_modTrailGradientEnabled);
 static tConfItem<REAL> sg_modTrailAlphaTopConf("MOD_TRAIL_ALPHA_TOP", sg_modTrailAlphaTop);
 static tConfItem<REAL> sg_modTrailAlphaBottomConf("MOD_TRAIL_ALPHA_BOTTOM", sg_modTrailAlphaBottom);
+static tConfItem<REAL> sg_modWallHeightMultiplierConf("MOD_WALL_HEIGHT_MULTIPLIER", sg_modWallHeightMultiplier);
 
 
-
+// ---- Sub-menu: Combat ----
 static void sg_ModCombatMenu() {
-    volatile unsigned long long _salt = 0x496c6f6e61ULL;
-
     uMenu sub("Combat Settings");
 
-    
+    // Pull in the anti-360 time window from gCycle.cpp
     extern REAL sn_anti360Window;
 
     static int anti360WindowInt;
@@ -154,10 +187,8 @@ static void sg_ModCombatMenu() {
     if (sn_anti360Window < 0.1f) sn_anti360Window = 0.1f;
 }
 
-
+// ---- Sub-menu: Fortress & Alerts ----
 static void sg_ModFortressMenu() {
-    volatile unsigned long long _salt = 0x496c6f6e61ULL;
-
     uMenu sub("Fortress & Alerts");
 
     uMenuItemToggle t4(&sub,
@@ -183,15 +214,17 @@ static void sg_ModFortressMenu() {
     sub.Enter();
 }
 
-
+// ---- Sub-menu: Minimap ----
 static void sg_ModMinimapMenu() {
-    volatile unsigned long long _salt = 0x496c6f6e61ULL;
-
     uMenu sub("Minimap Settings");
 
-    static int minimapScaleInt, minimapZoomInt;
+    static int minimapScaleInt, minimapZoomInt, minimapRotateSpeedInt;
     minimapScaleInt = (int)(sg_modMinimapScale * 10.0f);
     minimapZoomInt = (int)(sg_modMinimapZoom * 10.0f);
+    minimapRotateSpeedInt = (int)sg_modMinimapRotateSpeed;
+
+    uMenuItemInt rotSpeed(&sub, "Rotation Speed",
+        "Speed of minimap rotation (1-30). Higher is faster/more instant", minimapRotateSpeedInt, 1, 30);
 
     uMenuItemToggle rotate(&sub, "Rotate With Player",
         "Rotate minimap smoothly to match player direction", sg_modMinimapRotate);
@@ -211,12 +244,12 @@ static void sg_ModMinimapMenu() {
     if (sg_modMinimapScale < 0.1f) sg_modMinimapScale = 0.1f;
     sg_modMinimapZoom = (REAL)minimapZoomInt / 10.0f;
     if (sg_modMinimapZoom < 1.0f) sg_modMinimapZoom = 1.0f;
+    sg_modMinimapRotateSpeed = (REAL)minimapRotateSpeedInt;
+    if (sg_modMinimapRotateSpeed < 1.0f) sg_modMinimapRotateSpeed = 1.0f;
 }
 
-
+// ---- Sub-menu: Pathfinding ----
 static void sg_ModPathfindingMenu() {
-    volatile unsigned long long _salt = 0x496c6f6e61ULL;
-
     uMenu sub("Pathfinding Settings");
 
     static int pathDepthInt, pathRangeInt;
@@ -238,10 +271,8 @@ static void sg_ModPathfindingMenu() {
     sg_modPathRange = pathRangeInt;
 }
 
-
+// ---- Sub-menu: Waypoints ----
 static void sg_ModWaypointsMenu() {
-    volatile unsigned long long _salt = 0x496c6f6e61ULL;
-
     uMenu sub("Waypoint Settings");
 
     static int minRubberInt, cooldownInt, lifetimeInt;
@@ -271,13 +302,11 @@ static void sg_ModWaypointsMenu() {
     sg_modWaypointsLifetime = (REAL)lifetimeInt;
 }
 
-
+// ---- Sub-menu: Perfect Turn & AutoEscape ----
 static void sg_ModPerfectTurnMenu() {
-    volatile unsigned long long _salt = 0x496c6f6e61ULL;
-
     uMenu sub("Perfect Turn & AutoEscape");
 
-    
+    // Pull in the config vars from gCycle.cpp
     extern REAL sg_perfectTurnCalibration;
     extern REAL sg_autoEscapeRubberMargin;
     extern bool sg_autoEscapePingComp;
@@ -307,8 +336,8 @@ static void sg_ModPerfectTurnMenu() {
     sg_autoEscapeRubberMargin = (REAL)marginInt / 100.0f;
 }
 
-
-
+// ============ NOCLIP SETTINGS ============
+// Externs from eCamera.cpp
 extern REAL sg_noclipSpeed;
 extern REAL sg_noclipSlowFactor;
 extern REAL sg_noclipMouseSens;
@@ -327,7 +356,7 @@ extern int sg_noclipKeyFollow;
 extern int sg_noclipKeyNextPl;
 extern int sg_noclipKeyPrevPl;
 extern int sg_noclipKeySlow;
-
+// Cinematic externs
 extern bool sg_noclipCinematic;
 extern int sg_noclipKeyToggle;
 extern int sg_noclipKeyCinematic;
@@ -398,7 +427,7 @@ public:
 static void sg_NoclipControlsMenu() {
     uMenu sub("Noclip Controls");
 
-    
+    // Cinematic keybinds
     new uMenuItemModKey(&sub, "Toggle Noclip Key", "Enter/Exit spectator mode",          sg_noclipKeyToggle);
     new uMenuItemModKey(&sub, "Zone Focus Key",    "Cycle camera look toward active zones",  sg_noclipKeyZoneFocus);
     extern int sg_noclipKeyMapCenter;
@@ -407,14 +436,14 @@ static void sg_NoclipControlsMenu() {
     new uMenuItemModKey(&sub, "Orbit Camera Key",  "Toggle auto-orbit around player",    sg_noclipKeyOrbit);
     new uMenuItemModKey(&sub, "Clean Screen Key",  "Toggle clean screen (hide ALL HUD)", sg_noclipKeyCinematic);
     
-    
+    // Console toggle
     extern bool sg_noclipHideConsole;
     new uMenuItemToggle(&sub, "Hide Console in Cinematic", "Hide the chat/console when Clean Screen is active", sg_noclipHideConsole);
 
     extern bool sg_noclipHideNames;
     new uMenuItemToggle(&sub, "Hide Names in Cinematic", "Hide player names and rubber gauge when Clean Screen is active", sg_noclipHideNames);
 
-    
+    // Navigation keybinds
     new uMenuItemModKey(&sub, "Slow Fly Key",       "Hold to fly slowly", sg_noclipKeySlow);
     new uMenuItemModKey(&sub, "Prev Player Key",    "Teleport to previous player", sg_noclipKeyPrevPl);
     new uMenuItemModKey(&sub, "Next Player Key",    "Teleport to next player", sg_noclipKeyNextPl);
@@ -478,7 +507,7 @@ static void sg_NoclipCinematicMenu() {
 static void sg_NoclipSettingsMenu() {
     uMenu sub("Noclip Spectator Settings");
 
-    
+    // Speed as int for easier slider
     int speedInt = (int)sg_noclipSpeed;
     int sensInt  = (int)(sg_noclipMouseSens * 10000);
     int slowInt  = (int)(sg_noclipSlowFactor * 100);
@@ -505,10 +534,8 @@ static void sg_NoclipSettingsMenu() {
     sg_noclipSlowFactor = (REAL)slowInt / 100.0;
 }
 
-
+// ---- Main Mod Menu ----
 void sg_ModSettingsMenu() {
-    volatile unsigned long long _salt = 0x496c6f6e61ULL;
-
     uMenu mod_menu("Ilona's Mod Menu");
 
     uMenuItemToggle battery(&mod_menu, "Rubber Battery Indicator",
@@ -532,8 +559,8 @@ void sg_ModSettingsMenu() {
     uMenuItemFunction fc(&mod_menu, "Combat Settings >>",
         "Cut-off predictor, proximity warning, gauges", sg_ModCombatMenu);
 
-    
-    
+    uMenuItemFunction fpt(&mod_menu, "Perfect Turn & AutoEscape >>",
+        "Configure perfect turn timing and auto-escape rubber triggers", sg_ModPerfectTurnMenu);
 
     uMenuItemFunction fnoclip(&mod_menu, "Noclip Spectator >>",
         "Flight speed, mouse sensitivity, keybinds, slow mode", &sg_NoclipSettingsMenu);
@@ -541,8 +568,8 @@ void sg_ModSettingsMenu() {
     uMenuItemToggle calcToggle(&mod_menu, "Chat Calculator Bot",
         "Auto-reply to math expressions in chat (e.g. 2+2, sin(45))", sg_modChatCalcEnabled);
 
-    
-    
+    uMenuItemToggle trashToggle(&mod_menu, "AI Trash Talker",
+        "Auto trash talk based on game events and chat keywords", sg_modTrashTalkEnabled);
 
     uMenuItemToggle kdToggle(&mod_menu, "K/D Counter HUD",
         "Show kills/deaths/KD ratio on screen (top-left)", sg_modKDEnabled);
@@ -550,15 +577,15 @@ void sg_ModSettingsMenu() {
     uMenuItemToggle greetToggle(&mod_menu, "Auto-Greet on Join",
         "Automatically greet when joining a server", sg_modAutoGreet);
 
-    
-    
+    uMenuItemToggle friendlyToggle(&mod_menu, "Friendly Auto-Responder",
+        "Polite responses only (gg, wp, gf, hi, bb) - safe for competitive", sg_modFriendlyChat);
 
     uMenuItemToggle colorPickToggle(&mod_menu, "Color Picker (chat: color NAME)",
         "Type 'color NAME' in chat to see player RGB. 'color NAME apply' to copy.", sg_modColorPicker);
 
     mod_menu.Enter();
 }
-
+// ============ END MOD SETTINGS ============
 
 static tConfItem<int>   tm0("TEXTURE_MODE_0",rTextureGroups::TextureMode[0]);
 static tConfItem<int>   tm1("TEXTURE_MODE_1",rTextureGroups::TextureMode[1]);
@@ -595,10 +622,10 @@ static tConfItemLine c_ext("GL_EXTENSIONS",gl_extensions);
 static tConfItemLine c_ver("GL_VERSION",gl_version);
 static tConfItemLine c_rEnd("GL_RENDERER",gl_renderer);
 static tConfItemLine c_vEnd("GL_VENDOR",gl_vendor);
+// static tConfItemLine a_ver("ARMAGETRON_VERSION",sn_programVersion);
 
-
-static std::deque<tString> sg_consoleHistory; 
-static int sg_consoleHistoryMaxSize=10; 
+static std::deque<tString> sg_consoleHistory; // global since the class doesn't live beyond the execution of the command
+static int sg_consoleHistoryMaxSize=10; // size of the console history
 static tSettingItem< int > sg_consoleHistoryMaxSizeConf("HISTORY_SIZE_CONSOLE",sg_consoleHistoryMaxSize);
 
 class ArmageTron_feature_menuitem: public uMenuItemSelection<int>{
@@ -670,7 +697,7 @@ static tConfItem<bool>    ss("SMOOTH_SHADING",sr_smoothShading);
 static tConfItem<bool>    to("TEXT_OUT",sr_textOut);
 static tConfItem<bool>    fps("SHOW_FPS",sr_FPSOut);
 static tConfItem<bool>    pbt("SHOW_RECORDING_TIME",sr_RecordingTimeOut);
-
+// tConfItem<> ("",&);
 static tConfItem<int> fm("FLOOR_MIRROR",sr_floorMirror);
 static tConfItem<int> fd("FLOOR_DETAIL",sr_floorDetail);
 static tConfItem<bool> hr("HIGH_RIM",sr_highRim);
@@ -705,10 +732,10 @@ bool operator < ( rScreenSize const & a, rScreenSize const & b )
 
 class gResMenEntry
 {
-    uMenuItemSelection<rScreenSize> res_men; 
-    std::set< rScreenSize > sizes;           
+    uMenuItemSelection<rScreenSize> res_men; // menu item
+    std::set< rScreenSize > sizes;           // set of already added modes
 
-    
+    // adds a single custom screen resolution
     void NewChoice( rScreenSize const & size )
     {
         if ( sizes.find( size ) == sizes.end() )
@@ -717,7 +744,7 @@ class gResMenEntry
         }
     }
 
-    
+    // adds a single predefined resolution
     void NewChoice( rResolution res )
     {
         rScreenSize size( res );
@@ -733,7 +760,7 @@ public:
              res)
     {
 #ifndef DEDICATED
-        
+        // SDL3: use SDL_GetFullscreenDisplayModes instead of SDL_ListModes
         SDL_DisplayID displayID = SDL_GetPrimaryDisplay();
         int numModes = 0;
         SDL_DisplayMode** modes = SDL_GetFullscreenDisplayModes( displayID, &numModes );
@@ -741,7 +768,7 @@ public:
         int i;
         if( !modes || numModes == 0 )
         {
-            
+            // No fullscreen modes found; add all fixed resolutions
             for ( i = ArmageTron_Custom; i>=0; --i )
             {
                 NewChoice( rResolution(i) );
@@ -749,10 +776,10 @@ public:
         }
         else
         {
-            
+            // add custom resolution
             NewChoice( ArmageTron_Custom );
 
-            
+            // add desktop resolution
             if ( sr_DesktopScreensizeSupported() && !addFixed )
                 NewChoice( ArmageTron_Desktop );
 
@@ -779,7 +806,7 @@ public:
             }
         }
 
-        
+        // insert sorted resolutions into menu
         for( std::set< rScreenSize >::iterator iter = sizes.begin(); iter != sizes.end(); ++iter )
             {
                 rScreenSize const & size = *iter;
@@ -819,10 +846,10 @@ static void sg_ScreenModeMenu()
      "$screen_check_errors_help",
      currentScreensetting.checkErrors);
 
-    
+    // frame rate limit
     std::unique_ptr<uMenuItem> zfm_t;
     {
-        
+        // list of hand-picked MAX_FPS values
         std::array<int, 17> pickableLimits{0, 20, 30, 40, 60, 80, 100, 120, 180, 240, 300, 360, 480, 600, 720, 900, 1200};
         bool pickable = false;
         for (auto const limit : pickableLimits)
@@ -833,7 +860,7 @@ static void sg_ScreenModeMenu()
 
         if (pickable)
         {
-            
+            // current value is in pickable list. create selection menu item
             auto zmf_t_p = new uMenuItemSelection<int>(&screen_menu_mode,
                                                        "$screen_max_fps_text",
                                                        "$max_fps_help",
@@ -852,7 +879,7 @@ static void sg_ScreenModeMenu()
         }
         else
         {
-            
+            // fallback to ranged item
             zfm_t.reset(new uMenuItemInt(&screen_menu_mode, "$screen_max_fps_text", "$max_fps_help", sr_maxFPS, 0, 9990, 10));
         }
     }
@@ -864,7 +891,7 @@ static void sg_ScreenModeMenu()
      "$screen_use_sdl_text",
      "$screen_use_sdl_help",
      currentScreensetting.useSDL);
-#endif 
+#endif // dirty
 
 #if SDL_VERSION_ATLEAST(1, 2, 10)
     uMenuItemSelection<rVSync> zvs_t
@@ -878,9 +905,9 @@ static void sg_ScreenModeMenu()
     uSelectEntry<rVSync> zvs_off(zvs_t,"$screen_vsync_off_text","$screen_vsync_off_help",ArmageTron_VSync_Off);
 #ifdef HAVE_GLEW
     uSelectEntry<rVSync> zvs_blur(zvs_t,"$screen_vsync_motionblur_text","$screen_vsync_motionblur_help",ArmageTron_VSync_MotionBlur);
-#endif 
-#endif 
-#endif 
+#endif // HAVE_GLEW
+#endif // SDL_GL_SWAP_CONTROL
+#endif // SDL_OPENGL
 
     uMenuItemToggle gm(
         &screen_menu_mode,
@@ -918,7 +945,29 @@ static void sg_ScreenModeMenu()
     gResMenEntry res( screen_menu_mode, currentScreensetting.res, "$screen_resolution_text", "$screen_resolution_help", false );
     gResMenEntry winsize( screen_menu_mode, currentScreensetting.windowSize, "$window_size_text", "$window_size_help", true );
 
-    
+    /*
+    uMenuItemSelection<rResolution> res_men
+    (&screen_menu_mode,
+     "$screen_resolution_text",
+     "$screen_resolution_help",
+     currentScreensetting.res);
+
+
+    uSelectEntry<rResolution> a(res_men,"320x200","",ArmageTron_320_200);
+     static uSelectEntry<rResolution> b(res_men,"320x240","",ArmageTron_320_240);
+    static uSelectEntry<rResolution> c(res_men,"400x300","",ArmageTron_400_300);
+    static uSelectEntry<rResolution> d(res_men,"512x384","",ArmageTron_512_384);
+    static uSelectEntry<rResolution> e(res_men,"640x480","",ArmageTron_640_480);
+    static uSelectEntry<rResolution> f(res_men,"800x600","",ArmageTron_800_600);
+    static uSelectEntry<rResolution> g(res_men,"1024x768","",ArmageTron_1024_768);
+    static uSelectEntry<rResolution> h(res_men,"1280x1024","",ArmageTron_1280_1024);
+    static uSelectEntry<rResolution> i(res_men,"1600x1200","",ArmageTron_1600_1200);
+    static uSelectEntry<rResolution> j(res_men,"2048x1572","",ArmageTron_2048_1572);
+    static uSelectEntry<rResolution> jj(res_men,
+    				    "$screen_custom_text",
+    				    "$screen_custom_help"
+    				    ,ArmageTron_Custom);
+    */
 
     screen_menu_mode.Enter();
 }
@@ -948,7 +997,7 @@ static uMenuItemToggle fs_dither
  sr_dither);
 
 #ifndef DEDICATED
-
+// from gWall.cpp
 extern bool sg_simpleTrail;
 static uMenuItemToggle sgm_simpleTrail
 (&screen_menu_detail,
@@ -986,17 +1035,19 @@ static uMenuItemToggle  ssm
  "$detail_smooth_help",
  sr_smoothShading);
 
-extern bool crash_sparks;		
-extern bool white_sparks;		
+extern bool crash_sparks;		// from gCycle.cpp
+extern bool white_sparks;		// from gSparks.cpp
 static tConfItem<bool> cs2("SPARKS",crash_sparks);
 static tConfItem<bool> wsp("WHITE_SPARKS",white_sparks);
 
-extern bool sg_crashExplosion;   
+extern bool sg_crashExplosion;   // from gExplosion.cpp
 static tConfItem<bool> crexp("EXPLOSION",sg_crashExplosion);
+extern bool sg_explosionSingleLineUp;
+static tConfItem<bool> crexpsl("EXPLOSION_SINGLE_LINE_UP", sg_explosionSingleLineUp);
 
 #ifndef DEDICATED
-
-
+//extern bool png_screenshot;		// from rSysdep.cpp
+//static tConfItem<bool> pns("PNG_SCREENSHOT",png_screenshot);
 
 static uMenuItemToggle  t32b
 (&screen_menu_detail,"$detail_text_truecolor_text",
@@ -1086,7 +1137,18 @@ static uSelectEntry<rSysDep::rSwapMode> swapMode_fastest(swapMode,"$swapmode_fas
 static uSelectEntry<rSysDep::rSwapMode> swapMode_glFlush(swapMode,"$swapmode_glflush_text","$swapmode_glflush_help",rSysDep::rSwap_glFlush);
 static uSelectEntry<rSysDep::rSwapMode> swapMode_glFinish(swapMode,"$swapmode_glfinish_text","$swapmode_glfinish_help",rSysDep::rSwap_glFinish);
 
+/*
+uMenuItemSelection<int> targetFPS
+(&screen_menu_tweaks,
+ "$targetfps_text",
+ "$targetfps_help",
+rSysDep::swapMode_);
 
+static uSelectEntry<rSysDep::rSwapMode> swapMode_150Hz(swapMode,"$swapmode_150hz_text","$swapmode_150hz_help",rSysDep::rSwap_150Hz);
+static uSelectEntry<rSysDep::rSwapMode> swapMode_100Hz(swapMode,"$swapmode_100hz_text","$swapmode_100hz_help",rSysDep::rSwap_100Hz);
+static uSelectEntry<rSysDep::rSwapMode> swapMode_80Hz(swapMode,"$swapmode_80hz_text","$swapmode_80hz_help",rSysDep::rSwap_80Hz);
+static uSelectEntry<rSysDep::rSwapMode> swapMode_60Hz(swapMode,"$swapmode_60hz_text","$swapmode_60hz_help",rSysDep::rSwap_60Hz);
+*/
 
 tCONFIG_ENUM( rSysDep::rSwapMode );
 
@@ -1180,7 +1242,7 @@ public:
 
     virtual ~gMemuItemConsole(){}
 
-    
+    //virtual void Render(REAL x,REAL y,REAL alpha=1,bool selected=0);
 
     virtual bool Event(SDL_Event &e){
 
@@ -1189,10 +1251,10 @@ public:
 
             con << tColoredString::ColorString(.5,.5,1) << " > " << *content << '\n';
 
-            
+            // direct commands are executed at owner level
             tCurrentAccessLevel level( tAccessLevel_Owner, true );
 
-            
+            // pass the console command to the configuration system
             std::stringstream s(&((*content)[0]));
             tConfItemBase::LoadAll( s, false );
 
@@ -1371,8 +1433,16 @@ public:
 
 
     virtual void RenderBackground(){
-        
-        
+        //    static int count=0;
+        /*
+        while(rgb[0]+rgb[1]+rgb[2]<13){
+          if (rgb[count]<15)
+        rgb[count]++;
+          count++;
+          if (count>2)
+        count=0;
+        }
+        */
 #ifndef DEDICATED
         uMenuItem::RenderBackground();
         if (!sr_glOut)
@@ -1402,7 +1472,7 @@ void sg_PlayerMenu(int Player){
 
     uMenu camera_menu("$player_camera_text");
     uMenu chat_menu("$player_chat_text");
-    
+    //  name.Clear();
     chat_menu.SetCenter(-.5);
 
     uMenuItemString *ic[MAX_INSTANT_CHAT];
@@ -1573,7 +1643,7 @@ void sg_PlayerMenu(int Player){
         delete ic[i];
 
 
-    
+    // request network synchronisation if the server can handle it
     static nVersionFeature inGameRenames( 5 );
     if ( inGameRenames.Supported() )
     {
@@ -1581,7 +1651,17 @@ void sg_PlayerMenu(int Player){
         ePlayer::SendAuthNames();
     }
 
-    
+    /*
+    for (i=MAX_PLAYERS-1; i>=0; i--)
+    {
+        if (ePlayer::PlayerIsInGame(i))
+        {
+            ePlayer* p = ePlayer::PlayerConfig(i);
+            if (p->netPlayer)
+                p->netPlayer->RequestSync();
+        }
+    }
+    */
 }
 
 
@@ -1592,8 +1672,8 @@ VOIDFUNC viewport_menu_x;
 
 
 
-
-
+// from gGame.C
+//extern int pingCharity;
 
 
 void sg_PlayerMenu(){
@@ -1628,7 +1708,7 @@ void sg_PlayerMenu(){
 
     Player_men.Enter();
 
-    
+    //  ePlayerNetID::Update();
     for(i=MAX_VIEWPORTS-1;i>=0;i--){
         delete names[i];
     }
@@ -1647,7 +1727,7 @@ void viewport_menu_x(void){
         select[i]=new ArmageTronPlayer_to_viewport_menuitem(&sg_PlayerMenu,i);
     }
 
-    
+    // ArmageTron_viewport_menuitem vp(&sg_PlayerMenu);
 
     sg_PlayerMenu.Enter();
 
@@ -1686,12 +1766,12 @@ static bool toggle_fullscreen_func( REAL x )
 {
 #ifndef DEDICATED
 #ifdef DEBUG
-    
+    // don't toggle fullscreen while playing back in debug mode, that's annoying
     if ( tRecorder::IsPlayingBack() )
         return true;
 #endif
 
-    
+    // only do anything if the application is active (work around odd bug)
     if ( x > 0 && ( SDL_GetWindowFlags(sr_screen) & SDL_WINDOW_OCCLUDED ) )
     {
         currentScreensetting.fullscreen = !currentScreensetting.fullscreen;
@@ -1706,14 +1786,14 @@ static uActionGlobalFunc gaf_ss(&screenshot,&screenshot_func, true );
 static uActionGlobalFunc gaf_md(&con_input,&con_func);
 static uActionGlobalFunc gaf_tf(&togglefullscreen,&toggle_fullscreen_func, true );
 
-
-
-
+// =====================================================================
+// MODERN VISUAL MENU (ImGui-style)
+// =====================================================================
 #undef glBegin
 #undef glEnd
 #undef glMatrixMode
 
-#include "../render/rGL.h"
+#include <GL/gl.h>
 #include <math.h>
 #include "rTexture.h"
 #include "ModMenu.h"

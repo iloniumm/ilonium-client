@@ -533,8 +533,7 @@ case "$target" in
         MATHLIB=""
         SYS_GL_LIB="opengl32"
         SYS_GLU_LIB="glu32"
-        LDFLAGS="$LDFLAGS -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic"
-        is_windows=true
+        LDFLAGS="$LDFLAGS -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread -Wl,-Bdynamic -Wl,--allow-multiple-definition"
         ;;
     *-*-beos*)
 	AC_DEFINE(BEOS, 1, [BeOS])
@@ -782,9 +781,7 @@ dnl         GLU
 dnl *************************************************
 
 
-if test "$SYS_GLU_LIB" = "glu32"; then
-  LIBS="$LIBS -lglu32"
-elif test $SYS_GLU_LIB && echo $LIBS | grep -v "\-lGLU" > /dev/null; then
+if test $SYS_GLU_LIB && echo $LIBS | grep -v "\-lGLU" > /dev/null; then
 
 dnl AC_CHECK_LIB($SYS_GLU_LIB, gluBuild2DMipmaps,,
 AC_CHECK_LIB($SYS_GLU_LIB, gluBuild3DMipmaps,,
@@ -1062,14 +1059,9 @@ AC_SUBST(progid)
 # all include directories added via -I so far should be system level inlcudes, divide them from those added by individual makefiles
 # CPPFLAGS="-I- $CPPFLAGS"
 
-if test "$is_windows" = true; then
-    CXXFLAGS="$CXXFLAGS -O3 -mtune=generic"
-    CFLAGS="$CFLAGS -O3 -mtune=generic"
-else
-    CXXFLAGS="$CXXFLAGS -O3 -mtune=generic -flto"
-    CFLAGS="$CFLAGS -O3 -mtune=generic -flto"
-    LDFLAGS="$LDFLAGS -flto"
-fi
+CXXFLAGS="$CXXFLAGS -O3 -mtune=generic -flto"
+CFLAGS="$CFLAGS -O3 -mtune=generic -flto"
+LDFLAGS="$LDFLAGS -flto"
 
 export CPPFLAGS
 export CXXFLAGS
