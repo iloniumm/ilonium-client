@@ -3,10 +3,8 @@
 
 #include "tMath.h"
 
-#ifdef LINUX
-#include <SDL3/SDL.h>
-#include <GL/gl.h>
-#include <GL/glu.h>
+#ifndef DEDICATED
+#include "rGL.h"
 #endif
 
 // Struct representing a single physical particle
