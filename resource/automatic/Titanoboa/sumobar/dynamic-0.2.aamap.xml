@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE Resource SYSTEM "AATeam/map-0.2.8.0_rc4.dtd">
+<Resource type="aamap" name="dynamic" version="0.2" author="Titanoboa" category="sumobar">
+	<Map version="2">
+		<World>
+			<Field>
+				<Spawn x="	-2.80	" y="	-22.40	" xdir="-1"	ydir="0" />
+				<Spawn x="	2.80	" y="	22.40	" xdir="1"	ydir="0" />
+				<Spawn x="	22.40	" y="	-2.80	" xdir="0"	ydir="-1" />
+				<Spawn x="	-22.40	" y="	2.80	" xdir="0"	ydir="1" />
+									
+				<Spawn x="	-2.80	" y="	22.40	" xdir="-1"	ydir="0" />
+				<Spawn x="	2.80	" y="	-22.40	" xdir="1"	ydir="0" />
+				<Spawn x="	-22.40	" y="	-2.80	" xdir="0"	ydir="-1" />
+				<Spawn x="	22.40	" y="	2.80	" xdir="0"	ydir="1" />
+									
+				<Spawn x="	24.64	" y="	0.06	" xdir="-1"	ydir="0" />
+				<Spawn x="	-24.64	" y="	-0.06	" xdir="1"	ydir="0" />
+				<Spawn x="	-0.06	" y="	24.64	" xdir="0"	ydir="-1" />
+				<Spawn x="	0.06	" y="	-24.64	" xdir="0"	ydir="1" />
+
+				<Wall>
+					<Point	x="-300"	y="-300"	/>
+					<Point	x="-300"	y="300"		/>
+					<Point	x="300"		y="300"		/>
+					<Point	x="300"		y="-300"	/>
+					<Point	x="-300"	y="-300"	/>
+				</Wall>
+
+				<Zone effect="fortress">
+					<ShapeCircle radius="28" growth="-0.28">
+						<Point x="0" y="0" />
+					</ShapeCircle>
+				</Zone>
+				<Zone effect="fortress">
+					<ShapeCircle radius="28" growth="-0.28">
+						<Point x="0" y="0" />
+					</ShapeCircle>
+				</Zone>
+				<Zone effect="fortress">
+					<ShapeCircle radius="28" growth="-0.28">
+						<Point x="0" y="0" />
+					</ShapeCircle>
+				</Zone>
+				<Zone effect="fortress">
+					<ShapeCircle radius="28" growth="-0.28">
+						<Point x="0" y="0" />
+					</ShapeCircle>
+				</Zone>
+				<Zone effect="fortress">
+					<ShapeCircle radius="28" growth="-0.28">
+						<Point x="0" y="0" />
+					</ShapeCircle>
+				</Zone>
+				<Zone effect="fortress">
+					<ShapeCircle radius="28" growth="-0.28">
+						<Point x="0" y="0" />
+					</ShapeCircle>
+				</Zone>
+				<Zone effect="fortress">
+					<ShapeCircle radius="28" growth="-0.28">
+						<Point x="0" y="0" />
+					</ShapeCircle>
+				</Zone>
+				<Zone effect="fortress">
+					<ShapeCircle radius="28" growth="-0.28">
+						<Point x="0" y="0" />
+					</ShapeCircle>
+				</Zone>
+				<Zone effect="fortress">
+					<ShapeCircle radius="28" growth="-0.28">
+						<Point x="0" y="0" />
+					</ShapeCircle>
+				</Zone>
+				<Zone effect="fortress">
+					<ShapeCircle radius="28" growth="-0.28">
+						<Point x="0" y="0" />
+					</ShapeCircle>
+				</Zone>
+				<Zone effect="fortress">
+					<ShapeCircle radius="28" growth="-0.28">
+						<Point x="0" y="0" />
+					</ShapeCircle>
+				</Zone>
+				<Zone effect="fortress">
+					<ShapeCircle radius="28" growth="-0.28">
+						<Point x="0" y="0" />
+					</ShapeCircle>
+				</Zone>
+			</Field>
+		</World>
+	</Map>
+</Resource>

@@ -1,0 +1,236 @@
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ <!doctype html public "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+   <meta name="author" content="Manuel Moos">
+   <title>Retrocycles: Documentation</title>
+   <meta name="description" content="Retrocycles: Documentation">
+</head><body>
+
+
+
+
+<table width="90%" align=center>
+<tr>
+
+
+
+
+
+
+ 
+ 
+ 
+
+
+
+
+
+ 
+
+<td align=center width="15%">
+<a href="index.html" target="_top">First Start</a>
+</td>
+
+
+
+ <td align=center width="15%">
+<a href="install_linux.html" target="_top"> Installation</a>
+</td>
+      
+<td align=center width="15%">
+<a href="network.html" target="_top">Network Play</a>
+</td>
+
+<td align=center width="15%">
+<a href="config.html" target="_top">Configuration</a>
+</td>
+
+<td align=center width="10%">
+<a href="faq.html" target="_top">FAQ</a>
+</td>
+
+<td align=center width="15%">
+<a href="compile.html" target="_top">Redistribution</a>
+</td>
+
+
+</tr>
+</table>
+
+
+
+<a name=><h1 align=center>Protocol Version History</h1></a>
+
+<p align=justify>
+<table cellpadding="5" border="1">
+<tr ><td ><strong>Retrocycles Version</strong></td><td ><strong>Protocol Versions supported</strong></td></tr>
+<tr ><td >0.2.0 - 0.2.4</td><td >0</td></tr>
+<tr ><td >0.2.5.x </td><td >0 - 2</td></tr>
+<tr ><td >0.2.6 - 0.2.7.0 </td><td >3 </td></tr>
+<tr ><td >0.2.7.1 </td><td >4 </td></tr>
+<tr ><td >0.2.8.0_beta1</td><td >6 </td></tr>
+<tr ><td >0.2.8.0_beta2</td><td >7 </td></tr>
+<tr ><td >0.2.8.0_beta3</td><td >8 </td></tr>
+<tr ><td >0.2.8.0_beta4</td><td >9 </td></tr>
+<tr ><td >0.2.8.0_rcX</td><td >10 </td></tr>
+<tr ><td >0.2.8.0</td><td >11 </td></tr>
+<tr ><td >0.2.8.2</td><td >13 </td></tr>
+<tr ><td >0.2.8.3</td><td >16 </td></tr>
+</table>
+</p>
+
+<p align=justify>
+<table cellpadding="5" border="1">
+<tr ><td ><strong>Protocol Version</strong></td><td ><strong>New Features</strong></td></tr>
+<tr ><td >1</td><td >Protocol version control</td></tr>
+<tr ><td >2</td><td >Instant win zone and limited usability of brakes</td></tr>
+<tr ><td >3</td><td >Chat control( silencing and kick voting ) </td></tr>
+<tr ><td >4</td><td >Fixed the rip bug, clients sent game time of cycle commands</td></tr>
+<tr ><td >5</td><td >new cycle sync code: server sends more data to identify which client command was last executed. Shaped arenas and non-rectangular turns added.</td></tr>
+<tr ><td >6</td><td >Client support for server formatted chat messages.</td></tr>
+<tr ><td >7</td><td >Doublebind countermeasures. Proper cycle speed and acceleration handling and syncing.</td></tr>
+<tr ><td >8</td><td >Server bugfix: turns that were accepted from the client, but not yet executed, are not claimed to be executed in sync messages.</td></tr>
+<tr ><td >10</td><td >New server controlled voting items to add voting items that only require code on the server (code was broken and is no longer used).</td></tr>
+<tr ><td >11</td><td >No actual change, just the bump to 0.2.8.</td></tr>
+<tr ><td >12</td><td >Again, no actual change to be found. Z-Man wonders why.</td></tr>
+<tr ><td >13</td><td >Spectators can now be visible and chat, clients no longer send redundant brake commands.</td></tr>
+<tr ><td >14</td><td >Clientside lag compensation and server controlled ping charity, fullscreen messages.</td></tr>
+<tr ><td >15</td><td >Player authentication, new fixed version of the server controlled vote items.</td></tr>
+<tr ><td >16</td><td >Bugfix: clients no longer get confused if they have to move a cycle backwards during a sync from the server.</td></tr>
+</table>
+</p>
+
+<p align=justify>
+Note: Some protocol versions were only available in CVS/SVN/BZR, so not every protocol version corresponds to a Retrocycles version. Likewise, not every version had a network protocol change.
+</p>
+
+<br>
+
+
+
+<p align=center>This document was created by
+<a href="http://armagetron.sf.net/contact.html" target=_top><strong>Manuel Moos</strong></a>
+</p>
+
+<p align=center>
+Last modification: 2026-08-28
+</p>
+<p align=center><!--#spaceportsbanner--></p>
+
+
+
+<table width="90%" align=center>
+<tr>
+
+
+
+
+
+
+ 
+ 
+ 
+
+
+
+
+
+ 
+
+<td align=center width="15%">
+<a href="index.html" target="_top">First Start</a>
+</td>
+
+
+
+ <td align=center width="15%">
+<a href="install_linux.html" target="_top"> Installation</a>
+</td>
+      
+<td align=center width="15%">
+<a href="network.html" target="_top">Network Play</a>
+</td>
+
+<td align=center width="15%">
+<a href="config.html" target="_top">Configuration</a>
+</td>
+
+<td align=center width="10%">
+<a href="faq.html" target="_top">FAQ</a>
+</td>
+
+<td align=center width="15%">
+<a href="compile.html" target="_top">Redistribution</a>
+</td>
+
+
+</tr>
+</table>
+
+
+</body>
+</html>
+
+

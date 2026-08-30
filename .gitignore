@@ -1,0 +1,108 @@
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+*.bak
+*.backup
+*.backup_current
+*.log
+*.Tpo
+*.Po
+.deps/
+
+# Build dirs
+docker/
+.kdevelop/
+autom4te.cache/
+conan/
+
+# Executables
+armagetronad_main
+armagetronad
+retrocycles
+Retrocycles
+steamlog.txt
+*.a
+
+# runtime output
+var/session_*.aarec
+var/session_*.aarec.idx
+var/*.playback
+var/telemetry_*
+var/demobrowser_config.txt
+src/macosx/build_bundle.sh
+*.pyc
+__pycache__/
+Makefile
+*/Makefile
+config.status
+*_diff.txt
+var/user.cfg
+*.bak_*
+*~
+*.orig
+*.rej
+*.patch
+*.tar.gz
+*.zip
+macos_*log*.txt
+
+# Anything the client writes about the person using it: logins, session
+# tokens, hardware ids, saved profiles. None of it belongs in a public tree,
+# and one careless "git add -A" is all it takes.
+var/irc_auth.cfg
+# The private half of this installation's identity. Whoever holds it can speak
+# as this person, so it belongs on one machine and nowhere else.
+var/ilonium_key
+var/ilonium_post.json
+
+# Everything the client keeps for itself now lives in one folder, and none of
+# it is source: keys, sessions, the bridge to the media player, logs, the
+# numbers behind the dashboard.
+var/.ilonium/
+rubbish/.ilonium/
+
+# What the game leaves behind when it is run from the source tree.
+var/*.cfg
+var/*.txt
+var/*.json
+!var/autoexec.cfg
+var/irc_post_payload.json
+var/rcl_session.cfg
+var/rcl_session_refreshed.json
+var/ticket_payload.json
+var/ticket_timer.cfg
+var/saved_profiles.txt
+var/rc_stats.txt
+var/noclip_waypoints.txt
+var/bans.txt
+var/autoexec.cfg
+var/server_settings.cfg
+var/*.tmp
+var/rcl_http_post_*
+
+# What the client writes while it runs: ladder and score logs, the cached
+# server list, the rules a session was captured from, the media bridge's
+# mailbox. All of it regenerates, and all of it carries the names of whoever
+# happened to be playing. Only the two configs the build ships stay tracked.
+var/check.cfg
+var/frommaster.srv
+var/highscores.txt
+var/ladder.txt
+var/ladderlog.txt
+var/master.srv
+var/retrocycles_media_cmd.txt
+var/scorelog.txt
+var/won_matches.txt
+var/won_rounds.txt
+
+# Maps the game downloads from servers as it joins them. Someone else's work,
+# arriving by itself, filling up a tree it was never meant to be part of.
+resource/automatic/
+
+# What packaging leaves behind
+appdir/
+deps/
+*.AppImage
+/COMMIT_MESSAGE.txt

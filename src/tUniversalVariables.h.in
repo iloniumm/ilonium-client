@@ -1,0 +1,105 @@
+#ifndef INITDIR
+    #define INITDIR "@initdir@"
+#endif
+#ifndef PREFIX
+    #define PREFIX "@prefix@"
+#endif
+#ifndef EXEC_PREFIX
+    #define EXEC_PREFIX "@exec_prefix@"
+#endif
+#ifndef BINDIR
+    #define BINDIR "@bindir@"
+#endif
+#ifndef SBINDIR
+    #define SBINDIR "@sbindir@"
+#endif
+#ifndef DATADIR
+    #define DATADIR "@datadir@"
+#endif
+#ifndef DATADIR_SUFFIX
+    #define DATADIR_SUFFIX "@datadir_suffix@"
+#endif
+#ifndef AA_DATADIR
+    #define AA_DATADIR "@aa_datadir@"
+#endif
+#ifndef SYSCONFDIR
+    #define SYSCONFDIR "@sysconfdir@"
+#endif
+#ifndef SYSCONFDIR_SUFFIX
+    #define SYSCONFDIR_SUFFIX "@sysconfdir_suffix@"
+#endif
+#ifndef AA_SYSCONFDIR
+    #define AA_SYSCONFDIR "@aa_sysconfdir@"
+#endif
+#ifndef LOCALSTATEDIR
+    #define LOCALSTATEDIR "@localstatedir@"
+#endif
+#ifndef LOCALSTATEDIR_SUFFIX
+    #define LOCALSTATEDIR_SUFFIX "@localstatedir_suffix@"
+#endif
+#ifndef AA_LOCALSTATEDIR
+    #define AA_LOCALSTATEDIR "@aa_localstatedir@"
+#endif
+#ifndef INFODIR
+    #define INFODIR "@infodir@"
+#endif
+#ifndef INFODIR_SUFFIX
+    #define INFODIR_SUFFIX "@infodir_suffix@"
+#endif
+#ifndef AA_INFODIR
+    #define AA_INFODIR "@aa_infodir@"
+#endif
+#ifndef MANDIR
+    #define MANDIR "@mandir@"
+#endif
+#ifndef MANDIR_SUFFIX
+    #define MANDIR_SUFFIX "@mandir_suffix@"
+#endif
+#ifndef AA_MANDIR
+    #define AA_MANDIR "@aa_mandir@"
+#endif
+#ifndef SCRIPTDIR
+    #define SCRIPTDIR "@scriptdir@"
+#endif
+#ifndef DOCDIR
+    #define DOCDIR "@docdir@"
+#endif
+#ifndef DOCDIR_SUFFIX
+    #define DOCDIR_SUFFIX "@docdir_suffix@"
+#endif
+#ifndef AA_DOCDIR
+    #define AA_DOCDIR "@aa_docdir@"
+#endif
+#ifndef RUNDIR
+    #define RUNDIR "@rundir@"
+#endif
+#ifndef RUNDIR_SUFFIX
+    #define RUNDIR_SUFFIX "@rundir_suffix@"
+#endif
+#ifndef AA_RUNDIR
+    #define AA_RUNDIR "@aa_rundir@"
+#endif
+#ifndef LOGDIR
+    #define LOGDIR "@logdir@"
+#endif
+#ifndef LOGDIR_SUFFIX
+    #define LOGDIR_SUFFIX "@logdir_suffix@"
+#endif
+#ifndef AA_LOGDIR
+    #define AA_LOGDIR "@aa_logdir@"
+#endif
+#ifndef OLDVARDIR
+    #define OLDVARDIR "@oldvardir@"
+#endif
+#ifndef OLDVARDIR_SUFFIX
+    #define OLDVARDIR_SUFFIX "@oldvardir_suffix@"
+#endif
+#ifndef AA_OLDVARDIR
+    #define AA_OLDVARDIR "@aa_oldvardir@"
+#endif
+#ifndef ENABLE_MIGRATESTATE
+    #define ENABLE_MIGRATESTATE "@enable_migratestate@"
+#endif
+#ifndef RELOCATABLE
+    #define RELOCATABLE "@relocatable@"
+#endif

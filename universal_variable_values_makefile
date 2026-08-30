@@ -1,0 +1,77 @@
+${top_builddir}/universal_variable_values: ${top_builddir}/universal_variable_values_makefile Makefile
+	@echo Generating universal_variable_values...
+	@echo \# values of universal variables at compile time > ${top_builddir}/universal_variable_values
+	@echo initdir=${initdir} >> ${top_builddir}/universal_variable_values
+	@echo prefix=${prefix} >> ${top_builddir}/universal_variable_values
+	@echo exec_prefix=${exec_prefix} >> ${top_builddir}/universal_variable_values
+	@echo bindir=${bindir} >> ${top_builddir}/universal_variable_values
+	@echo sbindir=${sbindir} >> ${top_builddir}/universal_variable_values
+	@echo datadir=${datadir} >> ${top_builddir}/universal_variable_values
+	@echo datadir_suffix=${datadir_suffix} >> ${top_builddir}/universal_variable_values
+	@echo aa_datadir=${aa_datadir} >> ${top_builddir}/universal_variable_values
+	@echo sysconfdir=${sysconfdir} >> ${top_builddir}/universal_variable_values
+	@echo sysconfdir_suffix=${sysconfdir_suffix} >> ${top_builddir}/universal_variable_values
+	@echo aa_sysconfdir=${aa_sysconfdir} >> ${top_builddir}/universal_variable_values
+	@echo localstatedir=${localstatedir} >> ${top_builddir}/universal_variable_values
+	@echo localstatedir_suffix=${localstatedir_suffix} >> ${top_builddir}/universal_variable_values
+	@echo aa_localstatedir=${aa_localstatedir} >> ${top_builddir}/universal_variable_values
+	@echo infodir=${infodir} >> ${top_builddir}/universal_variable_values
+	@echo infodir_suffix=${infodir_suffix} >> ${top_builddir}/universal_variable_values
+	@echo aa_infodir=${aa_infodir} >> ${top_builddir}/universal_variable_values
+	@echo mandir=${mandir} >> ${top_builddir}/universal_variable_values
+	@echo mandir_suffix=${mandir_suffix} >> ${top_builddir}/universal_variable_values
+	@echo aa_mandir=${aa_mandir} >> ${top_builddir}/universal_variable_values
+	@echo scriptdir=${scriptdir} >> ${top_builddir}/universal_variable_values
+	@echo docdir=${docdir} >> ${top_builddir}/universal_variable_values
+	@echo docdir_suffix=${docdir_suffix} >> ${top_builddir}/universal_variable_values
+	@echo aa_docdir=${aa_docdir} >> ${top_builddir}/universal_variable_values
+	@echo rundir=${rundir} >> ${top_builddir}/universal_variable_values
+	@echo rundir_suffix=${rundir_suffix} >> ${top_builddir}/universal_variable_values
+	@echo aa_rundir=${aa_rundir} >> ${top_builddir}/universal_variable_values
+	@echo logdir=${logdir} >> ${top_builddir}/universal_variable_values
+	@echo logdir_suffix=${logdir_suffix} >> ${top_builddir}/universal_variable_values
+	@echo aa_logdir=${aa_logdir} >> ${top_builddir}/universal_variable_values
+	@echo oldvardir=${oldvardir} >> ${top_builddir}/universal_variable_values
+	@echo oldvardir_suffix=${oldvardir_suffix} >> ${top_builddir}/universal_variable_values
+	@echo aa_oldvardir=${aa_oldvardir} >> ${top_builddir}/universal_variable_values
+	@echo enable_migratestate=${enable_migratestate} >> ${top_builddir}/universal_variable_values
+	@echo relocatable=${relocatable} >> ${top_builddir}/universal_variable_values
+
+${top_builddir}/universal_variable_values_sed: ${top_builddir}/universal_variable_values_makefile Makefile
+	@echo Generating universal_variable_values_sed...
+	@echo \# unversal variable values at compile time > ${top_builddir}/universal_variable_values_sed
+	@echo s,@initdir@,${initdir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@prefix@,${prefix},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@exec_prefix@,${exec_prefix},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@bindir@,${bindir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@sbindir@,${sbindir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@datadir@,${datadir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@datadir_suffix@,${datadir_suffix},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@aa_datadir@,${aa_datadir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@sysconfdir@,${sysconfdir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@sysconfdir_suffix@,${sysconfdir_suffix},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@aa_sysconfdir@,${aa_sysconfdir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@localstatedir@,${localstatedir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@localstatedir_suffix@,${localstatedir_suffix},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@aa_localstatedir@,${aa_localstatedir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@infodir@,${infodir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@infodir_suffix@,${infodir_suffix},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@aa_infodir@,${aa_infodir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@mandir@,${mandir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@mandir_suffix@,${mandir_suffix},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@aa_mandir@,${aa_mandir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@scriptdir@,${scriptdir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@docdir@,${docdir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@docdir_suffix@,${docdir_suffix},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@aa_docdir@,${aa_docdir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@rundir@,${rundir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@rundir_suffix@,${rundir_suffix},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@aa_rundir@,${aa_rundir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@logdir@,${logdir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@logdir_suffix@,${logdir_suffix},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@aa_logdir@,${aa_logdir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@oldvardir@,${oldvardir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@oldvardir_suffix@,${oldvardir_suffix},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@aa_oldvardir@,${aa_oldvardir},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@enable_migratestate@,${enable_migratestate},g >> ${top_builddir}/universal_variable_values_sed
+	@echo s,@relocatable@,${relocatable},g >> ${top_builddir}/universal_variable_values_sed

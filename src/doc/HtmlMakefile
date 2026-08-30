@@ -1,0 +1,56 @@
+# include $(top_srcdir)/Makefile.paths
+
+# documentation location
+armadocdir=${aa_docdir}
+
+#*********************************************************
+#           HTML generation rules: need M4               *
+#*********************************************************
+
+htmlm4 = $(top_builddir)/src/doc/html.m4
+
+$(htmlm4): $(top_builddir)/config.status Makefile $(top_srcdir)/src/doc/html.m4.in
+	cd ${top_builddir}; ./config.status src/doc/html.m4
+
+@protect@ DATE_FMT = %Y-%m-%d
+@protect@ifdef SOURCE_DATE_EPOCH
+@protect@	BUILD_DATE ?= $(shell date -u -d "@$(SOURCE_DATE_EPOCH)" "+$(DATE_FMT)"  2>/dev/null || date -u -r "$(SOURCE_DATE_EPOCH)" "+$(DATE_FMT)" 2>/dev/null || date -u "+$(DATE_FMT)")
+@protect@else
+@protect@	BUILD_DATE ?= $(shell date "+$(DATE_FMT)")
+@protect@endif
+
+if HAVE_M4
+%.html : $(srcdir)/%.html.m4 %.html.dep $(htmlm4) Makefile 
+	echo "define(CHANGEDATE, $(BUILD_DATE)) include($(htmlm4)) include($<)" | m4 -I ${srcdir} > $@ || cp $< $@
+
+%.dep: %.m4 Makefile
+	echo $*.dep ":\\" > $@
+	grep "include(" $< | sed -e "s,include(\(.*\)),$(srcdir)/\1\\\," >> $@
+	echo "Makefile" >> $@
+endif
+
+.PRECIOUS: %.dep
+
+ @silent_inc@ $(wildcard *.dep) .dummy.dep
+
+.dummy.dep:
+	echo > $@
+
+auto_html_files_m4 = $(wildcard $(srcdir)/*.html.m4)
+auto_html_files_m4_dist = $(wildcard $(srcdir)/*.m4)
+
+auto_html_files_here_m4 = $(patsubst $(srcdir)/%.html.m4, %.html, $(auto_html_files_m4) )
+
+auto_html_files_here_processed = $(patsubst $(srcdir)/%.html, %.html, $(auto_html_files_processed) )
+auto_html_files = $(sort $(auto_html_files_here_m4) $(auto_html_files_here_processed) ) 
+
+htmlclean-local:
+	rm -rf *.dep .dummy.dep
+if HAVE_M4
+	rm -f blubb $(auto_html_files_here_m4)
+endif
+
+clean-local: htmlclean-local
+
+htmldist-hook:
+	cp ${auto_html_files_m4_dist} ${distfiles} ${distdir}

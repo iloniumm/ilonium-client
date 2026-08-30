@@ -1,0 +1,5 @@
+readme_macosx.html.dep :\
+./head.html.m4\
+./navbar.html.m4\
+./navbar.html.m4\
+Makefile

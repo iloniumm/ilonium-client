@@ -1,0 +1,7 @@
+install_linux.html.dep :\
+./head.html.m4\
+./navbar.html.m4\
+./install_result.html.m4\
+./sig.m4\
+./navbar.html.m4\
+Makefile

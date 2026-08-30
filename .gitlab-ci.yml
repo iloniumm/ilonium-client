@@ -1,0 +1,217 @@
+# The same three builds the GitHub side runs, arranged for an account that has
+# to count its minutes.
+#
+# Linux is the only machine here that costs one minute per minute, so it is the
+# one that runs by itself: on the default branch, on merge requests, and on
+# every tag. Windows and macOS cost several times that on shared runners and
+# are started by hand, from a tag, when a release is actually being cut.
+#
+# Nothing in here is tied to GitLab's own runners. Every job picks its machine
+# through a tag variable at the top, so pointing a job at a runner of your own -
+# a spare box, a laptop, a Mac on the desk - is a one line change and costs
+# nothing at all.
+
+stages:
+  - build
+  - release
+
+variables:
+  # The versions the game is developed against. Following the branch tip means
+  # a release can break on a morning when nothing here changed.
+  SDL_TAG: release-3.4.2
+  SDL_IMAGE_TAG: release-3.4.0
+  SDL_MIXER_TAG: release-3.2.0
+
+  # Which runners the jobs ask for. GitLab's own are named here; swap in the
+  # tag of your own runner and the same pipeline runs on your hardware.
+  # The small Linux machine is the one that costs a single minute per minute;
+  # every size above it is billed at a multiple.
+  LINUX_RUNNER: saas-linux-small-amd64
+  WINDOWS_RUNNER: saas-windows-medium-amd64
+  MACOS_RUNNER: saas-macos-medium-m1
+
+  PROGNAME: Retrocycles
+  PROGTITLE: Retrocycles
+
+build:linux:
+  stage: build
+  image: ubuntu:24.04
+  tags:
+    - $LINUX_RUNNER
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  # SDL takes longer to build than the game does. It is pinned, so the same
+  # three libraries come back out of the cache until the versions above move.
+  cache:
+    key: "sdl-$SDL_TAG-$SDL_IMAGE_TAG-$SDL_MIXER_TAG"
+    paths:
+      - deps/
+  before_script:
+    - export DEBIAN_FRONTEND=noninteractive
+    - apt-get update -qq
+    - >-
+      apt-get install -y --no-install-recommends
+      build-essential autoconf automake libtool cmake pkg-config git curl
+      ca-certificates file python3 recode desktop-file-utils
+      libxml2-dev libcurl4-openssl-dev libpng-dev libmimalloc-dev libzthread-dev
+      libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libpulse-dev
+      libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev
+      libxi-dev libxss-dev libxkbcommon-dev libwayland-dev libdbus-1-dev
+      libibus-1.0-dev libxtst-dev
+  script:
+    # A failing job shows the log and not much else, so every phase says its
+    # name before it starts: whatever banner is last on screen is the phase
+    # that died, without having to read a thousand lines of compiler output.
+    - echo "PHASE dependencies"; set -x
+    - |
+      if [ ! -f deps/.built ]; then
+        rm -rf deps && mkdir -p deps
+
+        # Each library goes to two places. Into the machine, because the next
+        # one looks for it there and finds nothing if it was only staged; and
+        # into a directory of its own, because that is what the cache keeps.
+        build() {
+          name=$1; tag=$2; shift 2
+          git clone --depth 1 -b "$tag" "https://github.com/libsdl-org/$name.git" "deps/$name"
+          cmake -S "deps/$name" -B "deps/$name/build" -DCMAKE_INSTALL_PREFIX=/usr "$@"
+          cmake --build "deps/$name/build" -j$(nproc)
+          cmake --install "deps/$name/build"
+          DESTDIR="$CI_PROJECT_DIR/deps/root" cmake --install "deps/$name/build"
+          ldconfig
+        }
+
+        build SDL       "$SDL_TAG"       -DSDL_STATIC=OFF -DSDL_SHARED=ON -DSDL_X11_XTEST=OFF
+        build SDL_image "$SDL_IMAGE_TAG" -DSDLIMAGE_SAMPLES=OFF -DSDLIMAGE_DEPS_SHARED=ON
+        build SDL_mixer "$SDL_MIXER_TAG" -DSDLMIXER_SAMPLES=OFF -DSDLMIXER_DEPS_SHARED=ON
+
+        # only the staged tree is worth keeping; the checkouts are not
+        rm -rf deps/SDL deps/SDL_image deps/SDL_mixer
+        touch deps/.built
+      fi
+    # staged into the cache, copied into place: the .pc files carry absolute
+    # paths, so the libraries have to end up where they were configured for
+    - echo "PHASE install libraries"; cp -a deps/root/usr/. /usr/; ldconfig
+    - echo "PHASE check libraries"; pkg-config --modversion sdl3 sdl3-image sdl3-mixer
+    - echo "PHASE bootstrap"; ./bootstrap.sh
+    - echo "PHASE configure"; ./configure --prefix=/usr --bindir=/usr/bin progname=$PROGNAME progtitle="$PROGTITLE"
+    - echo "PHASE compile"; make -j$(nproc)
+    - echo "PHASE package"; PACKAGE=$PROGNAME bash scripts/package_linux.sh
+  artifacts:
+    name: "$PROGNAME-linux-$CI_COMMIT_REF_NAME"
+    paths:
+      - $PROGNAME-x86_64.AppImage
+    expire_in: 1 year
+
+build:windows:
+  stage: build
+  tags:
+    - $WINDOWS_RUNNER
+  # Windows costs the same minute per minute as Linux and is on every plan,
+  # but it is the slowest of the three: MSYS2 has to be installed and updated
+  # before anything of ours is compiled. A tag pipeline shows the button;
+  # nothing starts it on its own.
+  rules:
+    # A button on tags and on the default branch, so the Windows package can be
+    # tried without cutting a release to do it. Never on its own.
+    - if: $CI_COMMIT_TAG
+      when: manual
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
+    - when: never
+  variables:
+    # CHERE_INVOKING keeps the login shell in the directory it was started
+    # from, which is the checkout - otherwise every command would have to
+    # translate a Windows path into an MSYS one and hope the quoting survives.
+    CHERE_INVOKING: "yes"
+    MSYSTEM: "MINGW64"
+  script:
+    - echo "PHASE msys2"
+    - choco install msys2 --yes --no-progress --params "/InstallDir:C:\msys64 /NoUpdate"
+    - $env:PATH = "C:\msys64\usr\bin;" + $env:PATH
+    # The first update can replace pacman and the runtime under itself and stop
+    # halfway; the second pass finishes what the first one started.
+    - echo "PHASE pacman update"
+    - bash -lc "pacman -Syuu --noconfirm --noprogressbar"
+    - bash -lc "pacman -Syuu --noconfirm --noprogressbar"
+    - echo "PHASE toolchain"
+    - bash -lc "pacman -S --needed --noconfirm --noprogressbar mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-autotools mingw-w64-x86_64-sdl3 mingw-w64-x86_64-sdl3-image mingw-w64-x86_64-sdl3-mixer mingw-w64-x86_64-mimalloc mingw-w64-x86_64-libxml2 mingw-w64-x86_64-curl mingw-w64-x86_64-libpng mingw-w64-x86_64-libjpeg-turbo mingw-w64-x86_64-recode git"
+    - echo "PHASE bootstrap"
+    - bash -lc "./bootstrap.sh"
+    - echo "PHASE configure"
+    - bash -lc "./configure --prefix=/mingw64 --disable-sysinstall --disable-desktop --disable-armathentication progname=$env:PROGNAME progtitle=$env:PROGTITLE"
+    - echo "PHASE compile"
+    - bash -lc "make -j4"
+    - echo "PHASE package"
+    - bash -lc "PACKAGE=$env:PROGNAME bash scripts/package_windows.sh"
+  artifacts:
+    name: "$PROGNAME-windows-$CI_COMMIT_REF_NAME"
+    paths:
+      - docker/build/context/winsource
+    expire_in: 1 year
+
+build:macos:
+  stage: build
+  tags:
+    - $MACOS_RUNNER
+  image: macos-14-xcode-15
+  # GitLab's own Macs are not part of a free plan, and where they are available
+  # a minute of one costs six. Either point MACOS_RUNNER at a Mac of your own
+  # with a runner registered on it, or let this job stay unstarted and take the
+  # macOS package from the GitHub side.
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: manual
+      allow_failure: true
+    - when: never
+  script:
+    - brew update
+    - brew install autoconf automake libtool dylibbundler sdl3 sdl3_image sdl3_mixer mimalloc pkg-config libpng libxml2 curl
+    - |
+      if [ -d /opt/homebrew ]; then
+        sudo mkdir -p /usr/local/lib /usr/local/opt/sdl3/lib /usr/local/opt/mimalloc/lib
+        sudo ln -sf /opt/homebrew/lib/libSDL3*.dylib /usr/local/lib/ || true
+        sudo ln -sf /opt/homebrew/lib/libmimalloc*.dylib /usr/local/lib/ || true
+        sudo ln -sf /opt/homebrew/lib/libSDL3*.dylib /usr/local/opt/sdl3/lib/ || true
+        sudo ln -sf /opt/homebrew/lib/libmimalloc*.dylib /usr/local/opt/mimalloc/lib/ || true
+      fi
+    - ./bootstrap.sh
+    - bash src/macosx/configure_for_bundle.sh progname=$PROGNAME progtitle="$PROGTITLE"
+    - make -j$(sysctl -n hw.ncpu)
+    - SKIP_PART_2=yes bash src/macosx/build_bundle.sh
+  artifacts:
+    name: "$PROGNAME-macos-$CI_COMMIT_REF_NAME"
+    paths:
+      - $PROGNAME.app
+    expire_in: 1 year
+
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  tags:
+    - $LINUX_RUNNER
+  rules:
+    - if: $CI_COMMIT_TAG
+  # Linux and nothing else. The other two are started by hand and are allowed
+  # to fail; naming them here only lets a machine nobody asked for take the
+  # release down with it.
+  needs:
+    - job: build:linux
+      artifacts: false
+  script:
+    - echo "packaging $CI_COMMIT_TAG"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: "$PROGTITLE $CI_COMMIT_TAG"
+    description: "$CI_COMMIT_TAG_MESSAGE"
+    assets:
+      links:
+        - name: Linux (AppImage)
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/download?job=build:linux"
+        - name: Windows
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/download?job=build:windows"
+        - name: macOS
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/download?job=build:macos"

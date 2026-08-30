@@ -1,0 +1,305 @@
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ <!doctype html public "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+   <meta name="author" content="Manuel Moos">
+   <title>Retrocycles: Documentation</title>
+   <meta name="description" content="Retrocycles: Documentation">
+</head><body>
+
+
+
+
+
+<table width="90%" align=center>
+<tr>
+
+
+
+
+
+
+ 
+ 
+ 
+
+
+
+
+
+ 
+
+<td align=center width="15%">
+<a href="index.html" target="_top">First Start</a>
+</td>
+
+
+
+ <td align=center width="15%">
+<strong> Installation</strong> 
+</td>
+      
+<td align=center width="15%">
+<a href="network.html" target="_top">Network Play</a>
+</td>
+
+<td align=center width="15%">
+<a href="config.html" target="_top">Configuration</a>
+</td>
+
+<td align=center width="10%">
+<a href="faq.html" target="_top">FAQ</a>
+</td>
+
+<td align=center width="15%">
+<a href="compile.html" target="_top">Redistribution</a>
+</td>
+
+
+</tr>
+</table>
+
+
+
+<a name=><h1 align=center> Installation</h1></a>
+
+<a name=><h2 align=left>General comments</h2></a>
+<p align=justify>
+All systemwide installation has to be carried out as root. 
+Installation from a source archive is recommended,
+as Retrocycles will be tailored for your system and missing libraries will be identified and
+pointed out to you. 
+Only as a last resort, you should choose the binary archives. 
+The binary RPMs and Debian packages are a reasonable choice 
+if your system supports them and you can get hold of
+the corresponding library packages in the right versions.
+</p>
+<p align=justify>
+It is very important that Armagetron and all of its dependencies are built with the same
+compiler. The different versions of gcc tend to be slightly binary incompatible with each other,
+and on complex projects like this one these small glitches tend to cause unexplainable problems.
+The distributed binaries are compiled with gcc 3.3, and we test source compatibility with 3.4 
+and 4.0 regularly. Yes, theoretically the binary interface for C code (ABI)
+did not change, but be prepared for problems nevertheless.
+</p>
+
+<a name=libs><h2 align=left>Required libraries</h2></a>
+
+<ul>
+<li><a href="http://www.xmlsoft.org/" target=_top><strong>LibXML2</strong></a> version 2.6.0 (some binaries: 2.6.12) or later for map file parsing</li>
+<li>OpenGL or <a href="http://mesa3d.sourceforge.net/" target=_top><strong>Mesa</strong></a> for rendering</li>
+<li><a href="http://www.libsdl.org" target=_top><strong>SDL</strong></a> version 1.2.x (Simple Direct Media Layer) for input and sound output</li>
+<li><a href="http://www.libsdl.org/projects/SDL_image/index.html" target=_top><strong>SDL_image</strong></a>
+version 1.2.x for the textures
+which itself needs the libs</li>
+<li><a href="http://www.libpng.org/pub/png/pngcode.html" target=_top><strong>pnglib and zlib</strong></a>
+(they should be included in your distribution)</li>
+<li>Optional: <a href="http://www.libsdl.org/projects/SDL_mixer/" target=_top><strong>SDL_mixer</strong></a></li>
+<li>Binary versions only: libstdc++.so.6 (any version that came with
+your System if it uses GCC 4.1 or higher should do).</li>
+</ul>
+
+<p align=justify></p>
+
+<a name=><h2 align=left>Installation</h2></a>
+
+<a name=source><h3 align=left>Source archive</h3></a>
+<p align=justify>
+Unpack the archive and change into the unpacked directory; type 
+<pre>./configure
+gmake install</pre>
+Everything will be copied to <strong>/usr/games/armagetron</strong>. 
+Should there already be a version, it will be overwritten (see the section on
+<a href="install_linux.html#multiple" target=_top>multiple versions</a> if you want to keep your old
+version around).
+If <strong>gmake</strong> is not found on your system, try 
+<strong>make</strong>; however, only GNU make is supported.
+To build the dedicated server, add the option <strong>--disable-glout</strong> to the configure script.
+To change the installation path, use the option <strong>--prefix=new_path</strong>.
+Type <pre>uninstall-Retrocycles-0.2.9.3.0-ilonas-modpack</pre> to uninstall.
+</p>
+
+<p align=justify>
+Please <a href="http://armagetron.sf.net/contact.html" target=_top><strong>report it</strong></a> if this procedure gives you errors you cannot
+resolve; the goal is to make it work on as many systems as possible.
+</p>
+
+
+
+<a name=><h3 align=left>Non-Root install</h3></a>
+<p align=justify>
+You have the option to install the game as a regular user in your home directory. To do so, use
+the <strong>--prefix</strong> directive of <strong>rpm</strong> or the <strong>configure</strong> script to point to a 
+place in your home directory, i.e.
+<pre>./configure --prefix /home/username/usr</pre>
+You can then start the game with
+<pre>/home/username/usr/bin/Retrocycles</pre>
+or, if you add <strong>/home/username/usr/bin</strong> to your executable search path, like normal.
+</p>
+
+<a name=multiple><h3 align=left>Multiple versions</h3></a>
+If you give the additional option <strong>--enable-multiver</strong> to <strong>configure</strong>, all installation
+directories and executables will get the suffix <strong>0.2.9.3.0-ilonas-modpack</strong>. Symbolic links will be created to
+your convenience. This allows to install multiple versions in parallel, where <strong>Retrocycles</strong> will
+always start the last installed version. 
+
+
+
+<a name=><h2 align=left>Dedicated Server</h2></a>
+<p align=justify>
+To install the dedicated server from binaries,
+follow all the procedures above with the corresponding
+download files; the server will be installed in
+<strong>usr/local/games/Retrocycles-dedicated</strong> and can be invoked by
+<pre>Retrocycles-dedicated</pre>
+Use the <strong>--disable-glout</strong> option of <strong>configure</strong> to build a dedicated server
+when you are installing from source.
+</p>
+
+<p align=justify>
+An init.d style start/stop script called <strong>Retrocycles</strong> will be installed into <strong>/etc/init.d</strong>,
+so you can use your standard system utilities to let it be started at boot time. By default, it runs
+the server under the userid Retrocycles-dedicated (which gets created at installation) and logs
+activity in <strong>/var/games/Retrocycles-dedicated</strong>. You can change these settings in the
+configuration file <strong>/etc/Retrocycles/rc.config</strong>.
+Unfortunately, the only way to give
+commands to the server when it is run this way is to put them into <strong>everytime.cfg</strong> which is 
+read every round or through the ingame admin.
+</p>
+
+
+
+<a name=><h2 align=left>Play</h2></a>
+<p align=justify>
+Type <pre>Retrocycles</pre>
+as a normal user to play.
+</p>
+
+<br>
+
+
+
+<p align=center>This document was created by
+<a href="http://armagetron.sf.net/contact.html" target=_top><strong>Manuel Moos</strong></a>
+</p>
+
+<p align=center>
+Last modification: 2026-08-28
+</p>
+<p align=center><!--#spaceportsbanner--></p>
+
+
+
+<table width="90%" align=center>
+<tr>
+
+
+
+
+
+
+ 
+ 
+ 
+
+
+
+
+
+ 
+
+<td align=center width="15%">
+<a href="index.html" target="_top">First Start</a>
+</td>
+
+
+
+ <td align=center width="15%">
+<strong> Installation</strong> 
+</td>
+      
+<td align=center width="15%">
+<a href="network.html" target="_top">Network Play</a>
+</td>
+
+<td align=center width="15%">
+<a href="config.html" target="_top">Configuration</a>
+</td>
+
+<td align=center width="10%">
+<a href="faq.html" target="_top">FAQ</a>
+</td>
+
+<td align=center width="15%">
+<a href="compile.html" target="_top">Redistribution</a>
+</td>
+
+
+</tr>
+</table>
+
+
+</body>
+</html>
+

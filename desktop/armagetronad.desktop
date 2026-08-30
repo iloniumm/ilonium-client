@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Retrocycles
+Exec=Retrocycles %f
+Comment=3d light cycle game
+Comment[de]=dreidimensionales Lichtradspiel
+Icon=org.armagetronad.Retrocycles
+Terminal=false
+StartupWMClass=com.ilonium.client
+Categories=Game;ActionGame;
+StartupNotify=false
+MimeType=application/x-armagetronad;
+Keywords=tron-like;light;cycle;3D;multiplayer;networked;server;

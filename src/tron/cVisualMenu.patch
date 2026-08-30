@@ -1,0 +1,43 @@
+--- src/tron/gMenus.cpp
++++ src/tron/gMenus.cpp
+@@ -1763,6 +1763,33 @@
+ }
+ 
+ 
++static void drawRoundedRect(float x, float y, float w, float h, float rad, float r_col, float g_col, float b_col, float a_col) {
++    glColor4f(r_col, g_col, b_col, a_col);
++    glBegin(GL_POLYGON);
++    for (int i = 0; i <= 10; ++i) {
++        float angle = M_PI + (M_PI / 2.0f) * (i / 10.0f);
++        glVertex2f(x + rad + cos(angle) * rad, y + rad + sin(angle) * rad);
++    }
++    for (int i = 0; i <= 10; ++i) {
++        float angle = 1.5f * M_PI + (M_PI / 2.0f) * (i / 10.0f);
++        glVertex2f(x + w - rad + cos(angle) * rad, y + rad + sin(angle) * rad);
++    }
++    for (int i = 0; i <= 10; ++i) {
++        float angle = 0.0f + (M_PI / 2.0f) * (i / 10.0f);
++        glVertex2f(x + w - rad + cos(angle) * rad, y + h - rad + sin(angle) * rad);
++    }
++    for (int i = 0; i <= 10; ++i) {
++        float angle = 0.5f * M_PI + (M_PI / 2.0f) * (i / 10.0f);
++        glVertex2f(x + rad + cos(angle) * rad, y + h - rad + sin(angle) * rad);
++    }
++    glEnd();
++}
++
++static void RenderTextCustom(float x, float y, float size, const char* text, float r, float g, float b, float a) {
++    glPushMatrix();
++    glTranslatef(x, y, 0);
++    glScalef(size, -size, 1);
++    glColor4f(r, g, b, a);
++    rFont::s_defaultFont.Select(true);
++    rTextField c(0, 0, 1, 1);
++    c.SetWidth(1000);
++    c.StringOutput(text);
++    glPopMatrix();
++}
++
+ void cVisualMenu::Render() {
+     if (!isActive && menuAlpha <= 0.01f) return;
+     

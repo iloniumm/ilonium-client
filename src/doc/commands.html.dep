@@ -1,0 +1,7 @@
+commands.html.dep :\
+./head.html.m4\
+./navbar.html.m4\
+./commands.txt\
+./sig.m4\
+./navbar.html.m4\
+Makefile

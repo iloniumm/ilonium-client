@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE Resource SYSTEM "AATeam/map-0.2.8.0_rc4.dtd">
+<Resource type="aamap" name="8player_sumo" version="1" author="tourney" category="sumobar">
+	<Map version="2">
+		<!--Cody's map, with removed mod-->
+                  <World>
+			<Field>
+				<Spawn	x="145"	y="110"	xdir="-1"	ydir="0"	/>
+				<Spawn	x="155"	y="190"	xdir="1"	ydir="0"	/>
+				<Spawn	x="190"	y="145"	xdir="0"	ydir="-1"	/>
+				<Spawn	x="110"	y="155"	xdir="0"	ydir="1"	/>
+				<Spawn	x="145"	y="190"	xdir="-1"	ydir="0"	/>
+				<Spawn	x="155"	y="110"	xdir="1"	ydir="0"	/>
+				<Spawn	x="110"	y="145"	xdir="0"	ydir="-1"	/>
+				<Spawn	x="190"	y="155"	xdir="0"	ydir="1"	/>
+
+
+				<Wall>
+					<Point	x="0"	y="0"	/>
+					<Point	x="0"	y="300"	/>
+					<Point	x="300"	y="300"	/>
+					<Point	x="300"	y="0"	/>
+					<Point	x="0"	y="0"	/>
+				</Wall>
+
+
+				<Zone effect="fortress">
+					<ShapeCircle radius="45" growth="-0.4">
+						<Point x="150" y="150" />
+					</ShapeCircle>
+				</Zone>
+
+				<Zone effect="fortress">
+					<ShapeCircle radius="45" growth="-0.4">
+						<Point x="150" y="150" />
+					</ShapeCircle>
+				</Zone>
+
+				<Zone effect="fortress">
+					<ShapeCircle radius="45" growth="-0.4">
+						<Point x="150" y="150" />
+					</ShapeCircle>
+				</Zone>
+
+				<Zone effect="fortress">
+					<ShapeCircle radius="45" growth="-0.4">
+						<Point x="150" y="150" />
+					</ShapeCircle>
+                </Zone>
+
+				<Zone effect="fortress">
+					<ShapeCircle radius="45" growth="-0.4">
+						<Point x="150" y="150" />
+					</ShapeCircle>
+				</Zone>
+
+				<Zone effect="fortress">
+					<ShapeCircle radius="45" growth="-0.4">
+						<Point x="150" y="150" />
+					</ShapeCircle>
+                </Zone>
+
+				<Zone effect="fortress">
+					<ShapeCircle radius="45" growth="-0.4">
+						<Point x="150" y="150" />
+					</ShapeCircle>
+				</Zone>
+
+				<Zone effect="fortress">
+					<ShapeCircle radius="45" growth="-0.4">
+						<Point x="150" y="150" />
+					</ShapeCircle>
+                </Zone>
+
+			</Field>
+		</World>
+	</Map>
+</Resource>

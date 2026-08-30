@@ -1,0 +1,252 @@
+name: Release CI/CD
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # A tag both builds and publishes, which is no way to find out whether a
+  # build still works. This starts the same three builds by hand and stops
+  # short of publishing anything.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# The versions the game is developed against. Following the branch tip instead
+# means a release can break on a morning when nothing here changed, and the
+# build that produced a given tag can never be reproduced afterwards.
+env:
+  SDL_TAG: release-3.4.2
+  SDL_IMAGE_TAG: release-3.4.0
+  SDL_MIXER_TAG: release-3.2.0
+
+jobs:
+  build-linux:
+    name: Build Linux (AppImage)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            autoconf \
+            automake \
+            libtool \
+            cmake \
+            python3 \
+            pkg-config \
+            libxml2-dev \
+            libcurl4-openssl-dev \
+            libpng-dev \
+            libmimalloc-dev \
+            libzthread-dev \
+            recode \
+            desktop-file-utils \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libasound2-dev \
+            libpulse-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrandr-dev \
+            libxcursor-dev \
+            libxfixes-dev \
+            libxi-dev \
+            libxss-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libdbus-1-dev \
+            libibus-1.0-dev \
+            libxtst-dev
+
+      - name: Build SDL3 from source
+        run: |
+          # Build SDL3
+          git clone --depth 1 https://github.com/libsdl-org/SDL.git -b $SDL_TAG
+          cd SDL
+          cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DSDL_STATIC=OFF -DSDL_SHARED=ON -DSDL_X11_XTEST=OFF
+          cmake --build build -j$(nproc)
+          sudo cmake --install build
+          cd ..
+          
+          # Build SDL3_image
+          git clone --depth 1 https://github.com/libsdl-org/SDL_image.git -b $SDL_IMAGE_TAG
+          cd SDL_image
+          cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DSDLIMAGE_SAMPLES=OFF -DSDLIMAGE_DEPS_SHARED=ON
+          cmake --build build -j$(nproc)
+          sudo cmake --install build
+          cd ..
+          
+          # Build SDL3_mixer
+          git clone --depth 1 https://github.com/libsdl-org/SDL_mixer.git -b $SDL_MIXER_TAG
+          cd SDL_mixer
+          cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DSDLMIXER_SAMPLES=OFF -DSDLMIXER_DEPS_SHARED=ON
+          cmake --build build -j$(nproc)
+          sudo cmake --install build
+          cd ..
+
+      - name: Build
+        run: |
+          ./bootstrap.sh
+          ./configure --enable-curl --prefix=/usr --bindir=/usr/bin progname=Retrocycles progtitle="Retrocycles"
+          make -j$(nproc)
+
+      - name: Package
+        run: PACKAGE=Retrocycles bash scripts/package_linux.sh
+
+      - name: Archive
+        run: zip -r Retrocycles-Linux-AppImage.zip Retrocycles-x86_64.AppImage
+
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Retrocycles-Linux-AppImage.zip
+          # A tag carrying a suffix is a beta: it goes out visible, marked as a
+          # prerelease, so testers can find it while it stays off the "latest"
+          # link people land on.
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Only for a build started by hand, which publishes nothing and needs
+      # somewhere to leave its result. A day is long enough to look at it.
+      - name: Keep for inspection
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Retrocycles-Linux-AppImage
+          path: Retrocycles-Linux-AppImage.zip
+          retention-days: 1
+
+  build-windows:
+    name: Build Windows (MinGW)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-autotools
+            mingw-w64-x86_64-sdl3
+            mingw-w64-x86_64-sdl3-image
+            mingw-w64-x86_64-sdl3-mixer
+            mingw-w64-x86_64-mimalloc
+            mingw-w64-x86_64-libxml2
+            mingw-w64-x86_64-curl
+            mingw-w64-x86_64-libpng
+            mingw-w64-x86_64-libjpeg-turbo
+            mingw-w64-x86_64-recode
+            mingw-w64-x86_64-ca-certificates
+            git
+            zip
+
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          ./bootstrap.sh
+          ./configure --enable-curl --prefix=/mingw64 --disable-sysinstall --disable-desktop --disable-armathentication progname=Retrocycles progtitle="Retrocycles"
+          make -j4
+
+      - name: Package
+        shell: msys2 {0}
+        run: PACKAGE=Retrocycles bash scripts/package_windows.sh
+
+      - name: Archive
+        shell: msys2 {0}
+        run: cd docker/build/context/winsource && zip -r ../../../../Retrocycles-Windows-MinGW.zip .
+
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Retrocycles-Windows-MinGW.zip
+          # A tag carrying a suffix is a beta: it goes out visible, marked as a
+          # prerelease, so testers can find it while it stays off the "latest"
+          # link people land on.
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Keep for inspection
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Retrocycles-Windows-MinGW
+          path: Retrocycles-Windows-MinGW.zip
+          retention-days: 1
+
+  build-macos:
+    name: Build macOS (.app Bundle)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install autoconf automake libtool dylibbundler sdl3 sdl3_image sdl3_mixer mimalloc pkg-config libpng libxml2 curl
+
+      - name: Setup library symlinks for Apple Silicon
+        run: |
+          if [ -d /opt/homebrew ]; then
+            sudo mkdir -p /usr/local/lib
+            sudo ln -s /opt/homebrew/lib/libSDL3*.dylib /usr/local/lib/ || true
+            sudo ln -s /opt/homebrew/lib/libmimalloc*.dylib /usr/local/lib/ || true
+            sudo mkdir -p /usr/local/opt/sdl3/lib
+            sudo ln -s /opt/homebrew/lib/libSDL3*.dylib /usr/local/opt/sdl3/lib/ || true
+            sudo mkdir -p /usr/local/opt/mimalloc/lib
+            sudo ln -s /opt/homebrew/lib/libmimalloc*.dylib /usr/local/opt/mimalloc/lib/ || true
+          fi
+
+      - name: Build
+        run: |
+          ./bootstrap.sh
+          bash src/macosx/configure_for_bundle.sh --enable-curl progname=Retrocycles progtitle="Retrocycles"
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Package
+        run: |
+          export SKIP_PART_2=yes
+          bash src/macosx/build_bundle.sh
+
+      - name: Archive
+        run: zip -ry Retrocycles-macOS-Bundle.zip Retrocycles.app
+
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Retrocycles-macOS-Bundle.zip
+          # A tag carrying a suffix is a beta: it goes out visible, marked as a
+          # prerelease, so testers can find it while it stays off the "latest"
+          # link people land on.
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Keep for inspection
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Retrocycles-macOS-Bundle
+          path: Retrocycles-macOS-Bundle.zip
+          retention-days: 1

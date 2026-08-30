@@ -1,0 +1,206 @@
+/* config.h.in.  Generated from configure.ac by autoheader.  */
+
+/* AIX */
+#undef AIX
+
+/* BeOS */
+#undef BEOS
+
+/* Include pthread support for binary relocation? */
+#undef BR_PTHREAD
+
+/* Define if your system deos not like the pointer tricks in eWall.h. */
+#undef CAUTION_WALL
+
+/* Define if you wish to compile a dedicated server */
+#undef DEDICATED
+
+/* Define if you wish to use the old and dirty OpenGL initialization method */
+#undef DIRTY
+
+/* Define if you dont want to use a custom memory manager. */
+#undef DONTUSEMEMMANAGER
+
+/* Use binary relocation? */
+#undef ENABLE_BINRELOC
+
+/* Define to 1 if you have the `atan2f' function. */
+#undef HAVE_ATAN2F
+
+/* Define to 1 if you have the `clearenv' function. */
+#undef HAVE_CLEARENV
+
+/* Define to 1 if you have the `cosf' function. */
+#undef HAVE_COSF
+
+/* Define to 1 if you have the `expf' function. */
+#undef HAVE_EXPF
+
+/* Define to 1 if you have the `fabsf' function. */
+#undef HAVE_FABSF
+
+/* Define to 1 if you have the `floorf' function. */
+#undef HAVE_FLOORF
+
+/* Define to 1 if you have the <inttypes.h> header file. */
+#undef HAVE_INTTYPES_H
+
+/* Define to 1 if you have the `isblank' function. */
+#undef HAVE_ISBLANK
+
+/* Define if you have libcrypto */
+#undef HAVE_LIBCRYPTO
+
+/* Define to 1 if you have the `pthread' library (-lpthread). */
+#undef HAVE_LIBPTHREAD
+
+/* Define if you have the library SDL3 */
+#undef HAVE_LIBSDL
+
+/* Define if you have the SDL3_image library */
+#undef HAVE_LIBSDL_IMAGE
+
+/* Define if you have the SDL3_mixer library */
+#undef HAVE_LIBSDL_MIXER
+
+/* Define to 1 if you have the `wsock32' library (-lwsock32). */
+#undef HAVE_LIBWSOCK32
+
+/* Define if you have the X11 library (-lX11). */
+#undef HAVE_LIBX11
+
+/* Define if you have the libxml2 library */
+#undef HAVE_LIBXML2
+
+/* Define if you have the library ZThread. */
+#undef HAVE_LIBZTHREAD
+
+/* Define to 1 if you have the `logf' function. */
+#undef HAVE_LOGF
+
+/* Define if mimalloc is available */
+#undef HAVE_MIMALLOC
+
+/* Define to 1 if you have the `select' function. */
+#undef HAVE_SELECT
+
+/* Define to 1 if you have the `sinf' function. */
+#undef HAVE_SINF
+
+/* Define if you have the type socklen_t. */
+#undef HAVE_SOCKLEN_T
+
+/* Define to 1 if you have the `sqrtf' function. */
+#undef HAVE_SQRTF
+
+/* Define to 1 if you have the <stdint.h> header file. */
+#undef HAVE_STDINT_H
+
+/* Define to 1 if you have the <stdio.h> header file. */
+#undef HAVE_STDIO_H
+
+/* Define to 1 if you have the <stdlib.h> header file. */
+#undef HAVE_STDLIB_H
+
+/* Define to 1 if you have the <strings.h> header file. */
+#undef HAVE_STRINGS_H
+
+/* Define to 1 if you have the <string.h> header file. */
+#undef HAVE_STRING_H
+
+/* Define to 1 if you have the <sys/stat.h> header file. */
+#undef HAVE_SYS_STAT_H
+
+/* Define to 1 if you have the <sys/types.h> header file. */
+#undef HAVE_SYS_TYPES_H
+
+/* Define to 1 if you have the `tanf' function. */
+#undef HAVE_TANF
+
+/* Define to 1 if you have the <unistd.h> header file. */
+#undef HAVE_UNISTD_H
+
+/* Define to 1 if you have the `wmemset' function. */
+#undef HAVE_WMEMSET
+
+/* enables krawall */
+#undef KRAWALL
+
+/* enables krawall server */
+#undef KRAWALL_SERVER
+
+/* Define if you have libcurl and it supports http */
+#undef LIBCURL_PROTOCOL_HTTP
+
+/* GNU/Linux */
+#undef LINUX
+
+/* Mac OS X */
+#undef MACOSX
+
+/* maximal number of clients */
+#undef MAXCLIENTS
+
+/* Name of package */
+#undef PACKAGE
+
+/* Define to the address where bug reports for this package should be sent. */
+#undef PACKAGE_BUGREPORT
+
+/* Define to the full name of this package. */
+#undef PACKAGE_NAME
+
+/* Define to the full name and version of this package. */
+#undef PACKAGE_STRING
+
+/* Define to the one symbol short name of this package. */
+#undef PACKAGE_TARNAME
+
+/* Define to the home page for this package. */
+#undef PACKAGE_URL
+
+/* Define to the version of this package. */
+#undef PACKAGE_VERSION
+
+/* Define to the compiled in prefix where most game directories will be
+   children of */
+#undef PREFIX
+
+/* Define to the suffix of all installation folders */
+#undef PROGDIR_SUFFIX
+
+/* Define the short progam name (with possible -dedicated suffix) */
+#undef PROGNAME
+
+/* Define the short progam name */
+#undef PROGNAMEBASE
+
+/* Define the fully captialized project tile (witout possible " Server"
+   suffix) */
+#undef PROGTITLE
+
+/* enables hacky support for deathmatch mode */
+#undef RESPAWN_HACK
+
+/* Solaris */
+#undef SOLARIS
+
+/* Define to 1 if all of the C90 standard headers exist (not just the ones
+   required in a freestanding environment). This macro is provided for
+   backward compatibility; new code need not use it. */
+#undef STDC_HEADERS
+
+/* Define the top source directory */
+#undef TOP_SOURCE_DIR
+
+/* Version number of package */
+#undef VERSION
+
+/* Windows 9x/NT/2k/XP */
+#undef WIN32
+
+/* Define to 1 if the X Window System is missing or not being used. */
+#undef X_DISPLAY_MISSING
+
+/* Define to empty if `const' does not conform to ANSI C. */
+#undef const
